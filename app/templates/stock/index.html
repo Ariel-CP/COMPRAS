@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Stock Mensual{% endblock %}
+{% block content %}
+<h2>Stock Mensual (Flexxus)</h2>
+{% if error %}
+<div class="error">Error: {{ error }}</div>
+{% endif %}
+<form id="filtros">
+  <label>Año <input type="number" id="anio" min="2000" max="2100" value="{{ anio }}" /></label>
+  <label>Mes <input type="number" id="mes" min="1" max="12" value="{{ mes }}" /></label>
+  <label>Fecha corte <input type="date" id="fecha_corte" value="{{ fecha_corte }}" /></label>
+</form>
+
+<section>
+  <h3>Importar CSV/Excel</h3>
+  <form id="formImport" enctype="multipart/form-data">
+    <input type="file" name="archivo" id="archivo" accept=".csv,.xlsx" />
+    <button type="button" id="btnImportar">Importar</button>
+  </form>
+</section>
+
+<section>
+  <h3>Listado</h3>
+  <input type="search" id="q" placeholder="Buscar producto..." value="{{ q or '' }}" />
+  <button type="button" id="btnBuscar">Buscar</button>
+  <table>
+    <thead><tr><th>Producto</th><th>Stock</th><th>Fecha corte</th><th>Origen</th></tr></thead>
+    <tbody>
+    {% for item in stock %}
+      <tr>
+        <td>{{ item.producto_codigo }}</td>
+        <td class="num">{{ item.stock_disponible }}</td>
+        <td>{{ item.fecha_corte }}</td>
+        <td>{{ item.origen }}</td>
+      </tr>
+    {% endfor %}
+    {% if not stock %}
+      <tr><td colspan="4"><em>Sin resultados para "{{ q }}" en el período {{ anio }}-{{ '%02d' % mes }}. Si el producto no tiene stock cargado, importe el archivo o cree el registro.</em></td></tr>
+    {% endif %}
+    </tbody>
+  </table>
+  <p>Total ítems: {{ resumen.items }}, Total stock: {{ resumen.total_stock }}</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(async function(){
+  const anioEl = document.getElementById('anio');
+  const mesEl = document.getElementById('mes');
+  const qEl = document.getElementById('q');
+  const btnBuscar = document.getElementById('btnBuscar');
+  const btnImportar = document.getElementById('btnImportar');
+  const fechaEl = document.getElementById('fecha_corte');
+
+  btnBuscar.addEventListener('click', () => {
+    const a = anioEl.value; const m = mesEl.value; const q = (qEl.value || '').trim().toUpperCase();
+    const params = new URLSearchParams({ anio: a, mes: m, q });
+    window.location.search = params.toString();
+  });
+
+  btnImportar.addEventListener('click', async () => {
+    const a = anioEl.value; const m = mesEl.value; const fc = fechaEl.value;
+    const file = document.getElementById('archivo').files[0];
+    if(!file){ alert('Seleccione un archivo'); return; }
+    const form = new FormData(); form.append('archivo', file);
+    const resp = await fetch(`/api/stock/${a}/${m}/import?fecha_corte=${fc}`, { method: 'POST', body: form });
+    const data = await resp.json();
+    alert(`Insertados: ${data.insertados}, Actualizados: ${data.actualizados}, Rechazados: ${data.rechazados}`);
+    location.reload();
+  });
+})();
+</script>
+{% endblock %}

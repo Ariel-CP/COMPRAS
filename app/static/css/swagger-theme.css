@@ -1,0 +1,53 @@
+@import url("https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css");
+
+:root {
+  --brand-bg: #0f172a; /* slate-900 */
+  --brand-accent: #06b6d4; /* cyan-500 */
+  --brand-accent-2: #22d3ee; /* cyan-400 */
+}
+
+.swagger-ui .topbar {
+  background: var(--brand-bg);
+  border-bottom: 2px solid var(--brand-accent);
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select,
+.swagger-ui .topbar .download-url-wrapper input[type=text] {
+  border-color: var(--brand-accent);
+}
+
+.swagger-ui .info .title {
+  color: var(--brand-bg);
+}
+.swagger-ui .opblock.opblock-get {
+  border-color: #10b981; /* emerald-500 */
+}
+.swagger-ui .opblock.opblock-post {
+  border-color: #3b82f6; /* blue-500 */
+}
+.swagger-ui .opblock.opblock-put {
+  border-color: #f59e0b; /* amber-500 */
+}
+.swagger-ui .opblock.opblock-delete {
+  border-color: #ef4444; /* red-500 */
+}
+
+.swagger-ui .models.is-open h4 span {
+  color: var(--brand-bg);
+}
+.swagger-ui .markdown code, .swagger-ui .model, .swagger-ui table thead tr th {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+.swagger-ui .opblock .opblock-summary-method {
+  min-width: 68px;
+}
+
+/* Footer pequeño */
+.swagger-ui:after {
+  content: 'Compras Docs — personalizado';
+  display: block;
+  text-align: right;
+  color: #64748b;
+  font-size: 12px;
+  margin: 24px 8px;
+}

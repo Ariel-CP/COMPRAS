@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+<h2>Inicio</h2>
+<p>Fecha: {{ hoy }}</p>
+<section class="grid">
+  <a class="card" href="/ui/plan">
+    <h3>Plan de Producción</h3>
+    <p>Cargar y editar cantidades por período.</p>
+  </a>
+  <a class="card" href="/ui/stock">
+    <h3>Stock Mensual</h3>
+    <p>Importar foto de stock desde Flexxus.</p>
+  </a>
+</section>
+{% endblock %}

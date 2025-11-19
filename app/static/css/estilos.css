@@ -1,0 +1,40 @@
+body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;padding:0}
+header{background:#0b5cab;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:16px}
+header nav a{color:#fff;margin-right:12px;text-decoration:none}
+header .db-status{margin-left:auto;font-size:12px}
+header .db-status .ok{color:#bdfcc9}
+header .db-status .err{color:#ffd2d2}
+header .db-status .warn{color:#ffe9a6}
+main{padding:16px}
+label{margin-right:12px}
+table{border-collapse:collapse;width:100%;margin-top:12px;font-size:14px}
+th,td{border:1px solid #ddd;padding:6px 8px;vertical-align:middle}
+th{background:#f4f6f8;text-align:center;font-weight:600}
+.num{text-align:right}
+.hint{color:#555;font-size:12px}
+.error{background:#ffecec;color:#b10000;border:1px solid #ffb3b3;padding:6px;margin:8px 0}
+/* Home */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
+.card{display:block;border:1px solid #ddd;border-radius:6px;padding:12px;background:#fff;text-decoration:none;color:#111}
+.card:hover{border-color:#0b5cab;box-shadow:0 0 0 2px rgba(11,92,171,.1)}
+button{margin-right:8px}
+/* Productos layout */
+.productos-wrapper{display:grid;gap:16px}
+.panel{background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:12px}
+.panel-filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.panel-alta form input,.panel-alta form select{margin-right:8px;margin-bottom:8px}
+.panel-listado table.productos tbody tr.edit-mode{outline:2px solid #0b5cab;background:#eef6ff}
+.btn-accion{background:#0b5cab;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px}
+.btn-accion:hover{background:#094c90}
+.error-banner{background:#ffecec;color:#b10000;border:1px solid #ffb3b3;padding:6px;margin:8px 0;border-radius:4px}
+/* Centrado de la tabla productos */
+table.productos-table th, table.productos-table td { text-align:center; }
+/* Scroll contenedor tabla */
+.tabla-scroll { max-height:60vh; overflow-y:auto; border:1px solid #d0d7de; border-radius:6px; }
+.tabla-scroll { overflow-x:auto; }
+.tabla-controles{display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.tabla-controles select, .tabla-controles button{font-size:13px}
+/* Sticky header para mejor lectura al hacer scroll */
+.tabla-scroll table.productos-table thead th { position:sticky; top:0; z-index:2; }
+/* Asegurar ancho completo */
+table.productos-table { width:100%; }

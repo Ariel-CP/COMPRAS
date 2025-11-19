@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}Artículos{% endblock %}
+
+{% block content %}
+<section class="productos-wrapper">
+  <h2>Artículos</h2>
+
+  {% if error %}
+  <div class="error-banner">{{ error }}</div>
+  {% endif %}
+
+  <form method="get" class="panel panel-filtros">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar código o nombre" />
+    <select name="tipo">
+      <option value="">Todos los tipos</option>
+      {% for t in ['PT','WIP','MP','EMB','SERV','HERR'] %}
+      <option value="{{ t }}" {% if tipo == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+    <select name="activo">
+      <option value="">Todos</option>
+      <option value="true" {% if activo == True %}selected{% endif %}>Activos</option>
+      <option value="false" {% if activo == False %}selected{% endif %}>Inactivos</option>
+    </select>
+    <button type="submit">Filtrar</button>
+  </form>
+
+  <div class="panel panel-alta">
+    <h3>Nuevo artículo</h3>
+    <form id="form-nuevo" onsubmit="return crearProducto(event)" class="form-alta">
+      <input required maxlength="64" name="codigo" placeholder="Código" />
+      <input required maxlength="128" name="nombre" placeholder="Nombre" />
+      <select name="tipo_producto">
+        {% for t in ['PT','WIP','MP','EMB','SERV','HERR'] %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+      <select name="unidad_medida_id" required>
+        {% for um in unidades %}
+        <option value="{{ um.id }}">{{ um.codigo }} - {{ um.nombre }}</option>
+        {% endfor %}
+      </select>
+      <label><input type="checkbox" name="activo" checked /> Activo</label>
+      <button type="submit">Crear</button>
+    </form>
+  </div>
+
+  <div class="panel panel-listado">
+  <div class="tabla-controles">
+    <label>Cantidad inicial:
+      <select id="limitSelect" onchange="cambiarLimite()">
+        {% for n in [50,100,200,500] %}
+        <option value="{{ n }}" {% if limit == n %}selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" id="btnLoadMore" onclick="loadMore()">Cargar más</button>
+  </div>
+  <div class="tabla-scroll">
+  <table id="tablaProductos" class="productos-table table-center">
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nombre</th>
+        <th>Tipo</th>
+        <th>UM</th>
+        <th>Activo</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in productos %}
+      <tr data-id="{{ p.id }}"
+          data-codigo="{{ p.codigo }}"
+          data-nombre="{{ p.nombre }}"
+          data-tipo="{{ p.tipo_producto }}"
+          data-um-id="{{ p.unidad_medida_id }}"
+          data-activo="{{ 'true' if p.activo else 'false' }}">
+        <td>{{ p.codigo }}</td>
+        <td>{{ p.nombre }}</td>
+        <td>{{ p.tipo_producto }}</td>
+        <td title="{{ p.um_nombre }}">{{ p.um_codigo }}</td>
+        <td>{{ 'Sí' if p.activo else 'No' }}</td>
+        <td>
+          <button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentOffset = {{ productos|length }};
+const pageSize = 100; // tamaño adicional por carga
+const unidadesMap = {
+  {% for um in unidades %}
+  {{ um.id }}: {codigo: "{{ um.codigo }}", nombre: "{{ um.nombre }}"},
+  {% endfor %}
+};
+const tiposProd = ['PT','WIP','MP','EMB','SERV','HERR'];
+
+async function crearProducto(ev) {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  const payload = {
+    codigo: fd.get('codigo'),
+    nombre: fd.get('nombre'),
+    tipo_producto: fd.get('tipo_producto'),
+    unidad_medida_id: parseInt(fd.get('unidad_medida_id')),
+    activo: fd.get('activo') === 'on'
+  };
+  const res = await fetch('/api/productos/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert('Error: ' + (data.detail || res.statusText));
+    return false;
+  }
+  location.reload();
+  return false;
+}
+
+function editarFila(btn){
+  const tr = btn.closest('tr');
+  if(tr.classList.contains('edit-mode')) return;
+  tr.classList.add('edit-mode');
+
+  // Leer valores actuales (de dataset)
+  const id = tr.dataset.id;
+  const codigo = tr.dataset.codigo || tr.children[0].textContent.trim();
+  const nombre = tr.dataset.nombre || tr.children[1].textContent.trim();
+  const tipo = tr.dataset.tipo || tr.children[2].textContent.trim();
+  const umId = parseInt(tr.dataset.umId || '0') || 0;
+  const activo = (tr.dataset.activo || '').toLowerCase() === 'true';
+
+  // Reemplazar celdas por inputs/selects
+  tr.children[0].innerHTML = `<input name="codigo" value="${escapeHtml(codigo)}" maxlength="64" />`;
+  tr.children[1].innerHTML = `<input name="nombre" value="${escapeHtml(nombre)}" maxlength="128" />`;
+  tr.children[2].innerHTML = renderSelectTipos(tipo);
+  tr.children[3].innerHTML = renderSelectUnidades(umId);
+  tr.children[4].innerHTML = `<label><input type="checkbox" name="activo" ${activo ? 'checked':''}/> Activo</label>`;
+
+  // Acciones Guardar/Cancelar
+  tr.children[5].innerHTML = `
+    <button type="button" class="btn-accion" onclick="guardarFila(this)">Guardar</button>
+    <button type="button" class="btn-secundario" onclick="cancelarFila(this)">Cancelar</button>
+  `;
+}
+
+function renderSelectTipos(actual){
+  return `<select name="tipo_producto">${tiposProd.map(t=>`<option value="${t}" ${t===actual?'selected':''}>${t}</option>`).join('')}</select>`;
+}
+
+function renderSelectUnidades(actualId){
+  const opts = Object.entries(unidadesMap)
+    .map(([id, u])=>`<option value="${id}" ${parseInt(id)===(actualId||0)?'selected':''}>${u.codigo} - ${u.nombre}</option>`)
+    .join('');
+  return `<select name="unidad_medida_id">${opts}</select>`;
+}
+
+async function guardarFila(btn){
+  const tr = btn.closest('tr');
+  const id = tr.dataset.id;
+  const codigo = tr.querySelector('input[name="codigo"]').value.trim();
+  const nombre = tr.querySelector('input[name="nombre"]').value.trim();
+  const tipo = tr.querySelector('select[name="tipo_producto"]').value;
+  const umId = parseInt(tr.querySelector('select[name="unidad_medida_id"]').value);
+  const activo = tr.querySelector('input[name="activo"]').checked;
+
+  const payload = { codigo, nombre, tipo_producto: tipo, unidad_medida_id: umId, activo };
+  try{
+    const res = await fetch(`/api/productos/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      const data = await res.json().catch(()=>({}));
+      throw new Error(data.detail || res.statusText);
+    }
+    const p = await res.json();
+    // Actualizar dataset y volver a modo lectura
+    tr.dataset.codigo = p.codigo;
+    tr.dataset.nombre = p.nombre;
+    tr.dataset.tipo = p.tipo_producto;
+    tr.dataset.umId = p.unidad_medida_id;
+    tr.dataset.activo = p.activo ? 'true' : 'false';
+
+    const um = unidadesMap[p.unidad_medida_id] || {codigo:'?', nombre:''};
+    tr.children[0].textContent = p.codigo;
+    tr.children[1].textContent = p.nombre;
+    tr.children[2].textContent = p.tipo_producto;
+    tr.children[3].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
+    tr.children[4].textContent = p.activo ? 'Sí' : 'No';
+    tr.children[5].innerHTML = `<button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>`;
+    tr.classList.remove('edit-mode');
+  }catch(err){
+    alert('No se pudo guardar: ' + err.message);
+  }
+}
+
+function cancelarFila(btn){
+  const tr = btn.closest('tr');
+  const codigo = tr.dataset.codigo || '';
+  const nombre = tr.dataset.nombre || '';
+  const tipo = tr.dataset.tipo || '';
+  const umId = parseInt(tr.dataset.umId || '0') || 0;
+  const activo = (tr.dataset.activo || '').toLowerCase() === 'true';
+  const um = unidadesMap[umId] || {codigo:'?', nombre:''};
+
+  tr.children[0].textContent = codigo;
+  tr.children[1].textContent = nombre;
+  tr.children[2].textContent = tipo;
+  tr.children[3].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
+  tr.children[4].textContent = activo ? 'Sí' : 'No';
+  tr.children[5].innerHTML = `<button type=\"button\" class=\"btn-accion\" onclick=\"editarFila(this)\">Editar</button>`;
+  tr.classList.remove('edit-mode');
+}
+
+function escapeHtml(str){
+  return str.replace(/[&<>"]+/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s]));
+}
+
+function cambiarLimite(){
+  const sel = document.getElementById('limitSelect');
+  const val = sel.value;
+  const url = new URL(window.location.href);
+  url.searchParams.set('limit', val);
+  window.location.href = url.toString();
+}
+
+async function loadMore(){
+  const btn = document.getElementById('btnLoadMore');
+  btn.disabled = true; btn.textContent = 'Cargando...';
+  try {
+    const params = new URLSearchParams();
+    if('{{ q or "" }}') params.set('q','{{ q }}');
+    if('{{ tipo or "" }}') params.set('tipo','{{ tipo }}');
+    if('{{ activo if activo is not none else "" }}') params.set('activo','{{ 'true' if activo else 'false' }}');
+    params.set('limit', pageSize);
+    params.set('offset', currentOffset);
+    const res = await fetch('/api/productos/?' + params.toString());
+    if(!res.ok){ throw new Error('Error fetch ' + res.status); }
+    const nuevos = await res.json();
+    if(nuevos.length === 0){ btn.textContent = 'Sin más'; return; }
+    const tbody = document.querySelector('#tablaProductos tbody');
+    nuevos.forEach(p => {
+      const um = unidadesMap[p.unidad_medida_id] || {codigo:'?', nombre:''};
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-id', p.id);
+      tr.setAttribute('data-codigo', p.codigo);
+      tr.setAttribute('data-nombre', p.nombre);
+      tr.setAttribute('data-tipo', p.tipo_producto);
+      tr.setAttribute('data-um-id', p.unidad_medida_id);
+      tr.setAttribute('data-activo', p.activo ? 'true':'false');
+      tr.innerHTML = `
+        <td>${p.codigo}</td>
+        <td>${p.nombre}</td>
+        <td>${p.tipo_producto}</td>
+        <td title="${um.nombre}">${um.codigo}</td>
+        <td>${p.activo ? 'Sí':'No'}</td>
+        <td><button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    currentOffset += nuevos.length;
+    btn.textContent = 'Cargar más';
+    btn.disabled = false;
+  } catch(err){
+    alert(err.message);
+    btn.textContent = 'Cargar más';
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

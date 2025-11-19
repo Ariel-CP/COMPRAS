@@ -1,0 +1,8 @@
+{
+  "database_url": "mysql+pymysql://root:root@127.0.0.1:3306/compras_db?charset=utf8mb4",
+  "mysql_pool_size": 10,
+  "mysql_max_overflow": 10,
+  "max_upload_mb": 20,
+  "openai_api_key": null,
+  "openai_model": "gpt-4o-mini"
+}

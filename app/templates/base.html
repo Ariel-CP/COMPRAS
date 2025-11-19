@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Compras{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/estilos.css" />
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header>
+    <h1>Compras</h1>
+    <nav>
+      <a href="/ui">Inicio</a>
+      <a href="/ui/plan">Plan</a>
+      <a href="/ui/stock">Stock</a>
+      <a href="/ui/productos">Artículos</a>
+      <a href="/ui/mbom">MBOM</a>
+    </nav>
+    <div class="db-status">
+      {% if db_status and db_status.ok == 'true' %}
+        <span class="ok">DB: {{ db_status.database }} (OK)</span>
+      {% elif db_status %}
+        <span class="err" title="{{ db_status.message }}">DB: ERROR</span>
+      {% else %}
+        <span class="warn">DB: desconocida</span>
+      {% endif %}
+    </div>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <small>v0.1.0</small>
+  </footer>
+  <script src="/static/js/main.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
