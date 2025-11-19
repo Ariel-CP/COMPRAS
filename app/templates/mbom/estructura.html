@@ -1,0 +1,484 @@
+{% extends 'base.html' %}
+{% block title %}Estructura de Producto (MBOM){% endblock %}
+{% block content %}
+<h2>Estructura de Producto (MBOM)</h2>
+
+<div id="um-map" data-um='{{ um_map | tojson }}'></div>
+<div id="unidades-data" data-list='{{ unidades | tojson }}'></div>
+
+<section class="panel">
+  <h3>Encabezado</h3>
+  <label>Producto padre
+    <select id="productoSelect">
+      <option value="">-- Seleccione --</option>
+      {% for p in productos %}
+        <option value="{{ p.id }}" {% if producto_id and producto_id==p.id %}selected{% endif %}>{{ p.codigo }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label style="margin-left:8px;">Buscar
+    <input type="search" id="prodBuscar" placeholder="código o nombre" />
+  </label>
+  <label style="margin-left:8px;">
+    <input type="checkbox" id="soloPtWip" checked /> Sólo PT
+  </label>
+  <button id="btnActualizar" type="button">Actualizar</button>
+  <span id="cabeceraInfo"></span>
+  <div><small id="prodCount"></small></div>
+  <div style="margin-top:6px;">
+    <button id="btnRefrescarProductos" type="button" style="margin-left:6px;">Refrescar productos</button>
+    <details id="crearProdInline" style="margin-top:8px;">
+      <summary>Crear producto padre rápido</summary>
+      <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; align-items:center;">
+        <input type="text" id="nuevoCodigo" placeholder="Código" style="width:140px;" />
+        <input type="text" id="nuevoNombre" placeholder="Nombre" style="width:200px;" />
+        <select id="nuevoTipo">
+          <option value="PT">PT (Producto Terminado)</option>
+          <option value="WIP">WIP (En Proceso)</option>
+        </select>
+        <select id="nuevoUM" style="width:90px;"></select>
+        <button id="btnCrearProducto" type="button">Crear y Seleccionar</button>
+        <span id="crearProdMsg" style="font-size:12px; color:#a00;"></span>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="panel">
+    <h3>Estructura (líneas)</h3>
+    <table id="tblLineas" class="striped">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Cant</th>
+          <th>UM</th>
+          <th>Op</th>
+          <th>Merma</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <style id="styleTblLineasCompact">
+      #tblLineas { table-layout: auto; width:100%; }
+      #tblLineas th, #tblLineas td { white-space:nowrap; padding:1px 5px; vertical-align:middle; }
+      /* Altura unificada */
+      #tblLineas input[type=text],
+      #tblLineas input[type=number],
+      .panel input[type=text], .panel input[type=search], .panel input[type=number], .panel select { height:20px; line-height:18px; padding:2px 4px; font-size:12px; }
+      #tblLineas button { padding:1px 6px; font-size:12px; margin-right:4px; height:20px; }
+      #tblLineas td:last-child { white-space:nowrap; }
+    </style>
+    <button id="btnAgregarLinea" type="button">Agregar renglón</button>
+    <!-- Selector de componente (modal liviano) -->
+    <div id="componenteSelector" style="display:none; position:fixed; top:60px; left:50%; transform:translateX(-50%); width:760px; max-height:70vh; overflow:auto; background:#fff; border:2px solid #333; box-shadow:0 4px 16px rgba(0,0,0,.25); padding:12px; z-index:1000;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong>Seleccionar componente</strong>
+        <button type="button" id="btnCerrarSelector">X</button>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <input type="search" id="compBuscar" placeholder="Buscar código o nombre" style="flex:1; min-width:220px;" />
+        <select id="compTipo" style="width:140px;">
+          <option value="">(Todos tipos)</option>
+          <option value="MP">MP Materia Prima</option>
+          <option value="EMB">EMB Empaque</option>
+          <option value="WIP">WIP Subensamble</option>
+          <option value="SERV">SERV Servicio</option>
+          <option value="HERR">HERR Herramienta</option>
+        </select>
+        <button type="button" id="btnBuscarComp">Buscar</button>
+      </div>
+      <div id="compResultados" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
+<section class="panel">
+  <h3>Costos</h3>
+  <div id="costosPanel">
+    <em>Seleccione un producto y cargue la estructura.</em>
+  </div>
+</section>
+
+<section class="panel">
+  <h3>Importar desde Flexxus</h3>
+  <input type="file" id="archivoFlexxus" accept=".csv,.xlsx" />
+  <button id="btnImportarFlexxus" type="button">Importar</button>
+</section>
+
+<section class="panel" style="display:flex; gap:8px; justify-content:flex-end;">
+  <button id="btnGrabar" type="button">Grabar</button>
+  <button id="btnImprimir" type="button" disabled>Imprimir</button>
+  <button id="btnActivar" type="button" disabled>Activar revisión</button>
+  <button id="btnClonarRevision" type="button" disabled>Clonar revisión</button>
+  <button id="btnEliminar" type="button">Archivar</button>
+  <button id="btnSalir" type="button" onclick="window.location='/ui'">Salir</button>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const sel = document.getElementById('productoSelect');
+  const btnAct = document.getElementById('btnActualizar');
+  const tbody = document.querySelector('#tblLineas tbody');
+  const cabeceraInfo = document.getElementById('cabeceraInfo');
+  const btnAgregar = document.getElementById('btnAgregarLinea');
+  const btnGrabar = document.getElementById('btnGrabar');
+  const btnEliminar = document.getElementById('btnEliminar');
+  const btnActivar = document.getElementById('btnActivar');
+  const btnClonarRev = document.getElementById('btnClonarRevision');
+  const btnImpFlex = document.getElementById('btnImportarFlexxus');
+  const inpBuscar = document.getElementById('prodBuscar');
+  const chkSolo = document.getElementById('soloPtWip');
+  const prodCount = document.getElementById('prodCount');
+  const btnRefrescarProductos = document.getElementById('btnRefrescarProductos');
+  const nuevoCodigo = document.getElementById('nuevoCodigo');
+  const nuevoNombre = document.getElementById('nuevoNombre');
+  const nuevoTipo = document.getElementById('nuevoTipo');
+  const nuevoUM = document.getElementById('nuevoUM');
+  const btnCrearProducto = document.getElementById('btnCrearProducto');
+  const crearProdMsg = document.getElementById('crearProdMsg');
+  // Modal selector componentes
+  const selector = document.getElementById('componenteSelector');
+  const btnCerrarSelector = document.getElementById('btnCerrarSelector');
+  const compBuscar = document.getElementById('compBuscar');
+  const compTipo = document.getElementById('compTipo');
+  const btnBuscarComp = document.getElementById('btnBuscarComp');
+  const compResultados = document.getElementById('compResultados');
+
+  let cabecera = null; // {id, estado, revision, ...}
+  let lineas = [];     // array de líneas
+
+  const umMap = JSON.parse(document.getElementById('um-map').dataset.um);
+  const unidadesList = JSON.parse(document.getElementById('unidades-data').dataset.list || '[]');
+  function umCodigo(umId){ return umMap[umId] || '?'; }
+
+  // Poblar combo UM inline
+  (function cargarUMInline(){
+    nuevoUM.innerHTML='';
+    unidadesList.forEach(u=>{
+      const opt=document.createElement('option');
+      opt.value=u.id; opt.textContent=u.codigo; nuevoUM.appendChild(opt);
+    });
+  })();
+
+  function render(){
+    tbody.innerHTML = '';
+    lineas.sort((a,b)=>a.renglon-b.renglon).forEach(l => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${l.renglon}</td>
+        <td><input type="text" value="${l.componente_codigo||''}" readonly class="codigoComp" size="${(l.componente_codigo||'').length||6}"/></td>
+        <td>${l.componente_nombre||''}</td>
+        <td class="num"><input type="number" step="0.001" value="${(l.cantidad!==undefined && l.cantidad!==null)? (Math.round(l.cantidad*1000)/1000).toFixed(3) : ''}" data-field="cantidad" style="width:100px"/></td>
+        <td>${l.unidad_medida_codigo||umCodigo(l.unidad_medida_id)||''}</td>
+        <td><input type="number" value="${l.operacion_secuencia||''}" data-field="operacion_secuencia" style="width:70px"/></td>
+        <td><input type="number" step="0.0001" min="0" max="0.9999" value="${l.factor_merma}" data-field="factor_merma" style="width:90px"/></td>
+        <td>
+          <button class="btnGuardarLinea">Guardar</button>
+          <button class="btnBorrarLinea">Borrar</button>
+        </td>`;
+      // bind cambios
+      tr.querySelectorAll('input').forEach(inp=>{
+        inp.addEventListener('change', (e)=>{
+          const f = inp.dataset.field; let v = inp.value;
+          if(f==='cantidad') {
+            v = parseFloat(v);
+            if(!isNaN(v)) {
+              v = Math.round(v*1000)/1000; // limitar a 3 decimales
+              inp.value = v.toFixed(3);
+            } else { v = 0; inp.value = '0.000'; }
+          } else if(f==='factor_merma') {
+            v = parseFloat(v);
+          }
+          if(f==='operacion_secuencia') v = v ? parseInt(v) : null;
+          l[f] = v;
+        })
+      });
+      tr.querySelector('.btnGuardarLinea').addEventListener('click', async ()=>{
+        await guardarLinea(l);
+      });
+      tr.querySelector('.btnBorrarLinea').addEventListener('click', async ()=>{
+        if(!l.id){ lineas = lineas.filter(x=>x!==l); return render(); }
+        if(confirm('¿Borrar renglón?')){
+          await fetch(`/api/mbom/detalle/${l.id}`, {method:'DELETE'});
+          lineas = lineas.filter(x=>x.id!==l.id);
+          render();
+        }
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function cargar(){
+    const pid = sel.value;
+    if(!pid){ cabecera=null; lineas=[]; render(); cabeceraInfo.textContent=''; return; }
+    const resp = await fetch(`/api/mbom/${pid}?estado=ACTIVO`);
+    if(resp.status===404){
+      // crear borrador vacío
+      const r2 = await fetch(`/api/mbom/${pid}`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({cabecera:{producto_padre_id: parseInt(pid), estado:'BORRADOR', revision:'A'}, lineas:[]})});
+      const data2 = await r2.json();
+      cabecera = data2.cabecera; lineas = data2.lineas || [];
+    } else {
+      const data = await resp.json();
+      cabecera = data.cabecera; lineas = data.lineas || [];
+    }
+    cabeceraInfo.textContent = `MBOM ${cabecera.revision} - ${cabecera.estado}`;
+    updateRevisionButtons();
+    await cargarCostos();
+    render();
+  }
+
+  function updateRevisionButtons(){
+    if(!cabecera){
+      btnActivar.disabled = true; btnClonarRev.disabled = true; return;
+    }
+    // Activar sólo si es BORRADOR; Clonar sólo si es ACTIVO
+    btnActivar.disabled = cabecera.estado !== 'BORRADOR';
+    btnClonarRev.disabled = cabecera.estado !== 'ACTIVO';
+  }
+
+  async function fetchProductos(){
+    const q = inpBuscar.value || '';
+    const solo = chkSolo.checked;
+    let items = [];
+    let countPT = 0;
+    const t0 = performance.now();
+    try{
+      if(solo){
+        const r1 = await fetch(`/api/productos/?activo=true&tipo=PT&limit=1000&q=${encodeURIComponent(q)}`);
+        items = await r1.json();
+        countPT = items.length;
+      }else{
+        const r = await fetch(`/api/productos/?activo=true&limit=1000&q=${encodeURIComponent(q)}`);
+        items = await r.json();
+      }
+    }catch(e){ items = []; }
+    // Ordenar por código
+    items.sort((a,b)=> (a.codigo||'').localeCompare(b.codigo||''));
+    // Repoblar select
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- Seleccione --</option>';
+    items.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = `${p.codigo}`;
+      sel.appendChild(opt);
+    });
+    // Restaurar selección si aplica
+    if(current){ sel.value = current; }
+    if(solo){ prodCount.textContent = `PT: ${countPT}`; }
+    else { prodCount.textContent = `${items.length} productos`; }
+    if(items.length === 0){ prodCount.textContent = solo ? 'PT: 0 (verifique que estén activos)' : '0 productos'; }
+    const t1 = performance.now();
+  }
+
+  // Debug deshabilitado
+  function setDebug(tag,msg){ /* no-op */ }
+  btnRefrescarProductos.addEventListener('click', ()=>{ fetchProductos(); });
+
+  async function cargarCostos(){
+    if(!cabecera){ document.getElementById('costosPanel').innerHTML='<em>Sin MBOM</em>'; return; }
+    const r = await fetch(`/api/mbom/${cabecera.id}/costos`);
+    if(!r.ok){ document.getElementById('costosPanel').innerHTML='<em>Costos no disponibles</em>'; return; }
+    const d = await r.json();
+    const html = [`<table class="striped"><thead><tr><th>Código</th><th>Cant</th><th>UM</th><th>Unit.</th><th>Total</th></tr></thead><tbody>`];
+    d.componentes.forEach(c=>{
+      html.push(`<tr><td>${c.codigo}</td><td class='num'>${c.cantidad}</td><td>${c.um_codigo}</td><td class='num'>${c.costo_unitario} ${c.moneda}</td><td class='num'>${c.costo_total.toFixed(4)}</td></tr>`)
+    });
+    html.push(`</tbody><tfoot><tr><th colspan='4'>Total</th><th class='num'>${d.total.toFixed(4)}</th></tr></tfoot></table>`);
+    document.getElementById('costosPanel').innerHTML = html.join('');
+  }
+
+  async function guardarLinea(l){
+    if(!cabecera){ alert('Primero seleccione producto'); return; }
+    if(cabecera.estado === 'ACTIVO'){ alert('No se puede modificar una revisión ACTIVA. Clonar primero.'); return; }
+    if(!l.componente_producto_id || l.componente_producto_id === 0){ alert('Debe asignar un componente válido al renglón antes de guardar.'); return; }
+    if(!l.unidad_medida_id || l.unidad_medida_id === 0){ alert('Unidad de medida inválida en el renglón.'); return; }
+    if(l.cantidad === null || l.cantidad === undefined || l.cantidad <= 0){ alert('Cantidad debe ser > 0'); return; }
+    // valores mínimos para upsert de línea
+    const body = { cabecera, lineas: [l] };
+    const r = await fetch(`/api/mbom/${cabecera.producto_padre_id}`, {
+      method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if(!r.ok){
+      let msg='Error al guardar línea';
+      try{ const er = await r.json(); msg = er.detail || msg; }catch{}
+      alert(msg); return;
+    }
+    const d = await r.json();
+    cabecera = d.cabecera; lineas = d.lineas || [];
+    updateRevisionButtons();
+    await cargarCostos();
+    render();
+  }
+
+  btnAct.addEventListener('click', cargar);
+  inpBuscar.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ fetchProductos(); }});
+  chkSolo.addEventListener('change', fetchProductos);
+  // Botón extra para buscar si se desea añadir uno visual (se usa Enter)
+  if(!inpBuscar.nextElementSibling || inpBuscar.nextElementSibling.tagName!=='BUTTON'){
+    const b = document.createElement('button'); b.type='button'; b.textContent='Buscar'; b.style.marginLeft='4px';
+    b.addEventListener('click', fetchProductos); inpBuscar.parentElement.appendChild(b);
+  }
+  btnAgregar.addEventListener('click', ()=>{
+    if(!cabecera){ alert('Seleccione producto primero'); return; }
+    abrirSelectorComponentes();
+  });
+    function abrirSelectorComponentes(){
+      selector.style.display='block';
+      compBuscar.value='';
+      compResultados.innerHTML='<em>Ingrese texto y Buscar</em>';
+    }
+    function cerrarSelector(){ selector.style.display='none'; }
+    btnCerrarSelector.addEventListener('click', cerrarSelector);
+    btnBuscarComp.addEventListener('click', cargarComponentes);
+    compBuscar.addEventListener('keydown', e=>{ if(e.key==='Enter'){ cargarComponentes(); }});
+
+    async function cargarComponentes(){
+      let q = compBuscar.value.trim();
+      let tipo = compTipo.value;
+      const params = new URLSearchParams();
+      params.append('activo','true');
+      params.append('limit','300');
+      if(q) params.append('q', q);
+      if(tipo) params.append('tipo', tipo);
+      const url = `/api/productos/?${params.toString()}`;
+      compResultados.innerHTML='<em>Cargando...</em>';
+      try{
+        const r = await fetch(url);
+        if(!r.ok){ compResultados.innerHTML='<em>Error al cargar componentes</em>'; return; }
+        const arr = await r.json();
+        if(!Array.isArray(arr) || arr.length===0){ compResultados.innerHTML='<em>Sin resultados</em>'; return; }
+        renderTablaComponentes(arr);
+      }catch(e){ compResultados.innerHTML='<em>Error de red</em>'; }
+    }
+
+    function renderTablaComponentes(items){
+      const html = [`<table class='striped'><thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>UM</th><th></th></tr></thead><tbody>`];
+      items.forEach(p=>{
+        const um = umCodigo(p.unidad_medida_id);
+        html.push(`<tr><td>${p.codigo}</td><td>${p.nombre}</td><td>${p.tipo_producto}</td><td>${um}</td><td><button data-id='${p.id}' data-codigo='${p.codigo}' data-nombre='${p.nombre}' data-um='${p.unidad_medida_id}'>Agregar</button></td></tr>`);
+      });
+      html.push('</tbody></table>');
+      compResultados.innerHTML = html.join('');
+      compResultados.querySelectorAll('button[data-id]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          agregarLineaComponente({
+            id: parseInt(btn.dataset.id),
+            codigo: btn.dataset.codigo,
+            nombre: btn.dataset.nombre,
+            unidad_medida_id: parseInt(btn.dataset.um)
+          });
+        });
+      });
+    }
+
+    function agregarLineaComponente(prod){
+      if(!cabecera){ return; }
+      const maxR = lineas.length ? Math.max.apply(null, lineas.map(x=>x.renglon)) : 0;
+      const nueva = {
+        id:null,
+        mbom_id: cabecera.id,
+        renglon: maxR+10,
+        componente_producto_id: prod.id,
+        componente_codigo: prod.codigo,
+        componente_nombre: prod.nombre,
+        cantidad: 1,
+        unidad_medida_id: prod.unidad_medida_id,
+        unidad_medida_codigo: umCodigo(prod.unidad_medida_id),
+        factor_merma: 0.0
+      };
+      lineas.push(nueva);
+      cerrarSelector();
+      render();
+    }
+  btnGrabar.addEventListener('click', async ()=>{
+    if(!cabecera){ alert('Sin cabecera'); return; }
+    if(cabecera.estado === 'ACTIVO'){ alert('Revisión ACTIVA no editable. Clonar para modificar.'); return; }
+    const r = await fetch(`/api/mbom/${cabecera.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cabecera, lineas })});
+    if(!r.ok){ let msg='Error al grabar cabecera/detalle'; try{ const er=await r.json(); msg=er.detail||msg;}catch{} alert(msg); return; }
+    const d = await r.json();
+    cabecera = d.cabecera; lineas = d.lineas || [];
+    updateRevisionButtons();
+    await cargarCostos();
+    render();
+  });
+  btnEliminar.addEventListener('click', async ()=>{
+    if(!cabecera){ return; }
+    if(confirm('Archivar MBOM actual?')){
+      const body = { cabecera: { ...cabecera, estado: 'ARCHIVADO' }, lineas };
+      const r = await fetch(`/api/mbom/${cabecera.id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      if(r.ok){ await cargar(); }
+    }
+  });
+  btnActivar.addEventListener('click', async ()=>{
+    if(!cabecera || cabecera.estado !== 'BORRADOR'){ return; }
+    const r = await fetch(`/api/mbom/${cabecera.id}/activar`, { method:'POST' });
+    if(!r.ok){ alert('Error al activar revisión'); return; }
+    const d = await r.json();
+    cabecera = d.cabecera; lineas = d.lineas || [];
+    updateRevisionButtons();
+    await cargarCostos();
+    render();
+  });
+  btnClonarRev.addEventListener('click', async ()=>{
+    if(!cabecera || cabecera.estado !== 'ACTIVO'){ return; }
+    const r = await fetch(`/api/mbom/${cabecera.id}/clonar`, { method:'POST' });
+    if(!r.ok){ alert('Error al clonar revisión'); return; }
+    const d = await r.json();
+    cabecera = d.cabecera; lineas = d.lineas || [];
+    updateRevisionButtons();
+    await cargarCostos();
+    render();
+  });
+
+  btnImpFlex.addEventListener('click', async ()=>{
+    const pid = sel.value; if(!pid){ alert('Seleccione producto'); return; }
+    const f = document.getElementById('archivoFlexxus');
+    const file = f.files && f.files[0];
+    if(!file){ alert('Seleccione archivo .csv/.xlsx'); return; }
+    const form = new FormData(); form.append('archivo', file);
+    const r = await fetch(`/api/mbom/${pid}/importar-flexxus`, { method:'POST', body: form });
+    if(r.status===501){ alert('Importación pendiente de implementación'); return; }
+    const d = await r.json();
+    cabecera = d.cabecera; lineas = d.lineas || [];
+    await cargarCostos();
+    render();
+  });
+
+
+  btnCrearProducto.addEventListener('click', async ()=>{
+    crearProdMsg.textContent='';
+    const codigo = (nuevoCodigo.value||'').trim();
+    const nombre = (nuevoNombre.value||'').trim() || codigo;
+    const tipo = nuevoTipo.value;
+    const umId = parseInt(nuevoUM.value);
+    if(!codigo){ crearProdMsg.textContent='Código requerido'; return; }
+    if(!umId){ crearProdMsg.textContent='UM inválida'; return; }
+    const body = { codigo, nombre, tipo_producto: tipo, unidad_medida_id: umId, activo: true };
+    const r = await fetch('/api/productos/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if(!r.ok){
+      try{ const er = await r.json(); crearProdMsg.textContent = er.detail || 'Error al crear'; }catch{ crearProdMsg.textContent='Error al crear'; }
+      return;
+    }
+    const prod = await r.json();
+    await fetchProductos();
+    sel.value = prod.id;
+    await cargar();
+    crearProdMsg.style.color='#060'; crearProdMsg.textContent='Creado';
+  });
+
+  // Cargar lista de productos al abrir y luego la estructura si hay selección
+  fetchProductos().then(()=>{ if(sel.value){ cargar(); }});
+  // Inyectar estilo para codigoComp si no existe
+  if(!document.getElementById('styleCodigoComp')){
+    const st = document.createElement('style');
+    st.id='styleCodigoComp';
+    st.textContent='.codigoComp{background:#f3f3f3;border:1px solid #ccc;font-family:monospace;padding:2px 4px;height:20px;line-height:18px;font-size:12px;}';
+    document.head.appendChild(st);
+  }
+})();
+</script>
+{% endblock %}
