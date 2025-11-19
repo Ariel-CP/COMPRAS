@@ -1,0 +1,81 @@
+# Python / FastAPI ignores
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment & secrets
+.env
+.env.*
+*.env
+
+# Logs
+*.log
+log/
+logs/
+
+# Byte-compiled / optimized / DLL files
+*.so
+*.dll
+*.dylib
+
+# Distributions / packaging
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+
+# Unit test / coverage reports
+.coverage*
+htmlcov/
+.cache/
+.pytest_cache/
+pytestdebug.log
+
+# Type checker caches
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+
+# Editor / IDE
+.vscode/
+*.code-workspace
+.idea/
+*.iml
+
+# Node (if front-end assets later)
+node_modules/
+
+# Static build artifacts
+static_build/
+
+# SQL dumps / large data
+*.sql
+*.sqlite3
+
+# Profiling
+.prof
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Coverage XML / reports
+coverage.xml
+
+# Tooling
+pip-wheel-metadata/
+
+# Local overrides
+local_settings.py
+
+# Generated reports
+reports/
