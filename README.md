@@ -29,7 +29,7 @@ app/
     producto_service.py
     unidad_service.py
     plan_service.py
-    stock_import_service.py (futuro Flexxus)
+    stock_import_service.py (futuro origen ERP externo)
   schemas/             # Modelos Pydantic (serialización)
   templates/           # HTML Jinja2 (ej: mbom/estructura.html)
   static/              # CSS/JS estáticos (si se agregan)
@@ -99,11 +99,11 @@ Productos / Unidades:
 3. Cruzar con `stock_disponible_mes` → calcular faltantes.
 4. Generar `sugerencia_compra` (cantidad necesaria - stock disponible) con estados gestionables.
 
-## Integración Flexxus (Pendiente)
+## Integración ERP Externo (Pendiente)
 
 - Importar CSV/Excel de stock y precios.
 - Mapear códigos externos a `producto.codigo` (validación y reporte de diferencias).
-- Registrar origen `ERP_FLEXXUS` en tablas de stock y precios históricos.
+- Registrar origen definido en el schema (valor enum correspondiente) en tablas de stock y precios históricos.
 
 ## Integración IA (Pendiente)
 
@@ -175,7 +175,7 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 
 ## Próximos Pasos
 
-- Implementar importación Flexxus (`/api/mbom/{producto_id}/importar-flexxus`).
+- Implementar importación de datos externos (`/api/mbom/{producto_id}/importar-flexxus`).
 - Explotación MBOM + plan mensual para requerimientos materiales.
 - Generación automática de sugerencias de compra.
 - Endpoints de reportes IA y summaries comparativos.
