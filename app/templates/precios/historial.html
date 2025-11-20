@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}Historial de Precios{% endblock %}
+{% block content %}
+<h2>Historial de Precios de Artículos</h2>
+<section class="panel">
+  <form id="filtros" onsubmit="return false" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+    <label>Buscar
+      <input type="search" id="q" placeholder="producto o proveedor" value="{{ q or '' }}">
+    </label>
+    <label>Proveedor
+      <input type="text" id="proveedor" placeholder="código o nombre" value="{{ proveedor or '' }}">
+    </label>
+    <label>Desde
+      <input type="date" id="desde" value="{{ desde or '' }}">
+    </label>
+    <label>Hasta
+      <input type="date" id="hasta" value="{{ hasta or '' }}">
+    </label>
+    <label>Límite
+      <select id="limit">
+        <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
+        <option value="100" {% if limit==100 %}selected{% endif %}>100</option>
+        <option value="200" {% if limit==200 %}selected{% endif %}>200</option>
+      </select>
+    </label>
+    <button type="button" id="btnBuscar">Buscar</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div id="resultInfo"><em>Use los filtros y presione Buscar</em></div>
+  <table id="tbl" class="striped" style="width:100%; table-layout:auto;">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Producto</th>
+        <th>Proveedor</th>
+        <th>Precio</th>
+        <th>Moneda</th>
+        <th>Origen</th>
+        <th>Ref</th>
+        <th>Notas</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const q = document.getElementById('q');
+  const proveedor = document.getElementById('proveedor');
+  const desde = document.getElementById('desde');
+  const hasta = document.getElementById('hasta');
+  const limit = document.getElementById('limit');
+  const btnBuscar = document.getElementById('btnBuscar');
+  const tbody = document.querySelector('#tbl tbody');
+  const resultInfo = document.getElementById('resultInfo');
+
+  function fmtOrigen(val){
+    // Evitar mostrar nombres de marca directamente
+    if(!val) return '';
+    if(val.startsWith('ERP_')) return 'ERP';
+    return val;
+  }
+
+  async function cargar(){
+    const params = new URLSearchParams();
+    if(q.value.trim()) params.append('q', q.value.trim());
+    if(proveedor.value.trim()) params.append('proveedor', proveedor.value.trim());
+    if(desde.value) params.append('desde', desde.value);
+    if(hasta.value) params.append('hasta', hasta.value);
+    params.append('limit', limit.value);
+    const url = `/api/precios/historial?${params.toString()}`;
+    resultInfo.innerHTML = '<em>Cargando...</em>';
+    try{
+      const r = await fetch(url);
+      if(!r.ok){ resultInfo.innerHTML = '<em>Error al cargar</em>'; return; }
+      const arr = await r.json();
+      tbody.innerHTML = '';
+      if(!Array.isArray(arr) || arr.length===0){ resultInfo.innerHTML = '<em>Sin resultados</em>'; return; }
+      resultInfo.textContent = `${arr.length} resultados`;
+      arr.forEach(it=>{
+        const tr = document.createElement('tr');
+        const prov = [it.proveedor_codigo || '', it.proveedor_nombre || ''].filter(Boolean).join(' - ');
+        const precio = (it.precio_unitario ?? '').toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6});
+        tr.innerHTML = `
+          <td>${it.fecha_precio}</td>
+          <td><strong>${it.producto_codigo}</strong> - ${it.producto_nombre||''}</td>
+          <td>${prov}</td>
+          <td class="num">${precio}</td>
+          <td>${it.moneda||''}</td>
+          <td>${fmtOrigen(it.origen)}</td>
+          <td>${it.referencia_doc||''}</td>
+          <td>${it.notas||''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }catch(e){
+      resultInfo.innerHTML = '<em>Error de red</em>';
+    }
+  }
+
+  btnBuscar.addEventListener('click', cargar);
+  q.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ cargar(); }});
+  proveedor.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ cargar(); }});
+})();
+</script>
+{% endblock %}

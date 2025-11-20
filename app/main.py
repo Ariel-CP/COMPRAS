@@ -7,7 +7,7 @@ from fastapi.openapi.docs import (
 )
 
 from .api.router import api_router
-from .api import ui_plan, ui_stock, ui_home, ui_productos, ui_mbom
+from .api import ui_plan, ui_stock, ui_home, ui_productos, ui_mbom, ui_precios
 
 
 def create_app() -> FastAPI:
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     application.include_router(ui_stock.router, prefix="/ui")
     application.include_router(ui_productos.router, prefix="/ui")
     application.include_router(ui_mbom.router, prefix="/ui")
+    application.include_router(ui_precios.router, prefix="/ui")
 
     # Static files
     application.mount(
