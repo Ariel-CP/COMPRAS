@@ -248,11 +248,11 @@ git push{% extends 'base.html' %}
     const t0 = performance.now();
     try{
       if(solo){
-        const r1 = await fetch(`/api/productos/?activo=true&tipo=PT&limit=1000&q=${encodeURIComponent(q)}`);
+        const r1 = await fetch(`/api/productos/?activo=true&tipo=PT&limit=200&q=${encodeURIComponent(q)}`);
         items = await r1.json();
         countPT = items.length;
       }else{
-        const r = await fetch(`/api/productos/?activo=true&limit=1000&q=${encodeURIComponent(q)}`);
+        const r = await fetch(`/api/productos/?activo=true&limit=200&q=${encodeURIComponent(q)}`);
         items = await r.json();
       }
     }catch(e){ items = []; }
@@ -341,14 +341,21 @@ git push{% extends 'base.html' %}
       let tipo = compTipo.value;
       const params = new URLSearchParams();
       params.append('activo','true');
-      params.append('limit','300');
+      // Límite máximo permitido por la API: 200
+      params.append('limit','200');
       if(q) params.append('q', q);
       if(tipo) params.append('tipo', tipo);
       const url = `/api/productos/?${params.toString()}`;
       compResultados.innerHTML='<em>Cargando...</em>';
       try{
         const r = await fetch(url);
-        if(!r.ok){ compResultados.innerHTML='<em>Error al cargar componentes</em>'; return; }
+        if(!r.ok){
+          let msg = 'Error al cargar componentes';
+          if(r.status === 422){ msg = 'Parámetros inválidos (limite > 200)'; }
+          else if(r.status === 400){ msg = 'Solicitud inválida (verifique filtros)'; }
+          compResultados.innerHTML = `<em>${msg}</em>`;
+          return;
+        }
         const arr = await r.json();
         if(!Array.isArray(arr) || arr.length===0){ compResultados.innerHTML='<em>Sin resultados</em>'; return; }
         renderTablaComponentes(arr);
