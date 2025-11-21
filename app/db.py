@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import create_engine
@@ -14,7 +13,9 @@ _engine = create_engine(
     max_overflow=_settings.mysql_max_overflow,
     future=True,
 )
-SessionLocal = sessionmaker(bind=_engine, autocommit=False, autoflush=False, future=True)
+SessionLocal = sessionmaker(
+    bind=_engine, autocommit=False, autoflush=False, future=True
+)
 
 
 def get_db() -> Generator[Session, None, None]:

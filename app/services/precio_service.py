@@ -12,7 +12,9 @@ def _row_to_precio(row: Any) -> Dict[str, Any]:
         "producto_nombre": row.producto_nombre,
         "proveedor_codigo": row.proveedor_codigo,
         "proveedor_nombre": row.proveedor_nombre,
-        "fecha_precio": row.fecha_precio.isoformat() if row.fecha_precio else None,
+        "fecha_precio": (
+            row.fecha_precio.isoformat() if row.fecha_precio else None
+        ),
         "precio_unitario": float(row.precio_unitario),
         "moneda": row.moneda,
         "origen": row.origen,
@@ -40,12 +42,16 @@ def listar_precios_compra(
 
     if q:
         where.append(
-            "(p.codigo LIKE :q OR p.nombre LIKE :q OR h.proveedor_codigo LIKE :q OR h.proveedor_nombre LIKE :q)"
+            "(p.codigo LIKE :q OR p.nombre LIKE :q"
+            " OR h.proveedor_codigo LIKE :q"
+            " OR h.proveedor_nombre LIKE :q)"
         )
         params["q"] = f"%{q}%"
 
     if proveedor:
-        where.append("(h.proveedor_codigo LIKE :prov OR h.proveedor_nombre LIKE :prov)")
+        where.append(
+            "(h.proveedor_codigo LIKE :prov OR h.proveedor_nombre LIKE :prov)"
+        )
         params["prov"] = f"%{proveedor}%"
 
     if desde is not None:
@@ -66,7 +72,8 @@ def listar_precios_compra(
         JOIN producto p ON p.id = h.producto_id
         WHERE """
         + " AND ".join(where)
-        + " ORDER BY h.fecha_precio DESC, h.id DESC LIMIT :limit OFFSET :offset"
+        + " ORDER BY h.fecha_precio DESC, h.id DESC"
+        + " LIMIT :limit OFFSET :offset"
     )
 
     rows = db.execute(sql, params).fetchall()

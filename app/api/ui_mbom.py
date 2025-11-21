@@ -20,10 +20,16 @@ async def ui_mbom(
     producto_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    # Cargar catálogo de productos PT y WIP activos por separado para asegurar que estén incluidos
-    productos_pt = listar_productos(db, q=None, tipo="PT", activo=True, limit=500, offset=0)
-    productos_wip = listar_productos(db, q=None, tipo="WIP", activo=True, limit=500, offset=0)
-    productos = sorted([*productos_pt, *productos_wip], key=lambda p: p.get("codigo") or "")
+    # Combinar productos PT y WIP activos para el selector
+    productos_pt = listar_productos(
+        db, q=None, tipo="PT", activo=True, limit=500, offset=0
+    )
+    productos_wip = listar_productos(
+        db, q=None, tipo="WIP", activo=True, limit=500, offset=0
+    )
+    productos = sorted(
+        [*productos_pt, *productos_wip], key=lambda p: p.get("codigo") or ""
+    )
     unidades = listar_unidades(db)
     um_map = {u["id"]: u["codigo"] for u in unidades}
     status = db_status(db)

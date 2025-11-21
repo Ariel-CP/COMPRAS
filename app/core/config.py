@@ -16,8 +16,12 @@ class Settings:
     mysql_pool_size: int = 10
     mysql_max_overflow: int = 10
     max_upload_mb: int = 10
+    # 'anthropic' | 'openai' | 'azure-openai'
+    ai_provider: Optional[str] = None
     openai_api_key: Optional[str] = None
     openai_model: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    anthropic_model: Optional[str] = None
 
 
 def _load_json_config() -> dict:
@@ -65,16 +69,28 @@ def get_settings() -> Settings:
         os.environ.get("MAX_UPLOAD_MB", cfg.get("max_upload_mb", 10))
     )
 
+    ai_provider = os.environ.get("AI_PROVIDER") or cfg.get("ai_provider")
+
     openai_api_key = (
         os.environ.get("OPENAI_API_KEY") or cfg.get("openai_api_key")
     )
     openai_model = os.environ.get("OPENAI_MODEL") or cfg.get("openai_model")
+
+    anthropic_api_key = (
+        os.environ.get("ANTHROPIC_API_KEY") or cfg.get("anthropic_api_key")
+    )
+    anthropic_model = (
+        os.environ.get("ANTHROPIC_MODEL") or cfg.get("anthropic_model")
+    )
 
     return Settings(
         database_url=database_url,
         mysql_pool_size=mysql_pool_size,
         mysql_max_overflow=mysql_max_overflow,
         max_upload_mb=max_upload_mb,
+        ai_provider=ai_provider,
         openai_api_key=openai_api_key,
         openai_model=openai_model,
+        anthropic_api_key=anthropic_api_key,
+        anthropic_model=anthropic_model,
     )
