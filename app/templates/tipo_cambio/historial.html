@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% block title %}Historial Tipo de Cambio{% endblock %}
+{% block content %}
+<h2>Historial de Tipos de Cambio</h2>
+
+<section class="panel">
+  <h3>Importar Datos</h3>
+  <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:end;">
+    <div style="flex:1; min-width:280px;">
+      <h4>Importar desde Archivo</h4>
+      <form id="formImport" style="display:flex; flex-direction:column; gap:8px;">
+        <label>Archivo (.csv o .xlsx)
+          <input type="file" id="fileInput" accept=".csv,.xlsx" required>
+        </label>
+        <div style="display:flex; gap:8px;">
+          <label style="flex:1;">Moneda
+            <select id="importMoneda" required>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="ARS">ARS</option>
+            </select>
+          </label>
+          <label style="flex:1;">Tipo
+            <select id="importTipo" required>
+              <option value="VENTA">VENTA</option>
+              <option value="COMPRA">COMPRA</option>
+              <option value="PROMEDIO">PROMEDIO</option>
+            </select>
+          </label>
+        </div>
+        <label>Origen
+          <select id="importOrigen">
+            <option value="MANUAL">MANUAL</option>
+            <option value="ERP_FLEXXUS">ERP</option>
+            <option value="OTRO">OTRO</option>
+          </select>
+        </label>
+        <button type="submit" id="btnImportar">Importar</button>
+      </form>
+      <div id="importResult" style="margin-top:8px;"></div>
+    </div>
+
+    <div style="flex:1; min-width:280px;">
+      <h4>Generar Plantilla</h4>
+      <p>Descargue una plantilla vacía para completar:</p>
+      <div style="display:flex; gap:8px; flex-direction:column;">
+        <button type="button" id="btnPlantillaCSV">📄 Descargar Plantilla CSV</button>
+        <button type="button" id="btnPlantillaXLSX">📊 Descargar Plantilla Excel</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h3>Consultar Historial</h3>
+  <form id="filtros" onsubmit="return false" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+    <label>Moneda
+      <select id="filtroMoneda">
+        <option value="">Todas</option>
+        <option value="USD" {% if moneda=='USD' %}selected{% endif %}>USD</option>
+        <option value="EUR" {% if moneda=='EUR' %}selected{% endif %}>EUR</option>
+        <option value="ARS" {% if moneda=='ARS' %}selected{% endif %}>ARS</option>
+      </select>
+    </label>
+    <label>Tipo
+      <select id="filtroTipo">
+        <option value="">Todos</option>
+        <option value="VENTA" {% if tipo=='VENTA' %}selected{% endif %}>VENTA</option>
+        <option value="COMPRA" {% if tipo=='COMPRA' %}selected{% endif %}>COMPRA</option>
+        <option value="PROMEDIO" {% if tipo=='PROMEDIO' %}selected{% endif %}>PROMEDIO</option>
+      </select>
+    </label>
+    <label>Desde
+      <input type="date" id="filtroDesde" value="{{ desde or '' }}">
+    </label>
+    <label>Hasta
+      <input type="date" id="filtroHasta" value="{{ hasta or '' }}">
+    </label>
+    <button type="button" id="btnBuscar">Buscar</button>
+    <button type="button" id="btnLimpiar">Limpiar</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div id="resultInfo"><em>Use los filtros y presione Buscar</em></div>
+  <table id="tbl" class="striped" style="width:100%; table-layout:auto;">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Moneda</th>
+        <th>Tipo</th>
+        <th>Tasa</th>
+        <th>Origen</th>
+        <th>Notas</th>
+        <th>Fecha Creación</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const fileInput = document.getElementById('fileInput');
+  const importMoneda = document.getElementById('importMoneda');
+  const importTipo = document.getElementById('importTipo');
+  const importOrigen = document.getElementById('importOrigen');
+  const btnImportar = document.getElementById('btnImportar');
+  const formImport = document.getElementById('formImport');
+  const importResult = document.getElementById('importResult');
+
+  const btnPlantillaCSV = document.getElementById('btnPlantillaCSV');
+  const btnPlantillaXLSX = document.getElementById('btnPlantillaXLSX');
+
+  const filtroMoneda = document.getElementById('filtroMoneda');
+  const filtroTipo = document.getElementById('filtroTipo');
+  const filtroDesde = document.getElementById('filtroDesde');
+  const filtroHasta = document.getElementById('filtroHasta');
+  const btnBuscar = document.getElementById('btnBuscar');
+  const btnLimpiar = document.getElementById('btnLimpiar');
+  const tbody = document.querySelector('#tbl tbody');
+  const resultInfo = document.getElementById('resultInfo');
+
+  // Importar archivo
+  formImport.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const file = fileInput.files[0];
+    if(!file){
+      importResult.innerHTML = '<em style="color:red;">Seleccione un archivo</em>';
+      return;
+    }
+    const ext = file.name.split('.').pop().toLowerCase();
+    if(!['csv','xlsx'].includes(ext)){
+      importResult.innerHTML = '<em style="color:red;">Solo se admiten archivos .csv o .xlsx</em>';
+      return;
+    }
+
+    importResult.innerHTML = '<em>Importando...</em>';
+    btnImportar.disabled = true;
+
+    try{
+      let result;
+      if(ext === 'csv'){
+        const text = await file.text();
+        const resp = await fetch('/api/tipo-cambio/import', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            csv_contenido: text,
+            moneda: importMoneda.value,
+            tipo: importTipo.value,
+            origen: importOrigen.value
+          })
+        });
+        if(!resp.ok){
+          const err = await resp.text();
+          throw new Error(err);
+        }
+        result = await resp.json();
+      } else {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('moneda', importMoneda.value);
+        formData.append('tipo', importTipo.value);
+        formData.append('origen', importOrigen.value);
+        const resp = await fetch('/api/tipo-cambio/import-xlsx', {
+          method: 'POST',
+          body: formData
+        });
+        if(!resp.ok){
+          const err = await resp.text();
+          throw new Error(err);
+        }
+        result = await resp.json();
+      }
+
+      let msg = `<strong style="color:green;">Importación exitosa</strong><br>`;
+      msg += `Insertados: ${result.insertados}, Actualizados: ${result.actualizados}`;
+      if(result.errores > 0){
+        msg += `<br>Errores: ${result.errores}`;
+        if(result.detalle_errores && result.detalle_errores.length > 0){
+          msg += `<br><small>${result.detalle_errores.slice(0,5).join('<br>')}</small>`;
+        }
+      }
+      importResult.innerHTML = msg;
+      fileInput.value = '';
+      // Recargar tabla si hay filtros activos
+      if(tbody.children.length > 0) cargarHistorial();
+    } catch(e){
+      importResult.innerHTML = `<em style="color:red;">Error: ${e.message}</em>`;
+    } finally {
+      btnImportar.disabled = false;
+    }
+  });
+
+  // Generar plantillas
+  btnPlantillaCSV.addEventListener('click', ()=>{
+    window.location.href = '/api/tipo-cambio/plantilla-csv';
+  });
+  btnPlantillaXLSX.addEventListener('click', ()=>{
+    window.location.href = '/api/tipo-cambio/plantilla-xlsx';
+  });
+
+  // Cargar historial
+  async function cargarHistorial(){
+    const params = new URLSearchParams();
+    if(filtroMoneda.value) params.append('moneda', filtroMoneda.value);
+    if(filtroTipo.value) params.append('tipo', filtroTipo.value);
+    if(filtroDesde.value) params.append('desde', filtroDesde.value);
+    if(filtroHasta.value) params.append('hasta', filtroHasta.value);
+    const url = `/api/tipo-cambio?${params.toString()}`;
+    resultInfo.innerHTML = '<em>Cargando...</em>';
+    try{
+      const r = await fetch(url);
+      if(!r.ok){ resultInfo.innerHTML = '<em>Error al cargar</em>'; return; }
+      const arr = await r.json();
+      tbody.innerHTML = '';
+      if(!Array.isArray(arr) || arr.length===0){ 
+        resultInfo.innerHTML = '<em>Sin resultados</em>'; 
+        return; 
+      }
+      resultInfo.textContent = `${arr.length} resultados`;
+      arr.forEach(it=>{
+        const tr = document.createElement('tr');
+        const tasa = (it.tasa ?? '').toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 6});
+        const origen = (it.origen || '').startsWith('ERP_') ? 'ERP' : it.origen || '';
+        const fechaCreacion = it.fecha_creacion ? new Date(it.fecha_creacion).toLocaleString('es-AR') : '';
+        tr.innerHTML = `
+          <td>${it.fecha}</td>
+          <td><strong>${it.moneda}</strong></td>
+          <td>${it.tipo}</td>
+          <td class="num">${tasa}</td>
+          <td>${origen}</td>
+          <td>${it.notas||''}</td>
+          <td><small>${fechaCreacion}</small></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }catch(e){
+      resultInfo.innerHTML = '<em>Error de red</em>';
+    }
+  }
+
+  btnBuscar.addEventListener('click', cargarHistorial);
+  btnLimpiar.addEventListener('click', ()=>{
+    filtroMoneda.value = '';
+    filtroTipo.value = '';
+    filtroDesde.value = '';
+    filtroHasta.value = '';
+    tbody.innerHTML = '';
+    resultInfo.innerHTML = '<em>Use los filtros y presione Buscar</em>';
+  });
+})();
+</script>
+{% endblock %}

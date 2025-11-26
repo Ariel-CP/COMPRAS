@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import date
 from pydantic import BaseModel
 
@@ -19,3 +19,10 @@ class PrecioCompraOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PrecioImportResult(BaseModel):
+    insertados: int
+    actualizados: int
+    rechazados: int
+    errores: List[str] = []

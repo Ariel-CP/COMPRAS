@@ -28,6 +28,7 @@ def _row_to_detalle(row: Any) -> Dict[str, Any]:
         "componente_producto_id": row.componente_producto_id,
         "componente_codigo": row.comp_codigo,
         "componente_nombre": row.comp_nombre,
+        "componente_tipo_producto": row.comp_tipo,
         "cantidad": float(row.cantidad),
         "unidad_medida_id": row.unidad_medida_id,
         "unidad_medida_codigo": row.um_codigo,
@@ -156,6 +157,7 @@ def listar_lineas(db: Session, mbom_id: int) -> List[Dict[str, Any]]:
                    d.unidad_medida_id, d.factor_merma, d.operacion_secuencia,
                    d.grupo_alternativa, d.designador_referencia, d.notas,
                    p.codigo AS comp_codigo, p.nombre AS comp_nombre,
+                   p.tipo_producto AS comp_tipo,
                    um.codigo AS um_codigo
             FROM mbom_detalle d
             JOIN producto p ON p.id = d.componente_producto_id
@@ -265,6 +267,7 @@ def get_detalle_por_id(
                    d.unidad_medida_id, d.factor_merma, d.operacion_secuencia,
                    d.grupo_alternativa, d.designador_referencia, d.notas,
                    p.codigo AS comp_codigo, p.nombre AS comp_nombre,
+                   p.tipo_producto AS comp_tipo,
                    um.codigo AS um_codigo
             FROM mbom_detalle d
             JOIN producto p ON p.id = d.componente_producto_id

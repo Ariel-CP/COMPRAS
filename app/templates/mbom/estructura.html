@@ -168,6 +168,7 @@
     tbody.innerHTML = '';
     lineas.sort((a,b)=>a.renglon-b.renglon).forEach(l => {
       const tr = document.createElement('tr');
+      const showSub = (l.componente_tipo_producto === 'WIP' || l.componente_tipo_producto === 'PT');
       tr.innerHTML = `
         <td>${l.renglon}</td>
         <td><input type="text" value="${l.componente_codigo||''}" readonly class="codigoComp" size="${(l.componente_codigo||'').length||6}"/></td>
@@ -177,6 +178,7 @@
         <td><input type="number" value="${l.operacion_secuencia||''}" data-field="operacion_secuencia" style="width:70px"/></td>
         <td><input type="number" step="0.0001" min="0" max="0.9999" value="${l.factor_merma}" data-field="factor_merma" style="width:90px"/></td>
         <td>
+          ${showSub ? '<button class="btnSubestructura" title="Ver subestructura">Ver</button>' : ''}
           <button class="btnGuardarLinea">Guardar</button>
           <button class="btnBorrarLinea">Borrar</button>
         </td>`;
@@ -200,6 +202,12 @@
       tr.querySelector('.btnGuardarLinea').addEventListener('click', async ()=>{
         await guardarLinea(l);
       });
+      const btnSub = tr.querySelector('.btnSubestructura');
+      if(btnSub){
+        btnSub.addEventListener('click', async ()=>{
+          await toggleSubestructura(l, tr);
+        });
+      }
       tr.querySelector('.btnBorrarLinea').addEventListener('click', async ()=>{
         if(!l.id){ lineas = lineas.filter(x=>x!==l); return render(); }
         if(confirm('¿Borrar renglón?')){
@@ -210,6 +218,62 @@
       });
       tbody.appendChild(tr);
     });
+  }
+
+  async function toggleSubestructura(l, tr){
+    const key = 'sub-for-' + (l.id ? ('d'+l.id) : ('c'+l.componente_producto_id+'-'+l.renglon));
+    const next = tr.nextElementSibling;
+    if(next && next.dataset && next.dataset.subFor === key){
+      next.remove();
+      return;
+    }
+    if(next && next.classList && next.classList.contains('subRow')){
+      next.remove();
+    }
+    // Fetch MBOM ACTIVO del componente
+    let content = '<em>Cargando...</em>';
+    const subTr = document.createElement('tr');
+    subTr.className = 'subRow';
+    subTr.dataset.subFor = key;
+    const colSpan = 8; // columnas de la tabla principal
+    subTr.innerHTML = `<td colspan="${colSpan}">${content}</td>`;
+    tr.parentNode.insertBefore(subTr, tr.nextSibling);
+    try{
+      const r = await fetch(`/api/mbom/${l.componente_producto_id}?estado=ACTIVO`);
+      if(r.status === 404){
+        content = '<em>Sin MBOM ACTIVO para este componente</em>';
+      }else if(!r.ok){
+        content = '<em>Error al cargar subestructura</em>';
+      }else{
+        const d = await r.json();
+        const rows = Array.isArray(d.lineas) ? d.lineas : [];
+        if(rows.length === 0){
+          content = '<em>Sin líneas en la subestructura</em>';
+        }else{
+          const parts = [
+            "<div style='padding:4px 0'><strong>Subestructura</strong> (Rev. "+(d.cabecera?.revision||'?')+")</div>",
+            "<table class='striped' style='margin-left:8px'>",
+            "<thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant</th><th>UM</th></tr></thead><tbody>"
+          ];
+          rows.forEach(s=>{
+            parts.push(
+              `<tr>`+
+              `<td>${s.renglon}</td>`+
+              `<td>${s.componente_codigo||''}</td>`+
+              `<td>${s.componente_nombre||''}</td>`+
+              `<td class='num'>${(s.cantidad!=null)? (Math.round(parseFloat(s.cantidad)*1000)/1000).toFixed(3):''}</td>`+
+              `<td>${s.unidad_medida_codigo||umCodigo(s.unidad_medida_id)||''}</td>`+
+              `</tr>`
+            );
+          });
+          parts.push('</tbody></table>');
+          content = parts.join('');
+        }
+      }
+    }catch(e){
+      content = '<em>Error de red</em>';
+    }
+    subTr.firstElementChild.innerHTML = content;
   }
 
   async function cargar(){

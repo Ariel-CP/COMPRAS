@@ -1,6 +1,15 @@
 from fastapi import APIRouter
 
-from . import plan, stock, health, productos, unidades, mbom_api, precios
+from . import (
+        plan,
+        stock,
+        health,
+        productos,
+        unidades,
+        mbom_api,
+        precios,
+        tipo_cambio,
+)
 
 api_router = APIRouter()
 
@@ -18,4 +27,7 @@ api_router.include_router(
 )
 api_router.include_router(
         precios.router, prefix="/precios", tags=["precios"]
+)
+api_router.include_router(
+        tipo_cambio.router, prefix="/tipo-cambio", tags=["tipo-cambio"]
 )

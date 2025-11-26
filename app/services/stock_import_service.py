@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import List, Dict, Any, Optional
 import csv
 import io
+import logging
 from datetime import datetime
 
 from fastapi import HTTPException, UploadFile
@@ -21,13 +22,42 @@ def _get_producto_id(db: Session, codigo: str) -> Optional[int]:
 
 
 def _parse_csv(content: bytes) -> List[Dict[str, Any]]:
-    text_stream = io.StringIO(content.decode("utf-8-sig"))
-    # Intentar detectar delimitador ; o ,
+    if not content:
+        raise HTTPException(status_code=400, detail="Archivo CSV vacío")
+
+    # Intentar UTF-8; si falla, usar latin-1 (Flexxus suele exportar en ANSI)
+    try:
+        decoded = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            decoded = content.decode("latin-1")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se pudo decodificar el archivo CSV: {exc}",
+            )
+
+    text_stream = io.StringIO(decoded)
     sample = text_stream.read(2048)
     text_stream.seek(0)
-    dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo detectar el formato del CSV: {exc}",
+        )
+
     reader = csv.DictReader(text_stream, dialect=dialect)
-    rows = [dict((k.strip(), v.strip() if isinstance(v, str) else v) for k, v in row.items()) for row in reader]
+    rows = [
+        {
+            (k.strip() if isinstance(k, str) else k): (
+                v.strip() if isinstance(v, str) else v
+            )
+            for k, v in row.items()
+        }
+        for row in reader
+    ]
     return rows
 
 
@@ -37,106 +67,182 @@ def importar_stock_csv_o_excel(
     try:
         _ = datetime.strptime(fecha_corte, "%Y-%m-%d")
     except ValueError:
-        raise HTTPException(status_code=400, detail="fecha_corte inválida (YYYY-MM-DD)")
+        raise HTTPException(
+            status_code=400,
+            detail="fecha_corte inválida (YYYY-MM-DD)",
+        )
 
     filename = archivo.filename or ""
     content = archivo.file.read()
 
-    rows: List[Dict[str, Any]]
-    if filename.lower().endswith(".csv") or filename == "":
-        rows = _parse_csv(content)
-    elif filename.lower().endswith(".xlsx"):
-        try:
-            import openpyxl  # type: ignore
-        except Exception:
-            raise HTTPException(status_code=400, detail="Soporte Excel no disponible; enviar CSV")
-        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
-        ws = wb.active
-        headers = [str(c.value).strip() if c.value is not None else "" for c in next(ws.iter_rows(min_row=1, max_row=1))]
-        rows = []
-        for r in ws.iter_rows(min_row=2):
-            row = {}
-            for idx, cell in enumerate(r):
-                key = headers[idx] if idx < len(headers) else f"col_{idx}"
-                row[key] = str(cell.value).strip() if cell.value is not None else None
-            rows.append(row)
-    else:
-        raise HTTPException(status_code=400, detail="Extensión no soportada (usar .csv o .xlsx)")
-
-    # Validar encabezados
-    if not rows:
-        return StockImportResult(insertados=0, actualizados=0, rechazados=0, errores=["Archivo vacío"]) 
-    headers_present = {k for k in rows[0].keys()}
-    if not REQUIRED_STOCK_HEADERS.issubset({h.lower() for h in headers_present}):
-        return StockImportResult(
-            insertados=0,
-            actualizados=0,
-            rechazados=0,
-            errores=[
-                "Encabezados requeridos: producto_codigo, stock_disponible",
-            ],
-        )
-
-    insertados = 0
-    actualizados = 0
-    rechazados = 0
-    errores: List[str] = []
-
-    for idx, row in enumerate(rows, start=2):  # 2 considerando encabezado
-        codigo = (row.get("producto_codigo") or row.get("PRODUCTO_CODIGO") or "").strip()
-        stock_raw = row.get("stock_disponible") or row.get("STOCK_DISPONIBLE")
-        if not codigo:
-            rechazados += 1
-            errores.append(f"Fila {idx}: producto_codigo vacío")
-            continue
-        try:
-            # Normalizar separador decimal
-            stock = float(str(stock_raw).replace(",", "."))
-            if stock < 0:
-                raise ValueError()
-        except Exception:
-            rechazados += 1
-            errores.append(f"Fila {idx}: stock_disponible inválido")
-            continue
-
-        prod_id = _get_producto_id(db, codigo)
-        if not prod_id:
-            rechazados += 1
-            errores.append(f"Fila {idx}: producto no encontrado ({codigo})")
-            continue
-
-        # Upsert por periodo y producto
-        upd = text(
-            """
-            UPDATE stock_disponible_mes
-            SET stock_disponible=:stk, fecha_corte=:fc, origen='ERP_FLEXXUS'
-            WHERE anio=:a AND mes=:m AND producto_id=:pid
-            """
-        )
-        r = db.execute(
-            upd, {"stk": stock, "fc": fecha_corte, "a": anio, "m": mes, "pid": prod_id}
-        )
-        if r.rowcount and r.rowcount > 0:
-            actualizados += 1
+    try:
+        rows: List[Dict[str, Any]]
+        if filename.lower().endswith(".csv") or filename == "":
+            rows = _parse_csv(content)
+        elif filename.lower().endswith(".xlsx"):
+            try:
+                import openpyxl  # type: ignore
+            except Exception:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Soporte Excel no disponible; enviar CSV",
+                )
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+            ws = wb.active
+            headers = [
+                str(c.value).strip() if c.value is not None else ""
+                for c in next(ws.iter_rows(min_row=1, max_row=1))
+            ]
+            rows = []
+            for r in ws.iter_rows(min_row=2):
+                row = {}
+                for idx, cell in enumerate(r):
+                    key = headers[idx] if idx < len(headers) else f"col_{idx}"
+                    row[key] = (
+                        str(cell.value).strip()
+                        if cell.value is not None
+                        else None
+                    )
+                rows.append(row)
         else:
-            ins = text(
+            raise HTTPException(
+                status_code=400,
+                detail="Extensión no soportada (usar .csv o .xlsx)",
+            )
+
+        if not rows:
+            return StockImportResult(
+                insertados=0,
+                actualizados=0,
+                rechazados=0,
+                errores=["Archivo vacío"],
+            )
+
+        headers_present = {k for k in rows[0].keys()}
+        if not REQUIRED_STOCK_HEADERS.issubset(
+            {h.lower() for h in headers_present}
+        ):
+            return StockImportResult(
+                insertados=0,
+                actualizados=0,
+                rechazados=0,
+                errores=[
+                    "Encabezados requeridos: producto_codigo, "
+                    "stock_disponible",
+                ],
+            )
+
+        insertados = 0
+        actualizados = 0
+        rechazados = 0
+        errores: List[str] = []
+
+        for idx, row in enumerate(rows, start=2):
+            codigo = (
+                row.get("producto_codigo") or row.get("PRODUCTO_CODIGO") or ""
+            ).strip()
+            stock_raw = (
+                row.get("stock_disponible") or row.get("STOCK_DISPONIBLE")
+            )
+            if not codigo:
+                rechazados += 1
+                errores.append(f"Fila {idx}: producto_codigo vacío")
+                continue
+            try:
+                stock = float(str(stock_raw).replace(",", "."))
+                if stock < 0:
+                    raise ValueError()
+            except Exception:
+                rechazados += 1
+                errores.append(f"Fila {idx}: stock_disponible inválido")
+                continue
+
+            prod_id = _get_producto_id(db, codigo)
+            if not prod_id:
+                rechazados += 1
+                errores.append(
+                    f"Fila {idx}: producto no encontrado ({codigo})"
+                )
+                continue
+
+            upd = text(
                 """
-                INSERT INTO stock_disponible_mes (anio, mes, producto_id, stock_disponible, fecha_corte, origen)
-                VALUES (:a, :m, :pid, :stk, :fc, 'ERP_FLEXXUS')
+                UPDATE stock_disponible_mes
+                SET stock_disponible=:stk,
+                    fecha_corte=:fc,
+                    origen='ERP_FLEXXUS'
+                WHERE anio=:a AND mes=:m AND producto_id=:pid
                 """
             )
-            db.execute(ins, {"a": anio, "m": mes, "pid": prod_id, "stk": stock, "fc": fecha_corte})
-            insertados += 1
+            r = db.execute(
+                upd,
+                {
+                    "stk": stock,
+                    "fc": fecha_corte,
+                    "a": anio,
+                    "m": mes,
+                    "pid": prod_id,
+                },
+            )
+            if r.rowcount and r.rowcount > 0:
+                actualizados += 1
+            else:
+                ins = text(
+                    """
+                    INSERT INTO stock_disponible_mes (
+                        anio,
+                        mes,
+                        producto_id,
+                        stock_disponible,
+                        fecha_corte,
+                        origen
+                    )
+                    VALUES (:a, :m, :pid, :stk, :fc, 'ERP_FLEXXUS')
+                    """
+                )
+                db.execute(
+                    ins,
+                    {
+                        "a": anio,
+                        "m": mes,
+                        "pid": prod_id,
+                        "stk": stock,
+                        "fc": fecha_corte,
+                    },
+                )
+                insertados += 1
 
-    return StockImportResult(
-        insertados=insertados, actualizados=actualizados, rechazados=rechazados, errores=errores
-    )
+        db.commit()
+        return StockImportResult(
+            insertados=insertados,
+            actualizados=actualizados,
+            rechazados=rechazados,
+            errores=errores,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.exception("Error importando stock")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error importando stock: {exc}",
+        )
 
 
-def listar_stock_periodo(db: Session, anio: int, mes: int, q: Optional[str]) -> List[StockItemOut]:
+def listar_stock_periodo(
+    db: Session, anio: int, mes: int, q: Optional[str]
+) -> List[StockItemOut]:
     base_sql = (
         """
-        SELECT s.id, s.anio, s.mes, p.codigo AS producto_codigo, s.stock_disponible, s.fecha_corte, s.origen
+         SELECT s.id,
+             s.anio,
+             s.mes,
+             p.codigo AS producto_codigo,
+             p.nombre AS detalle,
+             s.stock_disponible,
+             s.fecha_corte,
+             s.origen
         FROM stock_disponible_mes s
         JOIN producto p ON p.id = s.producto_id
         WHERE s.anio = :a AND s.mes = :m
@@ -154,6 +260,7 @@ def listar_stock_periodo(db: Session, anio: int, mes: int, q: Optional[str]) -> 
             anio=r["anio"],
             mes=r["mes"],
             producto_codigo=r["producto_codigo"],
+            detalle=r["detalle"],
             stock_disponible=r["stock_disponible"],
             fecha_corte=str(r["fecha_corte"]),
             origen=r["origen"],
@@ -164,7 +271,12 @@ def listar_stock_periodo(db: Session, anio: int, mes: int, q: Optional[str]) -> 
 
 def resumen_stock_periodo(db: Session, anio: int, mes: int) -> Dict[str, Any]:
     q = text(
-        "SELECT COUNT(*) AS items, COALESCE(SUM(stock_disponible),0) AS total FROM stock_disponible_mes WHERE anio=:a AND mes=:m"
+        "SELECT COUNT(*) AS items, "
+        "COALESCE(SUM(stock_disponible),0) AS total "
+        "FROM stock_disponible_mes WHERE anio=:a AND mes=:m"
     )
     r = db.execute(q, {"a": anio, "m": mes}).first()
-    return {"items": int(r[0]) if r else 0, "total_stock": float(r[1]) if r else 0.0}
+    return {
+        "items": int(r[0]) if r else 0,
+        "total_stock": float(r[1]) if r else 0.0,
+    }

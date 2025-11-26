@@ -1,7 +1,15 @@
 from typing import Any, Dict, List, Optional
-from datetime import date
+from datetime import date, datetime
+import csv
+import io
+import logging
+
+from fastapi import HTTPException, UploadFile
+from openpyxl import load_workbook, Workbook
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from ..schemas.precio import PrecioImportResult
 
 
 def _row_to_precio(row: Any) -> Dict[str, Any]:
@@ -78,3 +86,312 @@ def listar_precios_compra(
 
     rows = db.execute(sql, params).fetchall()
     return [_row_to_precio(r) for r in rows]
+
+
+ALLOWED_MONEDAS = {"ARS", "USD", "EUR"}
+ALLOWED_ORIGENES = {"ERP_FLEXXUS", "MANUAL", "OTRO"}
+DEFAULT_PROVEEDOR_CODIGO = "PROV_GENERICO"
+DEFAULT_PROVEEDOR_NOMBRE = "Proveedor Genérico"
+
+
+def _decode_csv_content(content: bytes) -> str:
+    if not content:
+        raise HTTPException(status_code=400, detail="Archivo vacío")
+    try:
+        return content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return content.decode("latin-1")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se pudo decodificar el archivo: {exc}",
+            ) from exc
+
+
+def _normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {}
+    for key, value in row.items():
+        if key is None:
+            continue
+        norm_key = str(key).strip().lower()
+        if isinstance(value, str):
+            normalized[norm_key] = value.strip()
+        else:
+            normalized[norm_key] = value
+    return normalized
+
+
+def _parse_csv_rows(content: bytes) -> List[Dict[str, Any]]:
+    decoded = _decode_csv_content(content)
+    text_stream = io.StringIO(decoded)
+    sample = text_stream.read(2048)
+    text_stream.seek(0)
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo detectar el formato del CSV: {exc}",
+        ) from exc
+    reader = csv.DictReader(text_stream, dialect=dialect)
+    return [_normalize_row(row) for row in reader]
+
+
+def _parse_xlsx_rows(content: bytes) -> List[Dict[str, Any]]:
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Archivo XLSX inválido: {exc}",
+        ) from exc
+    ws = wb.active
+    try:
+        headers = [
+            str(c.value).strip().lower() if c.value is not None else ""
+            for c in next(ws.iter_rows(min_row=1, max_row=1))
+        ]
+    except StopIteration:
+        return []
+    rows: List[Dict[str, Any]] = []
+    for r in ws.iter_rows(min_row=2, values_only=True):
+        row_dict: Dict[str, Any] = {}
+        for idx, cell in enumerate(r):
+            key = headers[idx] if idx < len(headers) else f"col_{idx}"
+            if isinstance(cell, str):
+                row_dict[key] = cell.strip()
+            else:
+                row_dict[key] = cell
+        rows.append(row_dict)
+    return rows
+
+
+def _get_producto_id(
+    db: Session, cache: Dict[str, Optional[int]], codigo: str
+) -> Optional[int]:
+    if codigo in cache:
+        return cache[codigo]
+    res = db.execute(
+        text("SELECT id FROM producto WHERE codigo = :codigo"),
+        {"codigo": codigo},
+    ).first()
+    cache[codigo] = int(res[0]) if res else None
+    return cache[codigo]
+
+
+def generar_template_precios() -> io.BytesIO:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "precios"
+    ws.append(
+        [
+            "producto_codigo",
+            "proveedor_codigo",
+            "proveedor_nombre",
+            "fecha_precio",
+            "precio_unitario",
+            "moneda",
+            "origen",
+            "referencia_doc",
+            "notas",
+        ]
+    )
+    ws.append(
+        [
+            "MAT-001",
+            "PROV01",
+            "Proveedor Demo",
+            datetime.today().date().isoformat(),
+            "123.45",
+            "ARS",
+            "MANUAL",
+            "OC-123",
+            "Observaciones",
+        ]
+    )
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    return stream
+
+
+def importar_precios_desde_archivo(
+    db: Session, archivo: UploadFile
+) -> PrecioImportResult:
+    filename = archivo.filename or ""
+    content = archivo.file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Archivo vacío")
+
+    if filename.lower().endswith(".xlsx"):
+        rows = _parse_xlsx_rows(content)
+    elif filename.lower().endswith(".csv") or filename == "":
+        rows = _parse_csv_rows(content)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Extensión no soportada (usar .csv o .xlsx)",
+        )
+
+    if not rows:
+        return PrecioImportResult(
+            insertados=0,
+            actualizados=0,
+            rechazados=0,
+            errores=["Archivo vacío"],
+        )
+
+    required = {
+        "producto_codigo",
+        "proveedor_codigo",
+        "fecha_precio",
+        "precio_unitario",
+        "moneda",
+    }
+    missing = required - set(rows[0].keys())
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Faltan columnas requeridas: {', '.join(sorted(missing))}",
+        )
+
+    insertados = actualizados = rechazados = 0
+    errores: List[str] = []
+    cache: Dict[str, Optional[int]] = {}
+
+    try:
+        for idx, raw_row in enumerate(rows, start=2):
+            row = _normalize_row(raw_row)
+            codigo = row.get("producto_codigo", "") or ""
+            prov_codigo = (
+                row.get("proveedor_codigo", "") or DEFAULT_PROVEEDOR_CODIGO
+            )
+            if not codigo:
+                rechazados += 1
+                errores.append(f"Fila {idx}: producto_codigo vacío")
+                continue
+
+            prod_id = _get_producto_id(db, cache, codigo)
+            if not prod_id:
+                rechazados += 1
+                errores.append(
+                    f"Fila {idx}: producto no encontrado ({codigo})"
+                )
+                continue
+
+            fecha_raw = row.get("fecha_precio")
+            if isinstance(fecha_raw, date):
+                fecha_precio = fecha_raw
+            else:
+                try:
+                    fecha_precio = datetime.strptime(
+                        str(fecha_raw), "%Y-%m-%d"
+                    ).date()
+                except (ValueError, TypeError):
+                    rechazados += 1
+                    errores.append(f"Fila {idx}: fecha_precio inválida")
+                    continue
+
+            precio_raw = row.get("precio_unitario")
+            try:
+                precio = float(str(precio_raw).replace(",", "."))
+                if precio <= 0:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                rechazados += 1
+                errores.append(f"Fila {idx}: precio_unitario inválido")
+                continue
+
+            moneda = (row.get("moneda") or "ARS").upper()
+            if moneda not in ALLOWED_MONEDAS:
+                rechazados += 1
+                errores.append(f"Fila {idx}: moneda inválida ({moneda})")
+                continue
+
+            origen = (row.get("origen") or "MANUAL").upper()
+            if origen not in ALLOWED_ORIGENES:
+                rechazados += 1
+                errores.append(f"Fila {idx}: origen inválido ({origen})")
+                continue
+
+            prov_nombre = (
+                row.get("proveedor_nombre") or DEFAULT_PROVEEDOR_NOMBRE
+            )
+            referencia = row.get("referencia_doc") or None
+            notas = row.get("notas") or None
+
+            existing = db.execute(
+                text(
+                    "SELECT id FROM precio_compra_hist "
+                    "WHERE producto_id=:pid AND proveedor_codigo=:prov "
+                    "AND fecha_precio=:fecha AND moneda=:moneda"
+                ),
+                {
+                    "pid": prod_id,
+                    "prov": prov_codigo,
+                    "fecha": fecha_precio,
+                    "moneda": moneda,
+                },
+            ).first()
+
+            if existing:
+                db.execute(
+                    text(
+                        "UPDATE precio_compra_hist SET "
+                        "precio_unitario=:precio, proveedor_nombre=:prov_nom, "
+                        "origen=:origen, referencia_doc=:ref, notas=:notas "
+                        "WHERE id=:id"
+                    ),
+                    {
+                        "precio": precio,
+                        "prov_nom": prov_nombre,
+                        "origen": origen,
+                        "ref": referencia,
+                        "notas": notas,
+                        "id": existing[0],
+                    },
+                )
+                actualizados += 1
+            else:
+                db.execute(
+                    text(
+                        "INSERT INTO precio_compra_hist "
+                        "(producto_id, proveedor_codigo, proveedor_nombre, "
+                        "fecha_precio, precio_unitario, moneda, origen, "
+                        "referencia_doc, notas) VALUES "
+                        "(:pid, :prov, :prov_nom, :fecha, :precio, :moneda, "
+                        ":origen, :ref, :notas)"
+                    ),
+                    {
+                        "pid": prod_id,
+                        "prov": prov_codigo,
+                        "prov_nom": prov_nombre,
+                        "fecha": fecha_precio,
+                        "precio": precio,
+                        "moneda": moneda,
+                        "origen": origen,
+                        "ref": referencia,
+                        "notas": notas,
+                    },
+                )
+                insertados += 1
+
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logging.exception("Error importando precios")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error importando precios: {exc}",
+        ) from exc
+
+    return PrecioImportResult(
+        insertados=insertados,
+        actualizados=actualizados,
+        rechazados=rechazados,
+        errores=errores,
+    )

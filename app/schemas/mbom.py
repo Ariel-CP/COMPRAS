@@ -19,6 +19,7 @@ class MBOMDetalleLinea(BaseModel):
     componente_producto_id: int
     componente_codigo: Optional[str] = None
     componente_nombre: Optional[str] = None
+    componente_tipo_producto: Optional[str] = None
     cantidad: float
     unidad_medida_id: int
     unidad_medida_codigo: Optional[str] = None

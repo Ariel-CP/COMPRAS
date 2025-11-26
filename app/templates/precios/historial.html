@@ -28,6 +28,18 @@
 </section>
 
 <section class="panel">
+  <h3>Importar historial</h3>
+  <form id="importForm" enctype="multipart/form-data" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+    <label>Archivo CSV/XLSX
+      <input type="file" id="importFile" name="archivo" accept=".csv,.xlsx" required>
+    </label>
+    <button type="submit">Importar</button>
+    <a class="btn-link" href="/api/precios/template-xlsx">&#128190; Descargar plantilla XLSX</a>
+  </form>
+  <div id="importResult"></div>
+</section>
+
+<section class="panel">
   <div id="resultInfo"><em>Use los filtros y presione Buscar</em></div>
   <table id="tbl" class="striped" style="width:100%; table-layout:auto;">
     <thead>
@@ -58,6 +70,9 @@
   const btnBuscar = document.getElementById('btnBuscar');
   const tbody = document.querySelector('#tbl tbody');
   const resultInfo = document.getElementById('resultInfo');
+  const importForm = document.getElementById('importForm');
+  const importFile = document.getElementById('importFile');
+  const importResult = document.getElementById('importResult');
 
   function fmtOrigen(val){
     // Evitar mostrar nombres de marca directamente
@@ -106,6 +121,44 @@
   btnBuscar.addEventListener('click', cargar);
   q.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ cargar(); }});
   proveedor.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ cargar(); }});
+
+  if(importForm){
+    importForm.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      if(!importFile.files.length){
+        importResult.textContent = 'Seleccione un archivo';
+        return;
+      }
+      importResult.textContent = 'Importando...';
+      const formData = new FormData();
+      formData.append('archivo', importFile.files[0]);
+      try{
+        const res = await fetch('/api/precios/import', {
+          method: 'POST',
+          body: formData
+        });
+        const contentType = res.headers.get('content-type') || '';
+        const payload = contentType.includes('application/json') ? await res.json() : await res.text();
+        if(!res.ok){
+          const errMsg = (payload && payload.detail) || payload.error || payload;
+          importResult.textContent = `Error: ${errMsg}`;
+          return;
+        }
+        if(typeof payload !== 'object'){
+          importResult.textContent = payload;
+          return;
+        }
+        let msg = `Importados: ${payload.insertados}, Actualizados: ${payload.actualizados}, Rechazados: ${payload.rechazados}`;
+        if(payload.errores && payload.errores.length){
+          msg += '\nErrores:\n- ' + payload.errores.join('\n- ');
+        }
+        importResult.textContent = msg;
+        await cargar();
+      }catch(err){
+        importResult.textContent = `Error inesperado: ${err}`;
+      }
+    });
+  }
 })();
 </script>
 {% endblock %}

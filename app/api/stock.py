@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -9,8 +9,21 @@ from ..services.stock_import_service import (
     listar_stock_periodo,
     resumen_stock_periodo,
 )
+import os
+from fastapi.responses import FileResponse
 
 router = APIRouter()
+
+# Endpoint para descargar plantilla XLSX de stock mensual
+@router.get("/template-xlsx")
+def descargar_template_xlsx():
+    from openpyxl import Workbook
+    file_path = "template_stock_mensual.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["producto_codigo", "stock_disponible"])
+    wb.save(file_path)
+    return FileResponse(file_path, filename="template_stock_mensual.xlsx")
 
 
 @router.post("/{anio}/{mes}/import", response_model=StockImportResult)
@@ -18,7 +31,7 @@ def importar_stock(
     anio: int,
     mes: int,
     archivo: UploadFile = File(...),
-    fecha_corte: str = Query(..., description="Fecha de corte YYYY-MM-DD"),
+    fecha_corte: str = Form(..., description="Fecha de corte YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
     if not (1 <= mes <= 12):

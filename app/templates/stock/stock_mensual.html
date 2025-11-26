@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Stock Mensual</h2>
+<form id="importForm" enctype="multipart/form-data">
+  <div class="mb-3">
+    <label for="anio">Año:</label>
+    <input type="number" id="anio" name="anio" min="2020" max="2100" required>
+    <label for="mes">Mes:</label>
+    <input type="number" id="mes" name="mes" min="1" max="12" required>
+    <label for="fecha_corte">Fecha corte:</label>
+    <input type="date" id="fecha_corte" name="fecha_corte" required>
+  </div>
+  <div class="mb-3">
+    <input type="file" id="archivo" name="archivo" accept=".csv,.xlsx" required>
+    <button type="submit" class="btn btn-primary">Importar archivo</button>
+  </div>
+</form>
+<div class="mb-3">
+  <a href="/api/stock/template-xlsx" class="btn btn-success" style="font-weight:bold;">&#128190; Descargar plantilla vacía XLSX</a>
+</div>
+<div id="importResult"></div>
+<hr>
+<h3>Listado de stock mensual</h3>
+<div class="mb-2">
+  <form id="filtroForm" class="form-inline" onsubmit="return false;">
+    <label for="filtro">Buscar producto:</label>
+    <input type="text" id="filtro" name="filtro" placeholder="Código o detalle" />
+    <button type="button" id="btnBuscar" class="btn btn-secondary">Buscar</button>
+    <button type="button" id="btnLimpiar" class="btn btn-secondary">Limpiar</button>
+  </form>
+</div>
+<table class="table" id="stockTable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Año</th>
+      <th>Mes</th>
+      <th>Producto</th>
+      <th>Detalle</th>
+      <th>Stock</th>
+      <th>Fecha corte</th>
+      <th>Origen</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<script>
+async function fetchStock() {
+  const anio = document.getElementById('anio').value;
+  const mes = document.getElementById('mes').value;
+  const filtro = document.getElementById('filtro').value.trim();
+  if (!anio || !mes) return;
+
+  let url = `/api/stock/${anio}/${mes}`;
+  if (filtro) {
+    url += `?q=${encodeURIComponent(filtro)}`;
+  }
+
+  const tbody = document.querySelector('#stockTable tbody');
+  tbody.innerHTML = '<tr><td colspan="8">Cargando...</td></tr>';
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      tbody.innerHTML = `<tr><td colspan="8">Error al cargar: ${res.statusText}</td></tr>`;
+      return;
+    }
+    const data = await res.json();
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="8">Sin resultados para el período seleccionado</td></tr>';
+      return;
+    }
+    const rowsHtml = data.map(item => {
+      const stock = Number(item.stock_disponible ?? 0).toFixed(3);
+      return `
+        <tr>
+          <td>${item.id}</td>
+          <td>${item.anio}</td>
+          <td>${item.mes}</td>
+          <td>${item.producto_codigo}</td>
+          <td>${item.detalle ?? ''}</td>
+          <td>${stock}</td>
+          <td>${item.fecha_corte}</td>
+          <td>${item.origen}</td>
+        </tr>`;
+    }).join('');
+    tbody.innerHTML = rowsHtml;
+  } catch (error) {
+    tbody.innerHTML = `<tr><td colspan="8">Error inesperado: ${error}</td></tr>`;
+  }
+}
+
+document.getElementById('anio').addEventListener('change', fetchStock);
+document.getElementById('mes').addEventListener('change', fetchStock);
+document.getElementById('btnBuscar').addEventListener('click', fetchStock);
+document.getElementById('btnLimpiar').addEventListener('click', () => {
+  document.getElementById('filtro').value = '';
+  fetchStock();
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const hoy = new Date();
+  const anioInput = document.getElementById('anio');
+  const mesInput = document.getElementById('mes');
+  if (!anioInput.value) {
+    anioInput.value = hoy.getFullYear();
+  }
+  if (!mesInput.value) {
+    mesInput.value = hoy.getMonth() + 1;
+  }
+  fetchStock();
+});
+
+document.getElementById('importForm').onsubmit = async function(e) {
+  e.preventDefault();
+  const anio = document.getElementById('anio').value;
+  const mes = document.getElementById('mes').value;
+  const fecha_corte = document.getElementById('fecha_corte').value;
+  const archivo = document.getElementById('archivo').files[0];
+  if (!anio || !mes || !fecha_corte || !archivo) return;
+
+  const formData = new FormData();
+  formData.append('archivo', archivo);
+  formData.append('fecha_corte', fecha_corte);
+
+  const url = `/api/stock/${anio}/${mes}/import`;
+  const resultBox = document.getElementById('importResult');
+  resultBox.innerHTML = 'Procesando importación...';
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: formData
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json') ? await res.json() : await res.text();
+
+    if (!res.ok) {
+      const errMsg = (payload && payload.detail) || payload.error || payload;
+      resultBox.innerHTML = `Error: ${errMsg}`;
+      return;
+    }
+
+    let msg = `Importados: ${payload.insertados}, Actualizados: ${payload.actualizados}, Rechazados: ${payload.rechazados}`;
+    if (payload.errores && payload.errores.length) {
+      msg += '<br>Errores:<ul>' + payload.errores.map(e => `<li>${e}</li>`).join('') + '</ul>';
+    }
+    resultBox.innerHTML = msg;
+    fetchStock();
+  } catch (error) {
+    resultBox.innerHTML = 'Error inesperado: ' + error;
+  }
+};
+</script>
+{% endblock %}
