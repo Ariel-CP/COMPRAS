@@ -16,6 +16,7 @@
           <label style="flex:1;">Moneda
             <select id="importMoneda" required>
               <option value="USD">USD</option>
+              <option value="USD_MAY">USD MAY</option>
               <option value="EUR">EUR</option>
               <option value="ARS">ARS</option>
             </select>
@@ -58,6 +59,7 @@
       <select id="filtroMoneda">
         <option value="">Todas</option>
         <option value="USD" {% if moneda=='USD' %}selected{% endif %}>USD</option>
+        <option value="USD_MAY" {% if moneda=='USD_MAY' %}selected{% endif %}>USD MAY</option>
         <option value="EUR" {% if moneda=='EUR' %}selected{% endif %}>EUR</option>
         <option value="ARS" {% if moneda=='ARS' %}selected{% endif %}>ARS</option>
       </select>

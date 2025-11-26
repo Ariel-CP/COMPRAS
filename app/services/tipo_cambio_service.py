@@ -1,13 +1,17 @@
 from datetime import date
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Session
 
 from app.schemas.tipo_cambio import (
     TipoCambioCreate,
     TipoCambioUpdate,
     TipoCambioFiltro,
 )
+
+
+SQLConn = Union[Connection, Session]
 
 
 def listar_tipos_cambio(
@@ -331,3 +335,64 @@ def bulk_import_xlsx(
             errores.append(f"Fila {row[0].row}: {e}")
 
     return insertados, actualizados, errores
+
+
+def obtener_tasa_cercana(
+    conn: SQLConn,
+    moneda: str,
+    fecha: date,
+    tipo: str = "PROMEDIO",
+) -> Optional[dict]:
+    """Obtiene la tasa exacta o la más cercana a la fecha indicada.
+
+    - Prioriza coincidencia exacta.
+    - Si no existe, busca la última anterior.
+    - Finalmente, intenta con la siguiente posterior.
+    Devuelve None si no hay datos para la moneda/tipo.
+    """
+
+    params = {"moneda": moneda, "tipo": tipo, "fecha": fecha}
+    base_sql = (
+        "SELECT fecha, moneda, tipo, tasa, origen, notas "
+        "FROM tipo_cambio_hist WHERE moneda=:moneda AND tipo=:tipo"
+    )
+
+    exact = conn.execute(
+        text(f"{base_sql} AND fecha=:fecha ORDER BY fecha DESC LIMIT 1"),
+        params,
+    ).first()
+    if exact:
+        row = dict(exact._mapping)
+        row["tasa"] = float(row["tasa"])
+        row["fecha"] = row["fecha"]
+        row["es_estimativa"] = False
+        row["origen_busqueda"] = "exacta"
+        return row
+
+    prev = conn.execute(
+        text(
+            f"{base_sql} AND fecha < :fecha ORDER BY fecha DESC LIMIT 1"
+        ),
+        params,
+    ).first()
+    if prev:
+        row = dict(prev._mapping)
+        row["tasa"] = float(row["tasa"])
+        row["es_estimativa"] = True
+        row["origen_busqueda"] = "anterior"
+        return row
+
+    nxt = conn.execute(
+        text(
+            f"{base_sql} AND fecha > :fecha ORDER BY fecha ASC LIMIT 1"
+        ),
+        params,
+    ).first()
+    if nxt:
+        row = dict(nxt._mapping)
+        row["tasa"] = float(row["tasa"])
+        row["es_estimativa"] = True
+        row["origen_busqueda"] = "posterior"
+        return row
+
+    return None

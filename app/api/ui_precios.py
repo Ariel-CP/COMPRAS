@@ -15,6 +15,7 @@ templates = Jinja2Templates(directory="app/templates")
 @router.get("/precios", response_class=HTMLResponse)
 async def ui_precios(
     request: Request,
+    producto_id: Optional[int] = Query(default=None),
     q: Optional[str] = Query(default=None),
     proveedor: Optional[str] = Query(default=None),
     desde: Optional[date] = Query(default=None),
@@ -27,6 +28,7 @@ async def ui_precios(
         "precios/historial.html",
         {
             "request": request,
+            "producto_id": producto_id or "",
             "q": q,
             "proveedor": proveedor,
             "desde": desde.isoformat() if desde else "",

@@ -4,6 +4,16 @@
 <h2>Historial de Precios de Artículos</h2>
 <section class="panel">
   <form id="filtros" onsubmit="return false" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+    <div class="producto-picker">
+      <label>Artículo
+        <input type="text" id="productoTexto" placeholder="código o nombre (mín. 2)" autocomplete="off">
+      </label>
+      <input type="hidden" id="productoId" value="{{ producto_id or '' }}">
+      <button type="button" id="btnBuscarProducto">Buscar artículo</button>
+      <button type="button" id="btnLimpiarProducto" class="btn-secundario">Limpiar</button>
+      <div id="productoSeleccion" class="chip" {% if not producto_id %}style="display:none"{% endif %}></div>
+      <div id="productoResultados" class="picker-results"></div>
+    </div>
     <label>Buscar
       <input type="search" id="q" placeholder="producto o proveedor" value="{{ q or '' }}">
     </label>
@@ -41,6 +51,52 @@
 
 <section class="panel">
   <div id="resultInfo"><em>Use los filtros y presione Buscar</em></div>
+<style>
+.producto-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 260px;
+}
+.producto-picker .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: #eef2ff;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+.producto-picker .chip button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+.picker-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.picker-item {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 6px;
+  text-align: left;
+  background: #fff;
+  cursor: pointer;
+}
+.picker-item:hover {
+  background: #f0f4ff;
+}
+.picker-results .msg {
+  font-size: 0.9rem;
+  color: #555;
+}
+</style>
   <table id="tbl" class="striped" style="width:100%; table-layout:auto;">
     <thead>
       <tr>
@@ -68,6 +124,12 @@
   const hasta = document.getElementById('hasta');
   const limit = document.getElementById('limit');
   const btnBuscar = document.getElementById('btnBuscar');
+  const productoIdInput = document.getElementById('productoId');
+  const productoTexto = document.getElementById('productoTexto');
+  const btnBuscarProducto = document.getElementById('btnBuscarProducto');
+  const btnLimpiarProducto = document.getElementById('btnLimpiarProducto');
+  const productoResultados = document.getElementById('productoResultados');
+  const productoSeleccion = document.getElementById('productoSeleccion');
   const tbody = document.querySelector('#tbl tbody');
   const resultInfo = document.getElementById('resultInfo');
   const importForm = document.getElementById('importForm');
@@ -88,6 +150,9 @@
     if(desde.value) params.append('desde', desde.value);
     if(hasta.value) params.append('hasta', hasta.value);
     params.append('limit', limit.value);
+    if(productoIdInput && productoIdInput.value){
+      params.append('producto_id', productoIdInput.value);
+    }
     const url = `/api/precios/historial?${params.toString()}`;
     resultInfo.innerHTML = '<em>Cargando...</em>';
     try{
@@ -121,6 +186,99 @@
   btnBuscar.addEventListener('click', cargar);
   q.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ cargar(); }});
   proveedor.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ cargar(); }});
+
+  async function buscarProducto(){
+    if(!productoResultados) return;
+    const termino = (productoTexto?.value || '').trim();
+    if(termino.length < 2){
+      productoResultados.innerHTML = '<div class="msg">Ingrese al menos 2 caracteres</div>';
+      return;
+    }
+    productoResultados.innerHTML = '<div class="msg">Buscando...</div>';
+    try{
+      const resp = await fetch(`/api/productos/?q=${encodeURIComponent(termino)}&limit=20&activo=true`);
+      if(!resp.ok){
+        productoResultados.innerHTML = '<div class="msg">Error al buscar artículos</div>';
+        return;
+      }
+      const data = await resp.json();
+      if(!Array.isArray(data) || !data.length){
+        productoResultados.innerHTML = '<div class="msg">Sin coincidencias</div>';
+        return;
+      }
+      productoResultados.innerHTML = '';
+      data.forEach(item => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'picker-item';
+        btn.textContent = `${item.codigo} - ${item.nombre}`;
+        btn.addEventListener('click', ()=>{
+          if(productoIdInput){ productoIdInput.value = item.id; }
+          mostrarProductoSeleccion(item.codigo, item.nombre);
+          productoResultados.innerHTML = '';
+          cargar();
+        });
+        productoResultados.appendChild(btn);
+      });
+    }catch(err){
+      productoResultados.innerHTML = '<div class="msg">Error de red</div>';
+    }
+  }
+
+  function mostrarProductoSeleccion(codigo, nombre){
+    if(!productoSeleccion) return;
+    productoSeleccion.style.display = 'inline-flex';
+    const displayText = [codigo, nombre].filter(Boolean).join(' - ') || `ID ${productoIdInput?.value || ''}`;
+    productoSeleccion.innerHTML = `
+      <span>${displayText}</span>
+      <button type="button" class="chip-close" aria-label="Quitar">&times;</button>
+    `;
+    const closeBtn = productoSeleccion.querySelector('.chip-close');
+    if(closeBtn){
+      closeBtn.addEventListener('click', ()=>{
+        limpiarProductoSeleccion();
+        cargar();
+      });
+    }
+  }
+
+  function limpiarProductoSeleccion(){
+    if(productoIdInput){ productoIdInput.value = ''; }
+    if(productoSeleccion){
+      productoSeleccion.style.display = 'none';
+      productoSeleccion.textContent = '';
+    }
+  }
+
+  if(btnBuscarProducto){ btnBuscarProducto.addEventListener('click', buscarProducto); }
+  if(productoTexto){
+    productoTexto.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        buscarProducto();
+      }
+    });
+  }
+  if(btnLimpiarProducto){
+    btnLimpiarProducto.addEventListener('click', ()=>{
+      limpiarProductoSeleccion();
+      if(productoTexto){ productoTexto.value = ''; }
+      if(productoResultados){ productoResultados.innerHTML = ''; }
+      cargar();
+    });
+  }
+
+  async function cargarProductoInicial(){
+    if(!productoIdInput || !productoIdInput.value){ return; }
+    try{
+      const resp = await fetch(`/api/productos/${productoIdInput.value}`);
+      if(!resp.ok){ return; }
+      const prod = await resp.json();
+      mostrarProductoSeleccion(prod.codigo, prod.nombre);
+    }catch(_err){
+      // ignorar error inicial
+    }
+  }
 
   if(importForm){
     importForm.addEventListener('submit', async (e)=>{
@@ -159,6 +317,8 @@
       }
     });
   }
+
+  cargarProductoInicial();
 })();
 </script>
 {% endblock %}

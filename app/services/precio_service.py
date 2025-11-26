@@ -3,6 +3,7 @@ from datetime import date, datetime
 import csv
 import io
 import logging
+import re
 
 from fastapi import HTTPException, UploadFile
 from openpyxl import load_workbook, Workbook
@@ -88,10 +89,90 @@ def listar_precios_compra(
     return [_row_to_precio(r) for r in rows]
 
 
-ALLOWED_MONEDAS = {"ARS", "USD", "EUR"}
+ALLOWED_MONEDAS = {"ARS", "USD", "USD_MAY", "EUR"}
+CURRENCY_ALIASES = {
+    "ARS": "ARS",
+    "PESO": "ARS",
+    "PESOS": "ARS",
+    "USD": "USD",
+    "US": "USD",
+    "DOLAR": "USD",
+    "DOLARES": "USD",
+    "EURO": "EUR",
+    "EUROS": "EUR",
+    "EUR": "EUR",
+    "USD MAY": "USD_MAY",
+    "USDMAY": "USD_MAY",
+    "DOLAR MAY": "USD_MAY",
+    "DOLARES MAY": "USD_MAY",
+    "DOLAR MAYORISTA": "USD_MAY",
+    "USD MAYORISTA": "USD_MAY",
+}
 ALLOWED_ORIGENES = {"ERP_FLEXXUS", "MANUAL", "OTRO"}
 DEFAULT_PROVEEDOR_CODIGO = "PROV_GENERICO"
 DEFAULT_PROVEEDOR_NOMBRE = "Proveedor Genérico"
+DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%Y%m%d")
+DATETIME_FORMATS = (
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M",
+    "%d/%m/%Y %I:%M:%S %p",
+    "%d/%m/%Y %I:%M %p",
+    "%Y-%m-%d %H:%M:%S",
+)
+
+
+def _normalize_datetime_text(raw: str) -> str:
+    normalized = raw.replace("\xa0", " ").strip()
+    normalized = " ".join(normalized.split())
+    return re.sub(
+        r"(?i)\b([ap])\.?\s*m\.?\b",
+        lambda match: match.group(1).upper() + "M",
+        normalized,
+    )
+
+
+def _sanitize_currency_key(raw: str) -> str:
+    cleaned = raw.replace("\xa0", " ").strip().upper()
+    cleaned = cleaned.replace("_", " ")
+    cleaned = " ".join(cleaned.split())
+    return re.sub(r"[^A-Z0-9 ]+", "", cleaned)
+
+
+def _normalize_moneda_value(value: Any, default: Optional[str] = None) -> Optional[str]:
+    candidate = value if value not in (None, "") else default
+    if candidate is None:
+        return None
+    key = _sanitize_currency_key(str(candidate))
+    if not key:
+        return None
+    mapped = CURRENCY_ALIASES.get(key)
+    return mapped if mapped in ALLOWED_MONEDAS else None
+
+
+def _parse_fecha_precio(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    raw_text = str(value).strip()
+    if not raw_text:
+        return None
+    cleaned = _normalize_datetime_text(raw_text)
+    if not cleaned:
+        return None
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(cleaned, fmt).date()
+        except ValueError:
+            continue
+    for fmt in DATETIME_FORMATS:
+        try:
+            return datetime.strptime(cleaned, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _decode_csv_content(content: bytes) -> str:
@@ -244,7 +325,6 @@ def importar_precios_desde_archivo(
 
     required = {
         "producto_codigo",
-        "proveedor_codigo",
         "fecha_precio",
         "precio_unitario",
         "moneda",
@@ -280,18 +360,11 @@ def importar_precios_desde_archivo(
                 )
                 continue
 
-            fecha_raw = row.get("fecha_precio")
-            if isinstance(fecha_raw, date):
-                fecha_precio = fecha_raw
-            else:
-                try:
-                    fecha_precio = datetime.strptime(
-                        str(fecha_raw), "%Y-%m-%d"
-                    ).date()
-                except (ValueError, TypeError):
-                    rechazados += 1
-                    errores.append(f"Fila {idx}: fecha_precio inválida")
-                    continue
+            fecha_precio = _parse_fecha_precio(row.get("fecha_precio"))
+            if not fecha_precio:
+                rechazados += 1
+                errores.append(f"Fila {idx}: fecha_precio inválida")
+                continue
 
             precio_raw = row.get("precio_unitario")
             try:
@@ -303,10 +376,13 @@ def importar_precios_desde_archivo(
                 errores.append(f"Fila {idx}: precio_unitario inválido")
                 continue
 
-            moneda = (row.get("moneda") or "ARS").upper()
-            if moneda not in ALLOWED_MONEDAS:
+            moneda_raw = row.get("moneda")
+            moneda = _normalize_moneda_value(moneda_raw, "ARS")
+            if not moneda:
                 rechazados += 1
-                errores.append(f"Fila {idx}: moneda inválida ({moneda})")
+                errores.append(
+                    f"Fila {idx}: moneda inválida ({moneda_raw or ''})"
+                )
                 continue
 
             origen = (row.get("origen") or "MANUAL").upper()

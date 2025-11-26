@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field, field_validator
 
 class TipoCambioBase(BaseModel):
     fecha: date = Field(..., description="Fecha del tipo de cambio")
-    moneda: str = Field(..., description="Moneda (ARS, USD, EUR)")
+    moneda: str = Field(
+        ..., description="Moneda (ARS, USD, USD_MAY, EUR)"
+    )
     tipo: str = Field(
         "PROMEDIO", description="Tipo de tasa: COMPRA, VENTA, PROMEDIO"
     )

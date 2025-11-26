@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, date
@@ -88,6 +89,32 @@ DEFAULT_ORIGEN = "ERP_FLEXXUS"
 DEFAULT_MONEDA = "ARS"
 FALLBACK_PROV_CODIGO = "PROV_GENERICO"
 FALLBACK_PROV_NOMBRE = "Proveedor Genérico"
+CURRENCY_ALIASES = {
+    "ARS": "ARS",
+    "PESO": "ARS",
+    "PESOS": "ARS",
+    "USD": "USD",
+    "US": "USD",
+    "DOLAR": "USD",
+    "DOLARES": "USD",
+    "EUR": "EUR",
+    "EURO": "EUR",
+    "EUROS": "EUR",
+    "USD MAY": "USD_MAY",
+    "USDMAY": "USD_MAY",
+    "DOLAR MAY": "USD_MAY",
+    "DOLARES MAY": "USD_MAY",
+    "DOLAR MAYORISTA": "USD_MAY",
+    "USD MAYORISTA": "USD_MAY",
+}
+DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%Y%m%d")
+DATETIME_FORMATS = (
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M",
+    "%d/%m/%Y %I:%M:%S %p",
+    "%d/%m/%Y %I:%M %p",
+    "%Y-%m-%d %H:%M:%S",
+)
 
 RowDict = Dict[str, Any]
 
@@ -151,17 +178,52 @@ def _resolve_value(row: RowDict, field: str) -> Optional[Any]:
     return None
 
 
+def _sanitize_currency_key(raw: str) -> str:
+    cleaned = raw.replace("\xa0", " ").strip().upper()
+    cleaned = cleaned.replace("_", " ")
+    cleaned = " ".join(cleaned.split())
+    return re.sub(r"[^A-Z0-9 ]+", "", cleaned)
+
+
+def _normalize_moneda(value: object, default: Optional[str] = None) -> Optional[str]:
+    candidate = value if value not in (None, "") else default
+    if candidate is None:
+        return None
+    key = _sanitize_currency_key(str(candidate))
+    if not key:
+        return None
+    return CURRENCY_ALIASES.get(key)
+
+
+def _normalize_datetime_text(raw: str) -> str:
+    normalized = raw.replace("\xa0", " ").strip()
+    normalized = " ".join(normalized.split())
+    return re.sub(
+        r"(?i)\b([ap])\.?\s*m\.?\b",
+        lambda match: match.group(1).upper() + "M",
+        normalized,
+    )
+
+
 def _to_date(value: object) -> Optional[date]:
     if value is None:
         return None
     if isinstance(value, date):
         return value
+    if isinstance(value, datetime):
+        return value.date()
     value_str = str(value).strip()
     if not value_str:
         return None
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"):
+    cleaned = _normalize_datetime_text(value_str)
+    for fmt in DATE_FORMATS:
         try:
-            return datetime.strptime(value_str, fmt).date()
+            return datetime.strptime(cleaned, fmt).date()
+        except ValueError:
+            continue
+    for fmt in DATETIME_FORMATS:
+        try:
+            return datetime.strptime(cleaned, fmt).date()
         except ValueError:
             continue
     return None
@@ -253,7 +315,13 @@ def cleanse_rows(
             rejected.append(f"Fila {idx}: precio_unitario inválido")
             continue
 
-        moneda = str(_resolve_value(row, "moneda") or DEFAULT_MONEDA).upper()
+        moneda_raw = _resolve_value(row, "moneda")
+        moneda = _normalize_moneda(moneda_raw, DEFAULT_MONEDA)
+        if not moneda:
+            rejected.append(
+                f"Fila {idx}: moneda inválida ({moneda_raw or ''})"
+            )
+            continue
         origen = str(_resolve_value(row, "origen") or DEFAULT_ORIGEN).upper()
         referencia = _resolve_value(row, "referencia_doc")
         notas_raw = _resolve_value(row, "notas")

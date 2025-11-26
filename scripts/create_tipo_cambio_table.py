@@ -14,7 +14,7 @@ DROP TABLE IF EXISTS tipo_cambio_hist;
 CREATE TABLE tipo_cambio_hist (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   fecha date NOT NULL,
-  moneda enum('ARS','USD','EUR') NOT NULL,
+  moneda enum('ARS','USD','USD_MAY','EUR') NOT NULL,
   tipo enum('COMPRA','VENTA','PROMEDIO') NOT NULL DEFAULT 'PROMEDIO',
   tasa decimal(18,6) NOT NULL,
   origen enum('ERP_FLEXXUS','MANUAL','OTRO') NOT NULL DEFAULT 'MANUAL',
@@ -38,7 +38,7 @@ def main():
         CREATE TABLE tipo_cambio_hist (
           id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
           fecha date NOT NULL,
-          moneda enum('ARS','USD','EUR') NOT NULL,
+          moneda enum('ARS','USD','USD_MAY','EUR') NOT NULL,
           tipo enum('COMPRA','VENTA','PROMEDIO') NOT NULL DEFAULT 'PROMEDIO',
           tasa decimal(18,6) NOT NULL,
           origen enum('ERP_FLEXXUS','MANUAL','OTRO') NOT NULL DEFAULT 'MANUAL',
