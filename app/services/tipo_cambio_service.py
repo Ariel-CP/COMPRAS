@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
@@ -53,6 +53,33 @@ def listar_tipos_cambio(
             row_dict["tasa"] = float(row_dict["tasa"])
         rows.append(row_dict)
     return rows
+
+
+def obtener_resumen_ultimas_tasas(conn: Connection) -> List[dict]:
+    """Devuelve la última fecha y tasa por moneda/tipo."""
+    sql = text(
+        """
+        SELECT t.moneda, t.tipo, t.fecha, t.tasa
+        FROM tipo_cambio_hist t
+        INNER JOIN (
+            SELECT moneda, tipo, MAX(fecha) AS max_fecha
+            FROM tipo_cambio_hist
+            GROUP BY moneda, tipo
+        ) ult
+            ON ult.moneda = t.moneda
+            AND ult.tipo = t.tipo
+            AND ult.max_fecha = t.fecha
+        ORDER BY t.moneda, t.tipo
+        """
+    )
+    result = conn.execute(sql)
+    resumen: List[dict] = []
+    for row in result:
+        data = dict(row._mapping)
+        data["fecha"] = data["fecha"].isoformat()
+        data["tasa"] = float(data["tasa"])
+        resumen.append(data)
+    return resumen
 
 
 def upsert_tipo_cambio(
@@ -395,4 +422,20 @@ def obtener_tasa_cercana(
         row["origen_busqueda"] = "posterior"
         return row
 
+    return None
+
+
+def obtener_tasa_cercana_flexible(
+    conn: SQLConn,
+    moneda: str,
+    fecha: date,
+    tipos_prioridad: Sequence[str] | None = None,
+) -> Optional[dict]:
+    """Intenta obtener la tasa más cercana probando varios tipos (ordenados)."""
+    tipos = tipos_prioridad or ("PROMEDIO", "VENTA", "COMPRA")
+    for tipo in tipos:
+        tasa = obtener_tasa_cercana(conn, moneda, fecha, tipo)
+        if tasa:
+            tasa["tipo_sugerido"] = tipo
+            return tasa
     return None

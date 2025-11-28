@@ -7,15 +7,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services import mbom_service
-from app.services.tipo_cambio_service import (
-    obtener_tasa_cercana,
-    obtener_tasa_cercana_flexible,
-)
+from app.services.tipo_cambio_service import obtener_tasa_cercana
 
 BASE_MONEDA = "USD"
 ALERTA_MSG = (
-    "Algunas líneas fueron convertidas con tasa estimada; "
-    "verifique tipo de cambio."
+    "Algunas líneas fueron convertidas con tasa estimada; verifique tipo de cambio."
 )
 
 
@@ -122,12 +118,12 @@ def _get_costo_vigente(
                 """
                 SELECT costo_unitario, moneda, vigencia_desde
                 FROM costo_producto
-                WHERE producto_id=:pid
-                  AND vigencia_desde <= CURRENT_DATE()
-                  AND (
-                      vigencia_hasta IS NULL
-                      OR vigencia_hasta >= CURRENT_DATE()
-                  )
+                                WHERE producto_id=:pid
+                                    AND vigencia_desde <= CURRENT_DATE()
+                                    AND (
+                                            vigencia_hasta IS NULL
+                                            OR vigencia_hasta >= CURRENT_DATE()
+                                    )
                 ORDER BY vigencia_desde DESC
                 LIMIT 1
                 """
@@ -164,8 +160,6 @@ def _get_costo_vigente(
             valor_origen = float(historial_row.precio_unitario)
             moneda_origen = historial_row.moneda
             fecha_precio: date = historial_row.fecha_precio
-
-            # ARS: convertir a USD base
             if moneda_origen == "ARS":
                 conversion = _convertir_ars_a_usd(
                     db,
@@ -184,131 +178,6 @@ def _get_costo_vigente(
                 }
                 memo_costos[producto_id] = data
                 return data
-
-            # USD_MAY: convertir a ARS usando tasa histórica, luego a USD base
-            if moneda_origen == "USD_MAY":
-                tasa_hist = obtener_tasa_cercana_flexible(
-                    db,
-                    moneda_origen,
-                    fecha_precio,
-                )
-                if tasa_hist and tasa_hist.get("tasa"):
-                    # Convertir USD_MAY a ARS histórico
-                    ars_hist = valor_origen * float(tasa_hist["tasa"])
-                    # Convertir ARS histórico a USD base
-                    conversion = _convertir_ars_a_usd(
-                        db,
-                        ars_hist,
-                        fecha_precio,
-                    )
-                    detalle_fx_combined = {
-                        "usd_may_a_ars": {
-                            "tasa": float(tasa_hist["tasa"]),
-                            "fecha_tasa": (
-                                tasa_hist["fecha"].isoformat()
-                            ),
-                            "es_estimativa": bool(
-                                tasa_hist.get("es_estimativa")
-                            ),
-                            "origen_busqueda": tasa_hist.get(
-                                "origen_busqueda"
-                            ),
-                            "tipo_utilizado": tasa_hist.get("tipo_sugerido"),
-                        },
-                        "ars_a_usd": conversion["detalle_fx"],
-                    }
-                    alerta_combined = (
-                        bool(tasa_hist.get("es_estimativa"))
-                        or conversion["alerta"]
-                    )
-                    data = {
-                        "valor_base": conversion["valor_base"],
-                        "moneda_base": conversion["moneda_base"],
-                        "moneda_origen": moneda_origen,
-                        "valor_origen": valor_origen,
-                        "fuente": "precio_compra_hist",
-                        "fecha_precio": fecha_precio,
-                        "detalle_fx_hist": detalle_fx_combined,
-                        "alerta_fx_hist": alerta_combined,
-                    }
-                    memo_costos[producto_id] = data
-                    return data
-                # Sin tasa histórica para USD_MAY
-                data = {
-                    "valor_base": valor_origen,
-                    "moneda_base": moneda_origen,
-                    "moneda_origen": moneda_origen,
-                    "valor_origen": valor_origen,
-                    "fuente": "precio_compra_hist",
-                    "fecha_precio": fecha_precio,
-                    "detalle_fx_hist": {"sin_tasa": True},
-                    "alerta_fx_hist": True,
-                }
-                memo_costos[producto_id] = data
-                return data
-
-            # Otras monedas (EUR, etc.): convertir a USD estándar
-            if moneda_origen != BASE_MONEDA:
-                tasa_hist = obtener_tasa_cercana(
-                    db,
-                    moneda_origen,
-                    fecha_precio,
-                    "PROMEDIO",
-                )
-                if tasa_hist and tasa_hist.get("tasa"):
-                    # Convertir a ARS histórico y luego a USD
-                    ars_hist = valor_origen * float(tasa_hist["tasa"])
-                    conversion = _convertir_ars_a_usd(
-                        db,
-                        ars_hist,
-                        fecha_precio,
-                    )
-                    detalle_fx_combined = {
-                        "moneda_origen_a_ars": {
-                            "tasa": float(tasa_hist["tasa"]),
-                            "fecha_tasa": (
-                                tasa_hist["fecha"].isoformat()
-                            ),
-                            "es_estimativa": bool(
-                                tasa_hist.get("es_estimativa")
-                            ),
-                            "origen_busqueda": tasa_hist.get(
-                                "origen_busqueda"
-                            ),
-                        },
-                        "ars_a_usd": conversion["detalle_fx"],
-                    }
-                    alerta_combined = (
-                        bool(tasa_hist.get("es_estimativa"))
-                        or conversion["alerta"]
-                    )
-                    data = {
-                        "valor_base": conversion["valor_base"],
-                        "moneda_base": conversion["moneda_base"],
-                        "moneda_origen": moneda_origen,
-                        "valor_origen": valor_origen,
-                        "fuente": "precio_compra_hist",
-                        "fecha_precio": fecha_precio,
-                        "detalle_fx_hist": detalle_fx_combined,
-                        "alerta_fx_hist": alerta_combined,
-                    }
-                    memo_costos[producto_id] = data
-                    return data
-                # Sin tasa histórica para USD_MAY u otras monedas
-                data = {
-                    "valor_base": valor_origen,
-                    "moneda_base": moneda_origen,
-                    "moneda_origen": moneda_origen,
-                    "valor_origen": valor_origen,
-                    "fuente": "precio_compra_hist",
-                    "fecha_precio": fecha_precio,
-                    "detalle_fx_hist": {"sin_tasa": True},
-                    "alerta_fx_hist": True,
-                }
-                memo_costos[producto_id] = data
-                return data
-
-            # USD estándar
             data = {
                 "valor_base": valor_origen,
                 "moneda_base": moneda_origen,
@@ -418,9 +287,7 @@ def _calcular_costos_internal(
             "moneda_origen": costo_info["moneda_origen"],
         }
         if costo_info.get("fecha_precio"):
-            detalle_fx["fecha_precio"] = (
-                costo_info["fecha_precio"].isoformat()
-            )
+            detalle_fx["fecha_precio"] = costo_info["fecha_precio"].isoformat()
 
         if costo_info.get("alerta_fx_hist") or conv_actual.get("alerta"):
             alerta_fx_global = True

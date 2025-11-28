@@ -138,7 +138,10 @@ def _sanitize_currency_key(raw: str) -> str:
     return re.sub(r"[^A-Z0-9 ]+", "", cleaned)
 
 
-def _normalize_moneda_value(value: Any, default: Optional[str] = None) -> Optional[str]:
+def _normalize_moneda_value(
+    value: Any,
+    default: Optional[str] = None
+) -> Optional[str]:
     candidate = value if value not in (None, "") else default
     if candidate is None:
         return None

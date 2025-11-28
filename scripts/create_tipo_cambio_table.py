@@ -1,12 +1,12 @@
 """Script para crear la tabla tipo_cambio_hist en la base de datos."""
 import sys
 from pathlib import Path
+from sqlalchemy import text
 
 # Agregar directorio raíz al path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import text
-from app.db import _engine
+from app.db import _engine  # noqa: E402
 
 SQL_CREATE_TABLE = """
 DROP TABLE IF EXISTS tipo_cambio_hist;
@@ -26,6 +26,7 @@ CREATE TABLE tipo_cambio_hist (
   CONSTRAINT chk_tc_tasa CHECK (tasa > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 """
+
 
 def main():
     with _engine.begin() as conn:
@@ -59,6 +60,7 @@ def main():
             print("✓ Verificación: Tabla existe en la base de datos")
         else:
             print("✗ Error: La tabla no se encontró después de crearla")
+
 
 if __name__ == "__main__":
     main()

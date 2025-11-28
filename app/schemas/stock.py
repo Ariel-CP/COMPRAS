@@ -1,7 +1,11 @@
-from pydantic import BaseModel, field_validator
-from typing import Optional
 from datetime import date
-from decimal import Decimal
+from typing import List, Optional
+
+from pydantic import BaseModel, condecimal, field_validator
+
+
+StockCantidad = condecimal(ge=0, max_digits=18, decimal_places=6)
+
 
 # Modelo para importar stock mensual
 class StockMensualImport(BaseModel):
@@ -24,6 +28,7 @@ class StockMensualImport(BaseModel):
     class Config:
         from_attributes = True
 
+
 # Modelo de salida para listar stock mensual
 class StockMensualOut(BaseModel):
     id: int
@@ -35,11 +40,6 @@ class StockMensualOut(BaseModel):
 
     class Config:
         from_attributes = True
-from typing import List
-from pydantic import BaseModel, condecimal
-
-
-StockCantidad = condecimal(ge=0, max_digits=18, decimal_places=6)
 
 
 class StockItemOut(BaseModel):

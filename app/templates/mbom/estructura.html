@@ -109,7 +109,7 @@
 </section>
 
 <section class="panel">
-  <h3>Importar desde Flexxus</h3>
+  <h3>Importar desde ERP</h3>
   <input type="file" id="archivoFlexxus" accept=".csv,.xlsx" />
   <button id="btnImportarFlexxus" type="button">Importar</button>
 </section>
@@ -276,19 +276,51 @@
         if(rows.length === 0){
           content = '<em>Sin líneas en la subestructura</em>';
         }else{
+          // Cargar costos de la subestructura
+          let subCostos = { componentes: [], map: new Map() };
+          try{
+            const rCostos = await fetch(`/api/mbom/${d.cabecera.id}/costos`);
+            if(rCostos.ok){
+              const dataCostos = await rCostos.json();
+              subCostos.componentes = Array.isArray(dataCostos.componentes) ? dataCostos.componentes : [];
+              subCostos.map = new Map();
+              subCostos.componentes.forEach(c => {
+                if(c && c.producto_id){
+                  subCostos.map.set(c.producto_id, c);
+                }
+              });
+            }
+          }catch(e){ /* ignorar error de costos */ }
+
           const parts = [
             "<div style='padding:4px 0'><strong>Subestructura</strong> (Rev. "+(d.cabecera?.revision||'?')+")</div>",
-            "<table class='striped' style='margin-left:8px'>",
-            "<thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant</th><th>UM</th></tr></thead><tbody>"
+            "<table class='striped subTabla' style='margin-left:8px'>",
+            "<thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant</th><th>UM</th><th>Merma</th><th>Costo unit.</th><th>Costo total</th><th>Acciones</th></tr></thead><tbody>"
           ];
           rows.forEach(s=>{
+            const subCostInfo = subCostos.map.get(s.componente_producto_id);
+            const merma = s.factor_merma != null ? (parseFloat(s.factor_merma)*100).toFixed(2)+'%' : '0%';
+            const costoUnitHtml = subCostInfo 
+              ? `${formatMonto(subCostInfo.costo_unitario)} ${subCostInfo.moneda||''}` 
+              : '<span class="tag tag-warn">Sin costo</span>';
+            const costoTotalHtml = subCostInfo 
+              ? `${formatMonto(subCostInfo.costo_total)} ${subCostInfo.moneda||''}` 
+              : '<span class="tag tag-muted">-</span>';
+            const showSubBtn = (s.componente_tipo_producto === 'WIP' || s.componente_tipo_producto === 'PT');
+            const btnHtml = showSubBtn 
+              ? `<button class="btnSubSub" data-pid="${s.componente_producto_id}" data-codigo="${s.componente_codigo||''}" title="Ver subestructura">Ver</button>` 
+              : '';
             parts.push(
-              `<tr>`+
+              `<tr data-subpid="${s.componente_producto_id}">`+
               `<td>${s.renglon}</td>`+
               `<td>${s.componente_codigo||''}</td>`+
               `<td>${s.componente_nombre||''}</td>`+
               `<td class='num'>${(s.cantidad!=null)? (Math.round(parseFloat(s.cantidad)*1000)/1000).toFixed(3):''}</td>`+
               `<td>${s.unidad_medida_codigo||umCodigo(s.unidad_medida_id)||''}</td>`+
+              `<td class='num'>${merma}</td>`+
+              `<td class='num'>${costoUnitHtml}</td>`+
+              `<td class='num'>${costoTotalHtml}</td>`+
+              `<td>${btnHtml}</td>`+
               `</tr>`
             );
           });
@@ -300,6 +332,97 @@
       content = '<em>Error de red</em>';
     }
     subTr.firstElementChild.innerHTML = content;
+    // Bind eventos a botones Ver de subestructuras anidadas
+    subTr.querySelectorAll('.btnSubSub').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const pid = parseInt(btn.dataset.pid);
+        const codigo = btn.dataset.codigo || '?';
+        await toggleSubestructuraAnidada(pid, codigo, btn.closest('tr'));
+      });
+    });
+  }
+
+  async function toggleSubestructuraAnidada(pid, codigo, tr){
+    const key = 'subsub-for-' + pid;
+    const next = tr.nextElementSibling;
+    if(next && next.dataset && next.dataset.subFor === key){
+      next.remove();
+      return;
+    }
+    if(next && next.classList && next.classList.contains('subSubRow')){
+      next.remove();
+    }
+    let content = '<em>Cargando...</em>';
+    const subSubTr = document.createElement('tr');
+    subSubTr.className = 'subSubRow';
+    subSubTr.dataset.subFor = key;
+    const colSpan = 9; // columnas de la subtabla
+    subSubTr.innerHTML = `<td colspan="${colSpan}" style="padding-left:24px;">${content}</td>`;
+    tr.parentNode.insertBefore(subSubTr, tr.nextSibling);
+    try{
+      const r = await fetch(`/api/mbom/${pid}?estado=ACTIVO`);
+      if(r.status === 404){
+        content = '<em>Sin MBOM ACTIVO para '+codigo+'</em>';
+      }else if(!r.ok){
+        content = '<em>Error al cargar</em>';
+      }else{
+        const d = await r.json();
+        const rows = Array.isArray(d.lineas) ? d.lineas : [];
+        if(rows.length === 0){
+          content = '<em>Sin líneas</em>';
+        }else{
+          // Cargar costos anidados
+          let subCostos = { componentes: [], map: new Map() };
+          try{
+            const rCostos = await fetch(`/api/mbom/${d.cabecera.id}/costos`);
+            if(rCostos.ok){
+              const dataCostos = await rCostos.json();
+              subCostos.componentes = Array.isArray(dataCostos.componentes) ? dataCostos.componentes : [];
+              subCostos.map = new Map();
+              subCostos.componentes.forEach(c => {
+                if(c && c.producto_id){
+                  subCostos.map.set(c.producto_id, c);
+                }
+              });
+            }
+          }catch(e){ /* ignorar */ }
+
+          const parts = [
+            "<div style='padding:2px 0'><strong>↳ Subestructura de "+codigo+"</strong> (Rev. "+(d.cabecera?.revision||'?')+")</div>",
+            "<table class='striped' style='margin-left:16px; font-size:11px;'>",
+            "<thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant</th><th>UM</th><th>Merma</th><th>Costo unit.</th><th>Costo total</th></tr></thead><tbody>"
+          ];
+          rows.forEach(s=>{
+            const subCostInfo = subCostos.map.get(s.componente_producto_id);
+            const merma = s.factor_merma != null ? (parseFloat(s.factor_merma)*100).toFixed(2)+'%' : '0%';
+            const costoUnitHtml = subCostInfo 
+              ? `${formatMonto(subCostInfo.costo_unitario)} ${subCostInfo.moneda||''}` 
+              : '<span class="tag tag-warn">Sin costo</span>';
+            const costoTotalHtml = subCostInfo 
+              ? `${formatMonto(subCostInfo.costo_total)} ${subCostInfo.moneda||''}` 
+              : '<span class="tag tag-muted">-</span>';
+            parts.push(
+              `<tr>`+
+              `<td>${s.renglon}</td>`+
+              `<td>${s.componente_codigo||''}</td>`+
+              `<td>${s.componente_nombre||''}</td>`+
+              `<td class='num'>${(s.cantidad!=null)? (Math.round(parseFloat(s.cantidad)*1000)/1000).toFixed(3):''}</td>`+
+              `<td>${s.unidad_medida_codigo||umCodigo(s.unidad_medida_id)||''}</td>`+
+              `<td class='num'>${merma}</td>`+
+              `<td class='num'>${costoUnitHtml}</td>`+
+              `<td class='num'>${costoTotalHtml}</td>`+
+              `</tr>`
+            );
+          });
+          parts.push('</tbody></table>');
+          content = parts.join('');
+        }
+      }
+    }catch(e){
+      content = '<em>Error de red</em>';
+    }
+    subSubTr.firstElementChild.innerHTML = content;
   }
 
   async function cargar(){

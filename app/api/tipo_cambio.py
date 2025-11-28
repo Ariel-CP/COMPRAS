@@ -9,11 +9,13 @@ from fastapi import (
     UploadFile,
     File,
     Form,
+    Header,
 )
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
+from ..core.config import get_settings
 from ..db import get_db
 from ..schemas.tipo_cambio import (
     TipoCambioCreate,
@@ -21,6 +23,7 @@ from ..schemas.tipo_cambio import (
     TipoCambioOut,
     TipoCambioFiltro,
     BulkImportResult,
+    TipoCambioSyncResponse,
 )
 from ..services.tipo_cambio_service import (
     listar_tipos_cambio,
@@ -30,8 +33,13 @@ from ..services.tipo_cambio_service import (
     bulk_import_csv,
     bulk_import_xlsx,
 )
+from ..services.tipo_cambio_sync_service import (
+    TipoCambioSyncError,
+    sync_bcra_tipos_cambio,
+)
 
 router = APIRouter()
+settings = get_settings()
 
 
 @router.get("/", response_model=list[TipoCambioOut])
@@ -207,4 +215,43 @@ def descargar_plantilla_xlsx():
                 "attachment; filename=plantilla_tipo_cambio.xlsx"
             )
         },
+    )
+
+
+@router.post("/sync-oficial", response_model=TipoCambioSyncResponse)
+def api_sync_oficial(
+    desde: str | None = Query(
+        default=None, description="Fecha desde (YYYY-MM-DD)"
+    ),
+    hasta: str | None = Query(
+        default=None, description="Fecha hasta (YYYY-MM-DD)"
+    ),
+    x_sync_token: str | None = Header(
+        default=None,
+        alias="X-Sync-Token",
+        description="Token simple para autorizar la sincronización",
+    ),
+    db: Session = Depends(get_db),
+):
+    if settings.sync_job_token and x_sync_token != settings.sync_job_token:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    desde_dt = date.fromisoformat(desde) if desde else None
+    hasta_dt = date.fromisoformat(hasta) if hasta else None
+
+    try:
+        resumen = sync_bcra_tipos_cambio(
+            db,
+            desde=desde_dt,
+            hasta=hasta_dt,
+        )
+    except TipoCambioSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return TipoCambioSyncResponse(
+        insertados=resumen.insertados,
+        actualizados=resumen.actualizados,
+        procesados=resumen.procesados,
+        desde=resumen.desde,
+        hasta=resumen.hasta,
     )

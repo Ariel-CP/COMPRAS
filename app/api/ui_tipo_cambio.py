@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..services.tipo_cambio_service import obtener_resumen_ultimas_tasas
 from ..utils.health import db_status
 
 router = APIRouter()
@@ -22,6 +23,7 @@ async def ui_tipo_cambio(
     db: Session = Depends(get_db),
 ):
     status = db_status(db)
+    ultimas_tasas = obtener_resumen_ultimas_tasas(db)
     return templates.TemplateResponse(
         "tipo_cambio/historial.html",
         {
@@ -31,5 +33,6 @@ async def ui_tipo_cambio(
             "desde": desde.isoformat() if desde else "",
             "hasta": hasta.isoformat() if hasta else "",
             "db_status": status,
+            "ultimas_tasas": ultimas_tasas,
         },
     )

@@ -1,12 +1,14 @@
 import csv
-from openpyxl import load_workbook, Workbook
-from sqlalchemy.orm import Session
-from app.schemas.stock import StockMensualImport, StockMensualOut
-from app.models import StockDisponibleMes  # Asume modelo SQLAlchemy
 from datetime import date
 from decimal import Decimal
 
+from openpyxl import load_workbook, Workbook
+from sqlalchemy.orm import Session
+
+from app.models import StockDisponibleMes
+
 # Función para importar CSV
+
 
 def bulk_import_csv(file_path: str, db: Session):
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -27,11 +29,12 @@ def bulk_import_csv(file_path: str, db: Session):
 
 # Función para importar XLSX
 
+
 def bulk_import_xlsx(file_path: str, db: Session):
     wb = load_workbook(file_path)
     ws = wb.active
     items = []
-    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True)):
+    for row in ws.iter_rows(min_row=2, values_only=True):
         periodo, codigo_producto, cantidad, unidad_medida, fecha_stock = row
         item = StockDisponibleMes(
             periodo=periodo,
@@ -47,24 +50,39 @@ def bulk_import_xlsx(file_path: str, db: Session):
 
 # Generar plantilla XLSX
 
+
 def generar_template_xlsx(file_path: str):
     wb = Workbook()
     ws = wb.active
-    ws.append(['periodo', 'codigo_producto', 'cantidad', 'unidad_medida', 'fecha_stock'])
+    ws.append([
+        'periodo', 'codigo_producto', 'cantidad',
+        'unidad_medida', 'fecha_stock'
+    ])
     wb.save(file_path)
 
 # Listar stock mensual
+
 
 def listar_stock_mensual(db: Session):
     registros = db.query(StockDisponibleMes).all()
     resultado = []
     for r in registros:
+        cantidad_val = (
+            float(r.cantidad)
+            if isinstance(r.cantidad, Decimal)
+            else r.cantidad
+        )
+        fecha_val = (
+            r.fecha_stock.isoformat()
+            if isinstance(r.fecha_stock, date)
+            else r.fecha_stock
+        )
         resultado.append({
             'id': r.id,
             'periodo': r.periodo,
             'codigo_producto': r.codigo_producto,
-            'cantidad': float(r.cantidad) if isinstance(r.cantidad, Decimal) else r.cantidad,
+            'cantidad': cantidad_val,
             'unidad_medida': r.unidad_medida,
-            'fecha_stock': r.fecha_stock.isoformat() if isinstance(r.fecha_stock, date) else r.fecha_stock
+            'fecha_stock': fecha_val
         })
     return resultado

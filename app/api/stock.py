@@ -9,10 +9,10 @@ from ..services.stock_import_service import (
     listar_stock_periodo,
     resumen_stock_periodo,
 )
-import os
 from fastapi.responses import FileResponse
 
 router = APIRouter()
+
 
 # Endpoint para descargar plantilla XLSX de stock mensual
 @router.get("/template-xlsx")
@@ -34,22 +34,36 @@ def importar_stock(
     fecha_corte: str = Form(..., description="Fecha de corte YYYY-MM-DD"),
     db: Session = Depends(get_db),
 ):
-    if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
+    if not 1 <= mes <= 12:
+        raise HTTPException(
+            status_code=400,
+            detail="mes debe estar entre 1 y 12"
+        )
     if not archivo.filename:
         raise HTTPException(status_code=400, detail="Archivo requerido")
     return importar_stock_csv_o_excel(db, anio, mes, archivo, fecha_corte)
 
 
 @router.get("/{anio}/{mes}", response_model=List[StockItemOut])
-def listar_stock(anio: int, mes: int, q: str | None = None, db: Session = Depends(get_db)):
+def listar_stock(
+    anio: int,
+    mes: int,
+    q: str | None = None,
+    db: Session = Depends(get_db)
+):
     if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
+        raise HTTPException(
+            status_code=400,
+            detail="mes debe estar entre 1 y 12"
+        )
     return listar_stock_periodo(db, anio, mes, q)
 
 
 @router.get("/{anio}/{mes}/resumen")
 def resumen_stock(anio: int, mes: int, db: Session = Depends(get_db)):
     if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
+        raise HTTPException(
+            status_code=400,
+            detail="mes debe estar entre 1 y 12"
+        )
     return resumen_stock_periodo(db, anio, mes)

@@ -65,3 +65,11 @@ class BulkImportResult(BaseModel):
     actualizados: int
     errores: int
     detalle_errores: List[str] = []
+
+
+class TipoCambioSyncResponse(BaseModel):
+    insertados: int
+    actualizados: int
+    procesados: int
+    desde: date
+    hasta: date

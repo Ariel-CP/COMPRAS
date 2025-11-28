@@ -22,6 +22,10 @@ class Settings:
     openai_model: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     anthropic_model: Optional[str] = None
+    bcra_api_base_url: str = "https://api.estadisticasbcra.com"
+    bcra_api_token: Optional[str] = None
+    bcra_sync_days: int = 5
+    sync_job_token: Optional[str] = None
 
 
 def _load_json_config() -> dict:
@@ -83,6 +87,19 @@ def get_settings() -> Settings:
         os.environ.get("ANTHROPIC_MODEL") or cfg.get("anthropic_model")
     )
 
+    bcra_api_base_url = (
+        os.environ.get("BCRA_API_BASE_URL")
+        or cfg.get("bcra_api_base_url")
+        or "https://api.estadisticasbcra.com"
+    )
+    bcra_api_token = os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
+    bcra_sync_days = int(
+        os.environ.get("BCRA_SYNC_DAYS", cfg.get("bcra_sync_days", 5))
+    )
+    sync_job_token = (
+        os.environ.get("SYNC_JOB_TOKEN") or cfg.get("sync_job_token")
+    )
+
     return Settings(
         database_url=database_url,
         mysql_pool_size=mysql_pool_size,
@@ -93,4 +110,8 @@ def get_settings() -> Settings:
         openai_model=openai_model,
         anthropic_api_key=anthropic_api_key,
         anthropic_model=anthropic_model,
+        bcra_api_base_url=bcra_api_base_url,
+        bcra_api_token=bcra_api_token,
+        bcra_sync_days=bcra_sync_days,
+        sync_job_token=sync_job_token,
     )
