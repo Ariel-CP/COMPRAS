@@ -58,7 +58,7 @@ def get_settings() -> Settings:
         os.environ.get("DATABASE_URL")
         or cfg.get("database_url")
         or (
-            "mysql+pymysql://root:root@127.0.0.1:3306/"
+            "mysql+pymysql://compras:matete01@127.0.0.1:3306/"
             "compras_db?charset=utf8mb4"
         )
     )

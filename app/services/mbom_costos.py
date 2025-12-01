@@ -349,21 +349,60 @@ def _get_costo_vigente(
 
 
 def calcular_costos(db: Session, mbom_id: int) -> Dict[str, Any]:
+    """
+    Calcula costos completos del MBOM: materiales + procesos.
+    Retorna estructura discriminada con totales por categoría.
+    """
     memo_costos: Dict[int, Dict[str, Any]] = {}
     en_stack: Set[int] = set()
-    resultado = _calcular_costos_internal(
+    
+    # Costos de materiales
+    resultado_mat = _calcular_costos_internal(
         db,
         mbom_id,
         memo_costos,
         en_stack,
     )
-    alerta_fx = resultado["alerta_fx"]
+    
+    # Costos de procesos
+    resultado_proc = _calcular_costos_procesos(db, mbom_id)
+    
+    # Totales
+    total_materiales = resultado_mat["total"]
+    total_procesos = resultado_proc["total"]
+    total_general = total_materiales + total_procesos
+    
+    # Porcentajes
+    if total_general > 0:
+        pct_mat = (total_materiales / total_general * 100)
+        pct_proc = (total_procesos / total_general * 100)
+    else:
+        pct_mat = 0
+        pct_proc = 0
+    
+    alerta_fx = resultado_mat["alerta_fx"]
+    
     return {
         "mbom_id": mbom_id,
-        "componentes": resultado["componentes"],
-        "total": resultado["total"],
+        "materiales": {
+            "componentes": resultado_mat["componentes"],
+            "total": total_materiales,
+            "moneda": "ARS",
+        },
+        "procesos": {
+            "operaciones": resultado_proc["operaciones"],
+            "total": total_procesos,
+            "moneda": "ARS",
+        },
+        "total": total_general,
+        "desglose": {
+            "materiales_pct": round(pct_mat, 2),
+            "procesos_pct": round(pct_proc, 2),
+        },
         "alerta_fx": alerta_fx,
         "detalle_alerta": ALERTA_MSG if alerta_fx else None,
+        # Mantener compatibilidad con código anterior
+        "componentes": resultado_mat["componentes"],
     }
 
 
@@ -490,3 +529,66 @@ def _get_costo_desde_subestructura(
         },
         "alerta_fx_hist": bool(sub_resultado["alerta_fx"]),
     }
+
+
+def _calcular_costos_procesos(
+    db: Session,
+    mbom_id: int,
+) -> Dict[str, Any]:
+    """
+    Calcula costos de operaciones/procesos del MBOM.
+    Retorna operaciones con costo y total en ARS.
+    """
+    operaciones: List[Dict[str, Any]] = []
+    total = 0.0
+    
+    query = text("""
+        SELECT 
+            mo.secuencia,
+            o.codigo,
+            o.nombre,
+            o.centro_trabajo,
+            o.tiempo_estandar_minutos,
+            o.costo_hora,
+            o.moneda
+        FROM mbom_operacion mo
+        INNER JOIN operacion o ON mo.operacion_id = o.id
+        WHERE mo.mbom_id = :mbom_id
+        ORDER BY mo.secuencia
+    """)
+    
+    rows = db.execute(query, {"mbom_id": mbom_id}).fetchall()
+    
+    for r in rows:
+        tiempo_min = float(r.tiempo_estandar_minutos or 0)
+        costo_hora_orig = float(r.costo_hora or 0)
+        moneda_orig = r.moneda or "ARS"
+        
+        # Calcular costo en moneda original
+        costo_op_orig = (tiempo_min / 60.0) * costo_hora_orig
+        
+        # Convertir a ARS si es necesario
+        if moneda_orig == "ARS":
+            costo_ars = costo_op_orig
+        else:
+            # Usar tasa actual para conversión
+            conv = _convertir_base_a_ars(db, costo_op_orig, moneda_orig)
+            costo_ars = conv["valor_ars"]
+        
+        operaciones.append({
+            "secuencia": r.secuencia,
+            "codigo": r.codigo,
+            "nombre": r.nombre,
+            "centro_trabajo": r.centro_trabajo,
+            "tiempo_min": tiempo_min,
+            "costo_hora": costo_hora_orig,
+            "moneda_hora": moneda_orig,
+            "subtotal": costo_ars,
+        })
+        total += costo_ars
+    
+    return {
+        "operaciones": operaciones,
+        "total": total,
+    }
+

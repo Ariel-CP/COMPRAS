@@ -2,12 +2,21 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..schemas.mbom import MBOMCabecera, MBOMEstructura
 from ..services import mbom_service
 from ..services.mbom_costos import calcular_costos
+from ..services.mbom_import_service import importar_mbom_desde_flexxus
+from ..services.mbom_operacion_service import (
+    listar_operaciones_mbom,
+    agregar_operacion_mbom,
+    actualizar_operacion_mbom,
+    eliminar_operacion_mbom,
+    obtener_siguiente_secuencia,
+)
 from ..services.producto_service import listar_productos, crear_producto
 from ..services.unidad_service import listar_unidades
 
@@ -40,6 +49,22 @@ def api_get_estructura(
             raise HTTPException(status_code=404, detail="MBOM no encontrada")
     lineas = mbom_service.listar_lineas(db, int(cab["id"]))
     return {"cabecera": cab, "lineas": lineas}
+
+
+@router.get("/mbom/{producto_padre_id}/arbol-completo")
+def api_get_estructura_completa(
+    producto_padre_id: int,
+    estado: str = Query("BORRADOR", description="ACTIVO|BORRADOR (preferido)"),
+    db: Session = Depends(get_db),
+):
+    """
+    Devuelve estructura MBOM completa con todos los niveles anidados.
+    Cada línea incluye campo 'nivel' para indentación visual.
+    """
+    lineas_arbol = mbom_service.obtener_estructura_completa_recursiva(
+        db, producto_padre_id, estado
+    )
+    return {"lineas": lineas_arbol, "total": len(lineas_arbol)}
 
 
 class MBOMGuardarPayload(MBOMEstructura):
@@ -129,17 +154,16 @@ def api_get_costos(mbom_id: int, db: Session = Depends(get_db)):
     return calcular_costos(db, mbom_id)
 
 
-@router.post("/mbom/{producto_padre_id}/importar-flexxus")
+@router.post(
+    "/mbom/{producto_padre_id}/importar-flexxus",
+    response_model=MBOMEstructura,
+)
 def api_importar_flexxus(
     producto_padre_id: int,
     archivo: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    # Stub temporal; se implementará en mbom_import_flexxus.py
-    # Devolver "501 Not Implemented" por ahora
-    raise HTTPException(
-        status_code=501, detail="Importación Flexxus pendiente"
-    )
+    return importar_mbom_desde_flexxus(db, producto_padre_id, archivo)
 
 
 @router.post("/mbom/demo/{codigo}", response_model=MBOMEstructura)
@@ -263,3 +287,157 @@ def api_clonar_revision(mbom_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     lineas = mbom_service.listar_lineas(db, int(cab_nueva["id"]))
     return {"cabecera": cab_nueva, "lineas": lineas}
+
+
+@router.delete("/mbom/limpiar-todo")
+def api_limpiar_mbom_test(db: Session = Depends(get_db)):
+    """
+    PELIGRO: Elimina TODAS las estructuras MBOM de la base de datos.
+    Solo para desarrollo/testing. NO usar en producción.
+    """
+    try:
+        # Eliminar todas las líneas primero (FK constraint)
+        db.execute(text("DELETE FROM mbom_detalle"))
+        # Eliminar todos los encabezados
+        db.execute(text("DELETE FROM mbom_cabecera"))
+        db.commit()
+        
+        count_det = db.execute(
+            text("SELECT COUNT(*) as c FROM mbom_detalle")
+        ).scalar()
+        count_cab = db.execute(
+            text("SELECT COUNT(*) as c FROM mbom_cabecera")
+        ).scalar()
+        
+        return {
+            "mensaje": "MBOMs eliminadas",
+            "mbom_detalle": count_det,
+            "mbom_cabecera": count_cab
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al limpiar: {str(e)}"
+        ) from e
+
+
+@router.post("/productos/corregir-tipos-30")
+def api_corregir_tipos_productos_30(db: Session = Depends(get_db)):
+    """
+    Actualiza todos los productos que empiezan con '30' a tipo WIP.
+    Útil para corregir productos creados antes de implementar
+    detección automática de tipos.
+    """
+    try:
+        result = db.execute(
+            text(
+                "UPDATE producto SET tipo_producto = 'WIP' "
+                "WHERE codigo LIKE '30%'"
+            )
+        )
+        db.commit()
+        
+        count = db.execute(
+            text(
+                "SELECT COUNT(*) as c FROM producto "
+                "WHERE codigo LIKE '30%'"
+            )
+        ).scalar()
+        
+        return {
+            "mensaje": "Tipos actualizados",
+            "productos_actualizados": result.rowcount,
+            "total_productos_30": count
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al actualizar tipos: {str(e)}"
+        ) from e
+
+
+# ============================================================================
+# ENDPOINTS DE RUTA DE OPERACIONES (MBOM)
+# ============================================================================
+
+@router.get("/mbom/{mbom_id}/operaciones")
+def api_listar_operaciones_mbom(
+    mbom_id: int,
+    db: Session = Depends(get_db),
+):
+    """Lista las operaciones de la ruta de un MBOM."""
+    return listar_operaciones_mbom(db, mbom_id)
+
+
+@router.post("/mbom/{mbom_id}/operaciones", status_code=201)
+def api_agregar_operacion_mbom(
+    mbom_id: int,
+    operacion_id: int = Query(...),
+    secuencia: Optional[int] = Query(None),
+    notas: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Agrega una operación a la ruta del MBOM."""
+    if secuencia is None:
+        secuencia = obtener_siguiente_secuencia(db, mbom_id)
+    
+    try:
+        return agregar_operacion_mbom(
+            db=db,
+            mbom_id=mbom_id,
+            operacion_id=operacion_id,
+            secuencia=secuencia,
+            notas=notas,
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al agregar operación: {str(e)}"
+        )
+
+
+@router.put("/mbom/operaciones/{mbom_operacion_id}")
+def api_actualizar_operacion_mbom(
+    mbom_operacion_id: int,
+    secuencia: Optional[int] = Query(None),
+    notas: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Actualiza una operación en la ruta del MBOM."""
+    try:
+        actualizar_operacion_mbom(
+            db=db,
+            mbom_operacion_id=mbom_operacion_id,
+            secuencia=secuencia,
+            notas=notas,
+        )
+        return {"mensaje": "Operación actualizada"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al actualizar: {str(e)}"
+        )
+
+
+@router.delete("/mbom/operaciones/{mbom_operacion_id}", status_code=204)
+def api_eliminar_operacion_mbom(
+    mbom_operacion_id: int,
+    db: Session = Depends(get_db),
+):
+    """Elimina una operación de la ruta del MBOM."""
+    try:
+        if not eliminar_operacion_mbom(db, mbom_operacion_id):
+            raise HTTPException(
+                status_code=404,
+                detail="Operación no encontrada"
+            )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al eliminar: {str(e)}"
+        )

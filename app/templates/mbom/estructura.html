@@ -8,44 +8,88 @@
 
 <section class="panel">
   <h3>Encabezado</h3>
-  <label>Producto padre
-    <select id="productoSelect">
-      <option value="">-- Seleccione --</option>
-      {% for p in productos %}
-        <option value="{{ p.id }}" {% if producto_id and producto_id==p.id %}selected{% endif %}>{{ p.codigo }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label style="margin-left:8px;">Buscar
-    <input type="search" id="prodBuscar" placeholder="código o nombre" />
-  </label>
-  <label style="margin-left:8px;">
-    <input type="checkbox" id="soloPtWip" checked /> Sólo PT
-  </label>
-  <button id="btnActualizar" type="button">Actualizar</button>
-  <span id="cabeceraInfo"></span>
-  <div><small id="prodCount"></small></div>
-  <div style="margin-top:6px;">
-    <button id="btnRefrescarProductos" type="button" style="margin-left:6px;">Refrescar productos</button>
-    <details id="crearProdInline" style="margin-top:8px;">
-      <summary>Crear producto padre rápido</summary>
-      <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; align-items:center;">
-        <input type="text" id="nuevoCodigo" placeholder="Código" style="width:140px;" />
-        <input type="text" id="nuevoNombre" placeholder="Nombre" style="width:200px;" />
-        <select id="nuevoTipo">
-          <option value="PT">PT (Producto Terminado)</option>
-          <option value="WIP">WIP (En Proceso)</option>
-        </select>
-        <select id="nuevoUM" style="width:90px;"></select>
-        <button id="btnCrearProducto" type="button">Crear y Seleccionar</button>
-        <span id="crearProdMsg" style="font-size:12px; color:#a00;"></span>
-      </div>
-    </details>
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+    <label style="margin:0;">Producto padre
+      <select id="productoSelect" style="min-width:200px;">
+        <option value="">-- Seleccione --</option>
+        {% for p in productos %}
+          <option value="{{ p.id }}" {% if producto_id and producto_id==p.id %}selected{% endif %}>{{ p.codigo }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="margin:0;">Buscar
+      <input type="search" id="prodBuscar" placeholder="código o nombre" style="width:180px;" />
+    </label>
+    <label style="margin:0; display:flex; align-items:center; gap:4px;">
+      <input type="checkbox" id="soloPtWip" checked /> <span>Sólo PT</span>
+    </label>
+    <button id="btnActualizar" type="button">Actualizar</button>
+  </div>
+  <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+    <span id="cabeceraInfo" style="font-weight:500;"></span>
+    <small id="prodCount" style="color:#666;"></small>
+  </div>
+  <div style="display:flex; gap:8px; margin-bottom:8px;">
+    <button id="btnRefrescarProductos" type="button">Refrescar productos</button>
+  </div>
+  <details id="crearProdInline" style="padding:8px; background:#f8f9fa; border-radius:4px;">
+    <summary style="cursor:pointer; font-weight:500;">Crear producto padre rápido</summary>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center;">
+      <input type="text" id="nuevoCodigo" placeholder="Código" style="width:140px;" />
+      <input type="text" id="nuevoNombre" placeholder="Nombre" style="width:220px;" />
+      <select id="nuevoTipo" style="width:160px;">
+        <option value="PT">PT (Producto Terminado)</option>
+        <option value="WIP">WIP (En Proceso)</option>
+      </select>
+      <select id="nuevoUM" style="width:100px;"></select>
+      <button id="btnCrearProducto" type="button">Crear y Seleccionar</button>
+      <span id="crearProdMsg" style="font-size:12px; color:#dc2626;"></span>
+    </div>
+  </details>
+</section>
+
+<section class="panel">
+  <h3>Ruta de Operaciones</h3>
+  <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+    <button id="btnAgregarOperacion" type="button" style="background:#2563eb; color:white; padding:6px 12px; border:none; border-radius:4px;">➕ Agregar Operación</button>
+    <span id="operacionesInfo" style="font-size:12px; color:#666;"></span>
+  </div>
+  <div id="operacionesWrapper" style="max-height:240px; overflow-y:auto; border:1px solid #d0d7de; border-radius:6px; background:#fff;">
+    <table id="tblOperaciones" class="striped" style="width:100%; margin-bottom:0;">
+      <thead>
+        <tr>
+          <th style="width:80px;">Sec</th>
+          <th style="width:120px;">Código</th>
+          <th>Operación</th>
+          <th style="width:140px;">Centro</th>
+          <th style="width:100px;">Tiempo (min)</th>
+          <th style="width:120px;">Costo/hora</th>
+          <th style="width:120px;">Costo Op.</th>
+          <th style="width:120px;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  
+  <!-- Modal selector de operaciones -->
+  <div id="operacionSelector" style="display:none; position:fixed; top:60px; left:50%; transform:translateX(-50%); width:720px; max-height:70vh; overflow:auto; background:#fff; border:2px solid #333; box-shadow:0 4px 16px rgba(0,0,0,.25); padding:12px; z-index:1000;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <strong>Seleccionar Operación</strong>
+      <button type="button" id="btnCerrarOperacionSelector" style="padding:4px 8px;">✕</button>
+    </div>
+    <div style="margin-bottom:8px;">
+      <label>Secuencia (múltiplo de 10):
+        <input type="number" id="opSecuencia" value="10" step="10" min="10" style="width:100px; margin-left:8px;" />
+      </label>
+    </div>
+    <div id="opResultados" style="margin-top:10px; max-height:400px; overflow-y:auto;"></div>
   </div>
 </section>
 
 <section class="panel">
     <h3>Estructura (líneas)</h3>
+    <div id="lineasWrapper" class="tabla-scroll" style="max-height:60vh; overflow-y:auto; overflow-x:hidden;">
     <table id="tblLineas" class="striped">
       <thead>
         <tr>
@@ -63,21 +107,60 @@
       </thead>
       <tbody></tbody>
     </table>
+    </div>
     <style id="styleTblLineasCompact">
-      #tblLineas { table-layout: auto; width:100%; }
-      #tblLineas th, #tblLineas td { white-space:nowrap; padding:1px 5px; vertical-align:middle; }
-      /* Altura unificada */
+      /* Ajustar a lo ancho: sin scroll horizontal, columnas compactas */
+      #lineasWrapper { border:1px solid #d0d7de; border-radius:6px; overflow-x:hidden; max-width:100%; }
+      #tblLineas { table-layout: fixed; width:100%; margin-bottom:12px; }
+      #tblLineas th, #tblLineas td { white-space:nowrap; padding:2px 6px; vertical-align:middle; font-size:12px; line-height:1.1; }
+      /* Resizable columns: show divider and col-resize cursor */
+      #tblLineas th { position: relative; }
+      #tblLineas th .col-resizer { position:absolute; right:0; top:0; width:6px; height:100%; cursor:col-resize; }
+      #tblLineas th .col-resizer:hover { background: rgba(11,92,171,0.15); }
+      /* Ocultar columna # */
+      #tblLineas th:nth-child(1), #tblLineas td:nth-child(1){ display:none; }
+      /* Anchos sugeridos por columna para encajar en pantalla */
+      #tblLineas th:nth-child(2), #tblLineas td:nth-child(2){ width:clamp(90px, 12ch, 160px); }
+      /* Nombre ocupa el espacio restante con elipsis */
+      #tblLineas td:nth-child(3){ overflow:hidden; text-overflow:ellipsis; }
+      #tblLineas th:nth-child(4), #tblLineas td:nth-child(4){ width:90px; }
+      #tblLineas th:nth-child(5), #tblLineas td:nth-child(5){ width:clamp(50px, 6ch, 80px); }
+      #tblLineas th:nth-child(6), #tblLineas td:nth-child(6){ width:70px; }
+      #tblLineas th:nth-child(7), #tblLineas td:nth-child(7){ width:90px; }
+      #tblLineas th:nth-child(8), #tblLineas td:nth-child(8){ width:120px; }
+      #tblLineas th:nth-child(9), #tblLineas td:nth-child(9){ width:120px; }
+      /* Acciones: ancho fijo cómodo (puede cambiarse con el resizer) */
+      #tblLineas th:nth-child(10), #tblLineas td:nth-child(10){ width:180px; }
       #tblLineas input[type=text],
-      #tblLineas input[type=number],
-      .panel input[type=text], .panel input[type=search], .panel input[type=number], .panel select { height:20px; line-height:18px; padding:2px 4px; font-size:12px; }
-      #tblLineas button { padding:1px 6px; font-size:12px; margin-right:4px; height:20px; }
+      #tblLineas input[type=number] { height:20px; line-height:18px; padding:1px 4px; font-size:12px; }
+      #tblLineas button { padding:1px 6px; font-size:11px; margin-right:4px; height:20px; line-height:18px; }
       #tblLineas td:last-child { white-space:nowrap; }
+      /* Encabezado sticky al hacer scroll del listado */
+      #tblLineas thead th { position: sticky; top: 0; z-index: 2; background: #f4f6f8; }
       .tag { display:inline-block; padding:0 6px; border-radius:999px; font-size:11px; background:#e0e7ff; color:#1e3a8a; }
       .tag-warn { background:#fef3c7; color:#92400e; }
       .tag-muted { background:#e5e7eb; color:#4b5563; }
+      .tag-info { background:#dbeafe; color:#1e40af; }
       .nota-costos { font-size:12px; color:#555; }
+      .panel h3 { margin-top:0; margin-bottom:12px; font-size:16px; color:#1e293b; border-bottom:2px solid #e5e7eb; padding-bottom:6px; }
+      .panel { margin-bottom:16px; }
+      button:disabled { opacity:0.5; cursor:not-allowed; }
+      button:not(:disabled):hover { filter:brightness(1.1); cursor:pointer; }
+      /* Compactar también tablas de subestructuras */
+      table.subTabla th, table.subTabla td { padding:2px 6px; font-size:11px; line-height:1.1; }
+      
+      /* Estilos para tabla de operaciones */
+      #operacionesWrapper { border:1px solid #d0d7de; border-radius:6px; }
+      #tblOperaciones { table-layout: fixed; }
+      #tblOperaciones th, #tblOperaciones td { white-space:nowrap; padding:4px 8px; vertical-align:middle; font-size:12px; }
+      #tblOperaciones thead th { position: sticky; top: 0; z-index: 2; background: #f4f6f8; }
+      #tblOperaciones button { padding:2px 8px; font-size:11px; margin-right:4px; height:22px; }
     </style>
-    <button id="btnAgregarLinea" type="button">Agregar renglón</button>
+    <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+      <button id="btnAgregarLinea" type="button">Agregar renglón</button>
+      <button id="btnVerArbolCompleto" type="button" style="background:#2563eb; color:white;">🌲 Ver árbol completo</button>
+      <span id="modoVista" style="font-size:12px; color:#666;"></span>
+    </div>
     <!-- Selector de componente (modal liviano) -->
     <div id="componenteSelector" style="display:none; position:fixed; top:60px; left:50%; transform:translateX(-50%); width:760px; max-height:70vh; overflow:auto; background:#fff; border:2px solid #333; box-shadow:0 4px 16px rgba(0,0,0,.25); padding:12px; z-index:1000;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -102,25 +185,83 @@
 
 <section class="panel">
   <h3>Costos</h3>
-  <div id="costosResumen" style="margin-bottom:8px;"><em>Sin información</em></div>
-  <div id="costosPanel">
-    <em>Seleccione un producto y cargue la estructura.</em>
+  
+  <!-- Tab switcher -->
+  <div style="display:flex; gap:8px; margin-bottom:12px; border-bottom:2px solid #e5e7eb;">
+    <button id="btnCostosMateriales" class="tab-costos active" style="padding:6px 12px; border:none; background:transparent; cursor:pointer; border-bottom:2px solid #2563eb; margin-bottom:-2px; font-weight:500;">Materiales</button>
+    <button id="btnCostosProcesos" class="tab-costos" style="padding:6px 12px; border:none; background:transparent; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px;">Procesos</button>
+    <button id="btnCostosTotal" class="tab-costos" style="padding:6px 12px; border:none; background:transparent; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px;">Total</button>
+  </div>
+  
+  <!-- Panel materiales -->
+  <div id="costosMaterialesPanel" class="costos-content">
+    <div id="costosMaterialesTabla" style="padding:8px; border:1px solid #e5e7eb; border-radius:4px; min-height:60px; background:#fff;">
+      <em style="color:#999;">Seleccione un producto y cargue la estructura.</em>
+    </div>
+  </div>
+  
+  <!-- Panel procesos -->
+  <div id="costosProcesosPanel" class="costos-content" style="display:none;">
+    <div id="costosProcesosTabla" style="padding:8px; border:1px solid #e5e7eb; border-radius:4px; min-height:60px; background:#fff;">
+      <em style="color:#999;">Sin operaciones definidas.</em>
+    </div>
+  </div>
+  
+  <!-- Panel total -->
+  <div id="costosTotalPanel" class="costos-content" style="display:none;">
+    <div style="padding:12px; border:1px solid #e5e7eb; border-radius:4px; background:#fff;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+        <div style="padding:12px; background:#f0f9ff; border-radius:4px; border-left:3px solid #3b82f6;">
+          <div style="font-size:12px; color:#666; margin-bottom:4px;">Materiales</div>
+          <div style="font-size:18px; font-weight:600;" id="totalMaterialesDisplay">0.00</div>
+          <div style="font-size:11px; color:#666;" id="pctMaterialesDisplay">(0%)</div>
+        </div>
+        <div style="padding:12px; background:#fef3c7; border-radius:4px; border-left:3px solid #f59e0b;">
+          <div style="font-size:12px; color:#666; margin-bottom:4px;">Procesos</div>
+          <div style="font-size:18px; font-weight:600;" id="totalProcesosDisplay">0.00</div>
+          <div style="font-size:11px; color:#666;" id="pctProcesosDisplay">(0%)</div>
+        </div>
+      </div>
+      <div style="padding:12px; background:#f8f9fa; border-radius:4px; text-align:center;">
+        <div style="font-size:13px; color:#666; margin-bottom:4px;">COSTO TOTAL</div>
+        <div style="font-size:24px; font-weight:700; color:#0b5cab;" id="costoFinalDisplay">0.00</div>
+      </div>
+    </div>
+  </div>
+  
+  <div style="background:#f8f9fa; padding:8px 12px; border-radius:4px; margin-top:12px; border-left:4px solid #2563eb;">
+    <strong style="font-size:13px; color:#666;">Resumen:</strong>
+    <span id="costosResumen" style="margin-left:8px; font-weight:500;"><em>Sin información</em></span>
   </div>
 </section>
 
 <section class="panel">
   <h3>Importar desde ERP</h3>
-  <input type="file" id="archivoFlexxus" accept=".csv,.xlsx" />
-  <button id="btnImportarFlexxus" type="button">Importar</button>
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+    <input type="file" id="archivoFlexxus" accept=".csv,.xlsx" style="flex:1; min-width:200px;" />
+    <button id="btnImportarFlexxus" type="button" style="background:#059669; color:white; border:none; padding:6px 12px; border-radius:4px;">📥 Importar</button>
+  </div>
+  <div style="display:flex; gap:8px; padding:8px; background:#fef3c7; border-radius:4px; border-left:4px solid #f59e0b; align-items:center; flex-wrap:wrap;">
+    <button id="btnCorregirTipos30" type="button" style="background:#f59e0b; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" title="Corrige tipo WIP para productos que empiezan con 30">🔧 Corregir tipos 30→WIP</button>
+    <button id="btnLimpiarMBOMs" type="button" style="background:#dc2626; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" title="PELIGRO: Elimina todas las estructuras MBOM">⚠ Limpiar todo</button>
+    <small style="color:#92400e; margin-left:auto;">Acciones de mantenimiento</small>
+  </div>
+  <div id="importarFlexMsg" style="margin-top:8px; padding:6px; font-size:13px; color:#555;"></div>
 </section>
 
-<section class="panel" style="display:flex; gap:8px; justify-content:flex-end;">
-  <button id="btnGrabar" type="button">Grabar</button>
-  <button id="btnImprimir" type="button" disabled>Imprimir</button>
-  <button id="btnActivar" type="button" disabled>Activar revisión</button>
-  <button id="btnClonarRevision" type="button" disabled>Clonar revisión</button>
-  <button id="btnEliminar" type="button">Archivar</button>
-  <button id="btnSalir" type="button" onclick="window.location='/ui'">Salir</button>
+<section class="panel" style="background:#f8f9fa; padding:12px;">
+  <div style="display:flex; gap:12px; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button id="btnGrabar" type="button" style="background:#059669; color:white; font-weight:500; padding:6px 16px; border:none; border-radius:4px;">💾 Grabar</button>
+      <button id="btnActivar" type="button" disabled style="background:#2563eb; color:white; padding:6px 14px; border:none; border-radius:4px;">✓ Activar revisión</button>
+      <button id="btnClonarRevision" type="button" disabled style="padding:6px 14px; border-radius:4px;">📋 Clonar revisión</button>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button id="btnImprimir" type="button" disabled style="padding:6px 14px; border-radius:4px;">🖨 Imprimir</button>
+      <button id="btnEliminar" type="button" style="background:#f59e0b; color:white; padding:6px 14px; border:none; border-radius:4px;">📦 Archivar</button>
+      <button id="btnSalir" type="button" onclick="window.location='/ui'" style="padding:6px 14px; border-radius:4px;">← Salir</button>
+    </div>
+  </div>
 </section>
 {% endblock %}
 
@@ -137,6 +278,7 @@
   const btnActivar = document.getElementById('btnActivar');
   const btnClonarRev = document.getElementById('btnClonarRevision');
   const btnImpFlex = document.getElementById('btnImportarFlexxus');
+  const importarFlexMsg = document.getElementById('importarFlexMsg');
   const inpBuscar = document.getElementById('prodBuscar');
   const chkSolo = document.getElementById('soloPtWip');
   const prodCount = document.getElementById('prodCount');
@@ -156,10 +298,53 @@
   const compTipo = document.getElementById('compTipo');
   const btnBuscarComp = document.getElementById('btnBuscarComp');
   const compResultados = document.getElementById('compResultados');
+  const btnVerArbolCompleto = document.getElementById('btnVerArbolCompleto');
+  const modoVista = document.getElementById('modoVista');
+  // Column resizing for tblLineas
+  function enableColumnResizing(){
+    const table = document.getElementById('tblLineas');
+    if(!table) return;
+    const ths = table.querySelectorAll('thead th');
+    ths.forEach((th, idx)=>{
+      // Skip hidden first col (#)
+      if(idx===0) return;
+      // Add resizer handle
+      let handle = th.querySelector('.col-resizer');
+      if(!handle){
+        handle = document.createElement('span');
+        handle.className = 'col-resizer';
+        th.appendChild(handle);
+      }
+      let startX = 0; let startWidth = 0;
+      handle.addEventListener('mousedown', (e)=>{
+        e.preventDefault();
+        startX = e.clientX;
+        startWidth = th.offsetWidth;
+        const onMove = (ev)=>{
+          const dx = ev.clientX - startX;
+          let newW = Math.max(40, startWidth + dx);
+          th.style.width = newW + 'px';
+          // Apply to all tds in this column
+          const rows = table.querySelectorAll('tbody tr');
+          rows.forEach(r=>{
+            const cell = r.children[idx];
+            if(cell){ cell.style.width = newW + 'px'; }
+          });
+        };
+        const onUp = ()=>{
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+    });
+  }
 
   let cabecera = null; // {id, estado, revision, ...}
   let lineas = [];     // array de líneas
   let costosCache = { componentes: [], total: 0, map: new Map() };
+  let modoArbol = false; // false = editable, true = vista árbol completo
 
   const umMap = JSON.parse(document.getElementById('um-map').dataset.um);
   const unidadesList = JSON.parse(document.getElementById('unidades-data').dataset.list || '[]');
@@ -180,27 +365,46 @@
     return num.toFixed(4);
   }
 
+  // Formato para importes monetarios: 2 decimales
+  function formatMoneda2(value){
+    const num = Number(value);
+    if(!Number.isFinite(num)) return '0.00';
+    return num.toFixed(2);
+  }
+
   function render(){
+    if(modoArbol){
+      renderArbolCompleto();
+    } else {
+      renderEditable();
+    }
+  }
+
+  function renderEditable(){
     tbody.innerHTML = '';
     const costoMap = costosCache.map instanceof Map ? costosCache.map : new Map();
     lineas.sort((a,b)=>a.renglon-b.renglon).forEach(l => {
       const tr = document.createElement('tr');
       const showSub = (l.componente_tipo_producto === 'WIP' || l.componente_tipo_producto === 'PT');
+      console.log('[DEBUG]', l.componente_codigo, 'tipo:', l.componente_tipo_producto, 'showSub:', showSub);
       const costInfo = costoMap.get(l.componente_producto_id);
       const costoUnitarioHtml = costInfo
-        ? `${formatMonto(costInfo.costo_unitario)} ${costInfo.moneda || ''}`
+        ? `${formatMoneda2(costInfo.costo_unitario)} ${costInfo.moneda || ''}`
         : '<span class="tag tag-warn">Sin costo</span>';
       const costoTotalHtml = costInfo
-        ? `${formatMonto(costInfo.costo_total)} ${costInfo.moneda || ''}`
+        ? `${formatMoneda2(costInfo.costo_total)} ${costInfo.moneda || ''}`
         : '<span class="tag tag-muted">-</span>';
+      const tipoTag = l.componente_tipo_producto 
+        ? `<span class="tag tag-info" style="font-size:9px;margin-left:4px;">${l.componente_tipo_producto}</span>` 
+        : '';
       tr.innerHTML = `
         <td>${l.renglon}</td>
         <td><input type="text" value="${l.componente_codigo||''}" readonly class="codigoComp" size="${(l.componente_codigo||'').length||6}"/></td>
-        <td>${l.componente_nombre||''}</td>
-        <td class="num"><input type="number" step="0.001" value="${(l.cantidad!==undefined && l.cantidad!==null)? (Math.round(l.cantidad*1000)/1000).toFixed(3) : ''}" data-field="cantidad" style="width:100px"/></td>
+        <td>${l.componente_nombre||''}${tipoTag}</td>
+        <td class="num"><input type="number" step="0.001" value="${(l.cantidad!==undefined && l.cantidad!==null)? (Math.round(l.cantidad*1000)/1000).toFixed(3) : ''}" data-field="cantidad" style="width:80px"/></td>
         <td>${l.unidad_medida_codigo||umCodigo(l.unidad_medida_id)||''}</td>
-        <td><input type="number" value="${l.operacion_secuencia||''}" data-field="operacion_secuencia" style="width:70px"/></td>
-        <td><input type="number" step="0.0001" min="0" max="0.9999" value="${l.factor_merma}" data-field="factor_merma" style="width:90px"/></td>
+        <td><input type="number" value="${l.operacion_secuencia||''}" data-field="operacion_secuencia" style="width:60px"/></td>
+        <td><input type="number" step="0.0001" min="0" max="0.9999" value="${l.factor_merma}" data-field="factor_merma" style="width:80px"/></td>
         <td class="num">${costoUnitarioHtml}</td>
         <td class="num">${costoTotalHtml}</td>
         <td>
@@ -244,6 +448,52 @@
       });
       tbody.appendChild(tr);
     });
+    ajustarAlturaLineas();
+    enableColumnResizing();
+  }
+
+  function renderArbolCompleto(){
+    tbody.innerHTML = '';
+    if(!lineas || lineas.length === 0){
+      tbody.innerHTML = '<tr><td colspan="10"><em>Sin datos</em></td></tr>';
+      return;
+    }
+    const costoMap = costosCache.map instanceof Map ? costosCache.map : new Map();
+    lineas.forEach((l, idx) => {
+      const tr = document.createElement('tr');
+      const nivel = l.nivel || 0;
+      const indent = 16 * nivel;
+      const arrow = nivel > 0 ? ('└' + '─'.repeat(nivel)) + ' ' : '';
+      
+      const costInfo = costoMap.get(l.componente_producto_id);
+      const costoUnitarioHtml = costInfo
+        ? `${formatMoneda2(costInfo.costo_unitario)} ${costInfo.moneda || ''}`
+        : '<span class="tag tag-warn">-</span>';
+      const costoTotalHtml = costInfo
+        ? `${formatMoneda2(costInfo.costo_total)} ${costInfo.moneda || ''}`
+        : '<span class="tag tag-muted">-</span>';
+      const tipoTag = l.componente_tipo_producto 
+        ? `<span class="tag tag-info" style="font-size:9px;margin-left:4px;">${l.componente_tipo_producto}</span>` 
+        : '';
+      
+      const bgColor = nivel % 2 === 0 ? '#ffffff' : '#f9fafb';
+      tr.style.backgroundColor = bgColor;
+      
+      tr.innerHTML = `
+        <td>${l.renglon}</td>
+        <td style="padding-left:${indent}px;">${arrow}${l.componente_codigo||''}</td>
+        <td>${l.componente_nombre||''}${tipoTag}</td>
+        <td class="num">${(l.cantidad!==undefined && l.cantidad!==null)? (Math.round(l.cantidad*1000)/1000).toFixed(3) : ''}</td>
+        <td>${l.unidad_medida_codigo||umCodigo(l.unidad_medida_id)||''}</td>
+        <td>${l.operacion_secuencia||'-'}</td>
+        <td class="num">${l.factor_merma != null ? (parseFloat(l.factor_merma)*100).toFixed(2)+'%' : '0%'}</td>
+        <td class="num">${costoUnitarioHtml}</td>
+        <td class="num">${costoTotalHtml}</td>
+        <td><span class="tag" style="font-size:9px;">Nivel ${nivel}</span></td>`;
+      tbody.appendChild(tr);
+    });
+    ajustarAlturaLineas();
+    enableColumnResizing();
   }
 
   async function toggleSubestructura(l, tr){
@@ -265,9 +515,13 @@
     subTr.innerHTML = `<td colspan="${colSpan}">${content}</td>`;
     tr.parentNode.insertBefore(subTr, tr.nextSibling);
     try{
-      const r = await fetch(`/api/mbom/${l.componente_producto_id}?estado=ACTIVO`);
+      // Intentar ACTIVO primero, sino BORRADOR
+      let r = await fetch(`/api/mbom/${l.componente_producto_id}?estado=ACTIVO`);
       if(r.status === 404){
-        content = '<em>Sin MBOM ACTIVO para este componente</em>';
+        r = await fetch(`/api/mbom/${l.componente_producto_id}?estado=BORRADOR`);
+      }
+      if(r.status === 404){
+        content = '<em>Sin MBOM para este componente</em>';
       }else if(!r.ok){
         content = '<em>Error al cargar subestructura</em>';
       }else{
@@ -293,7 +547,7 @@
           }catch(e){ /* ignorar error de costos */ }
 
           const parts = [
-            "<div style='padding:4px 0'><strong>Subestructura</strong> (Rev. "+(d.cabecera?.revision||'?')+")</div>",
+            "<div style='padding:4px 0'><strong>Subestructura</strong> (Rev. "+(d.cabecera?.revision||'?')+" - "+(d.cabecera?.estado||'')+")</div>",
             "<table class='striped subTabla' style='margin-left:8px'>",
             "<thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant</th><th>UM</th><th>Merma</th><th>Costo unit.</th><th>Costo total</th><th>Acciones</th></tr></thead><tbody>"
           ];
@@ -301,14 +555,14 @@
             const subCostInfo = subCostos.map.get(s.componente_producto_id);
             const merma = s.factor_merma != null ? (parseFloat(s.factor_merma)*100).toFixed(2)+'%' : '0%';
             const costoUnitHtml = subCostInfo 
-              ? `${formatMonto(subCostInfo.costo_unitario)} ${subCostInfo.moneda||''}` 
+              ? `${formatMoneda2(subCostInfo.costo_unitario)} ${subCostInfo.moneda||''}` 
               : '<span class="tag tag-warn">Sin costo</span>';
             const costoTotalHtml = subCostInfo 
-              ? `${formatMonto(subCostInfo.costo_total)} ${subCostInfo.moneda||''}` 
+              ? `${formatMoneda2(subCostInfo.costo_total)} ${subCostInfo.moneda||''}` 
               : '<span class="tag tag-muted">-</span>';
             const showSubBtn = (s.componente_tipo_producto === 'WIP' || s.componente_tipo_producto === 'PT');
             const btnHtml = showSubBtn 
-              ? `<button class="btnSubSub" data-pid="${s.componente_producto_id}" data-codigo="${s.componente_codigo||''}" title="Ver subestructura">Ver</button>` 
+              ? `<button class="btnSubRecursivo" data-pid="${s.componente_producto_id}" data-codigo="${s.componente_codigo||''}" data-nivel="2" title="Ver subestructura">Ver</button>` 
               : '';
             parts.push(
               `<tr data-subpid="${s.componente_producto_id}">`+
@@ -332,38 +586,40 @@
       content = '<em>Error de red</em>';
     }
     subTr.firstElementChild.innerHTML = content;
-    // Bind eventos a botones Ver de subestructuras anidadas
-    subTr.querySelectorAll('.btnSubSub').forEach(btn=>{
+    // Bind eventos a botones Ver de subestructuras anidadas (recursivo)
+    subTr.querySelectorAll('.btnSubRecursivo').forEach(btn=>{
       btn.addEventListener('click', async (e)=>{
         e.stopPropagation();
         const pid = parseInt(btn.dataset.pid);
         const codigo = btn.dataset.codigo || '?';
-        await toggleSubestructuraAnidada(pid, codigo, btn.closest('tr'));
+        const nivel = parseInt(btn.dataset.nivel || '2');
+        await toggleSubestructuraRecursiva(pid, codigo, btn.closest('tr'), nivel);
       });
     });
   }
 
-  async function toggleSubestructuraAnidada(pid, codigo, tr){
-    const key = 'subsub-for-' + pid;
+  async function toggleSubestructuraRecursiva(pid, codigo, tr, nivel){
+    const key = 'sub-nivel-' + nivel + '-pid-' + pid;
     const next = tr.nextElementSibling;
     if(next && next.dataset && next.dataset.subFor === key){
       next.remove();
       return;
     }
-    if(next && next.classList && next.classList.contains('subSubRow')){
-      next.remove();
-    }
+    const indent = 8 * nivel;
     let content = '<em>Cargando...</em>';
-    const subSubTr = document.createElement('tr');
-    subSubTr.className = 'subSubRow';
-    subSubTr.dataset.subFor = key;
-    const colSpan = 9; // columnas de la subtabla
-    subSubTr.innerHTML = `<td colspan="${colSpan}" style="padding-left:24px;">${content}</td>`;
-    tr.parentNode.insertBefore(subSubTr, tr.nextSibling);
+    const subTr = document.createElement('tr');
+    subTr.className = 'subRowNivel' + nivel;
+    subTr.dataset.subFor = key;
+    const colSpan = 9;
+    subTr.innerHTML = `<td colspan="${colSpan}" style="padding-left:${indent}px;">${content}</td>`;
+    tr.parentNode.insertBefore(subTr, tr.nextSibling);
     try{
-      const r = await fetch(`/api/mbom/${pid}?estado=ACTIVO`);
+      let r = await fetch(`/api/mbom/${pid}?estado=ACTIVO`);
       if(r.status === 404){
-        content = '<em>Sin MBOM ACTIVO para '+codigo+'</em>';
+        r = await fetch(`/api/mbom/${pid}?estado=BORRADOR`);
+      }
+      if(r.status === 404){
+        content = '<em>Sin MBOM para '+codigo+'</em>';
       }else if(!r.ok){
         content = '<em>Error al cargar</em>';
       }else{
@@ -372,7 +628,6 @@
         if(rows.length === 0){
           content = '<em>Sin líneas</em>';
         }else{
-          // Cargar costos anidados
           let subCostos = { componentes: [], map: new Map() };
           try{
             const rCostos = await fetch(`/api/mbom/${d.cabecera.id}/costos`);
@@ -388,22 +643,27 @@
             }
           }catch(e){ /* ignorar */ }
 
+          const arrow = '⤷'.repeat(nivel-1) + ' ';
           const parts = [
-            "<div style='padding:2px 0'><strong>↳ Subestructura de "+codigo+"</strong> (Rev. "+(d.cabecera?.revision||'?')+")</div>",
-            "<table class='striped' style='margin-left:16px; font-size:11px;'>",
-            "<thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant</th><th>UM</th><th>Merma</th><th>Costo unit.</th><th>Costo total</th></tr></thead><tbody>"
+            "<div style='padding:2px 0'><strong>"+arrow+"Subestructura de "+codigo+"</strong> (Rev. "+(d.cabecera?.revision||'?')+" - "+(d.cabecera?.estado||'')+")</div>",
+            "<table class='striped' style='margin-left:"+(indent+8)+"px; font-size:11px;'>",
+            "<thead><tr><th>#</th><th>Código</th><th>Nombre</th><th>Cant</th><th>UM</th><th>Merma</th><th>Costo unit.</th><th>Costo total</th><th>Acc</th></tr></thead><tbody>"
           ];
           rows.forEach(s=>{
             const subCostInfo = subCostos.map.get(s.componente_producto_id);
             const merma = s.factor_merma != null ? (parseFloat(s.factor_merma)*100).toFixed(2)+'%' : '0%';
             const costoUnitHtml = subCostInfo 
-              ? `${formatMonto(subCostInfo.costo_unitario)} ${subCostInfo.moneda||''}` 
+              ? `${formatMoneda2(subCostInfo.costo_unitario)} ${subCostInfo.moneda||''}` 
               : '<span class="tag tag-warn">Sin costo</span>';
             const costoTotalHtml = subCostInfo 
-              ? `${formatMonto(subCostInfo.costo_total)} ${subCostInfo.moneda||''}` 
+              ? `${formatMoneda2(subCostInfo.costo_total)} ${subCostInfo.moneda||''}` 
               : '<span class="tag tag-muted">-</span>';
+            const showSubBtn = (s.componente_tipo_producto === 'WIP' || s.componente_tipo_producto === 'PT');
+            const btnHtml = showSubBtn 
+              ? `<button class="btnSubRecursivo" data-pid="${s.componente_producto_id}" data-codigo="${s.componente_codigo||''}" data-nivel="${nivel+1}" title="Ver subestructura">Ver</button>` 
+              : '';
             parts.push(
-              `<tr>`+
+              `<tr data-subpid="${s.componente_producto_id}">`+
               `<td>${s.renglon}</td>`+
               `<td>${s.componente_codigo||''}</td>`+
               `<td>${s.componente_nombre||''}</td>`+
@@ -412,6 +672,7 @@
               `<td class='num'>${merma}</td>`+
               `<td class='num'>${costoUnitHtml}</td>`+
               `<td class='num'>${costoTotalHtml}</td>`+
+              `<td>${btnHtml}</td>`+
               `</tr>`
             );
           });
@@ -422,7 +683,17 @@
     }catch(e){
       content = '<em>Error de red</em>';
     }
-    subSubTr.firstElementChild.innerHTML = content;
+    subTr.firstElementChild.innerHTML = content;
+    // Bind recursivo a nuevos botones
+    subTr.querySelectorAll('.btnSubRecursivo').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const pid = parseInt(btn.dataset.pid);
+        const codigo = btn.dataset.codigo || '?';
+        const nivelActual = parseInt(btn.dataset.nivel || '2');
+        await toggleSubestructuraRecursiva(pid, codigo, btn.closest('tr'), nivelActual);
+      });
+    });
   }
 
   async function cargar(){
@@ -440,8 +711,10 @@
     }
     cabeceraInfo.textContent = `MBOM ${cabecera.revision} - ${cabecera.estado}`;
     updateRevisionButtons();
+    await cargarOperaciones();
     await cargarCostos();
     render();
+    ajustarAlturaLineas();
   }
 
   function updateRevisionButtons(){
@@ -461,11 +734,11 @@
     const t0 = performance.now();
     try{
       if(solo){
-        const r1 = await fetch(`/api/productos/?activo=true&tipo=PT&limit=200&q=${encodeURIComponent(q)}`);
+        const r1 = await fetch(`/api/productos/?activo=true&tipo=PT&limit=500&q=${encodeURIComponent(q)}`);
         items = await r1.json();
         countPT = items.length;
       }else{
-        const r = await fetch(`/api/productos/?activo=true&limit=200&q=${encodeURIComponent(q)}`);
+        const r = await fetch(`/api/productos/?activo=true&limit=500&q=${encodeURIComponent(q)}`);
         items = await r.json();
       }
     }catch(e){ items = []; }
@@ -481,8 +754,11 @@
     });
     // Restaurar selección si aplica
     if(current){ sel.value = current; }
-    if(solo){ prodCount.textContent = `PT: ${countPT}`; }
-    else { prodCount.textContent = `${items.length} productos`; }
+    if(solo){ 
+      prodCount.textContent = countPT >= 500 ? `PT: ${countPT} (límite alcanzado, use búsqueda)` : `PT: ${countPT}`; 
+    } else { 
+      prodCount.textContent = items.length >= 500 ? `${items.length} productos (límite, use búsqueda)` : `${items.length} productos`; 
+    }
     if(items.length === 0){ prodCount.textContent = solo ? 'PT: 0 (verifique que estén activos)' : '0 productos'; }
     const t1 = performance.now();
   }
@@ -491,57 +767,316 @@
   function setDebug(tag,msg){ /* no-op */ }
   btnRefrescarProductos.addEventListener('click', ()=>{ fetchProductos(); });
 
-  async function cargarCostos(){
-    if(!costosPanel || !costosResumen){ return; }
-    function renderCostos(){
-      if(costosCache.componentes.length === 0){
-        costosPanel.innerHTML = '<em>Sin costos cargados</em>';
-      } else {
-        const html = [`<table class="striped"><thead><tr><th>Código</th><th>Cant</th><th>UM</th><th>Unit.</th><th>Total</th></tr></thead><tbody>`];
-        costosCache.componentes.forEach(c=>{
-          html.push(`<tr><td>${c.codigo}</td><td class='num'>${formatMonto(c.cantidad)}</td><td>${c.um_codigo}</td><td class='num'>${formatMonto(c.costo_unitario)} ${c.moneda||''}</td><td class='num'>${formatMonto(c.costo_total)} ${c.moneda||''}</td></tr>`);
-        });
-        html.push(`</tbody><tfoot><tr><th colspan='4'>Total</th><th class='num'>${formatMonto(costosCache.total)}</th></tr></tfoot></table>`);
-        costosPanel.innerHTML = html.join('');
-      }
-      if(!cabecera){
-        costosResumen.innerHTML = '<em>Seleccione un producto</em>';
-      }else{
-        const moneda = costosCache.componentes.find(c=>c.moneda)?.moneda || '';
-        const totalTxt = moneda ? `${formatMonto(costosCache.total)} ${moneda}` : formatMonto(costosCache.total);
-        costosResumen.innerHTML = `Costo total MBOM: <strong>${totalTxt}</strong> <span class="nota-costos">(suma nominal sin conversión)</span>`;
-      }
-    }
-
+  // ============================================
+  // OPERACIONES - Ruta de Operaciones
+  // ============================================
+  
+  async function cargarOperaciones(){
+    const tbody = document.querySelector('#tblOperaciones tbody');
     if(!cabecera){
-      costosCache = {componentes: [], total: 0, map: new Map()};
-      costosPanel.innerHTML = '<em>Sin MBOM</em>';
-      costosResumen.innerHTML = '<em>Seleccione un producto</em>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center"><em>Seleccione un MBOM</em></td></tr>';
       return;
     }
+    
+    try{
+      const r = await fetch(`/api/mbom/${cabecera.id}/operaciones`);
+      if(!r.ok){
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center"><em>Error al cargar operaciones</em></td></tr>';
+        return;
+      }
+      const data = await r.json();
+      renderOperaciones(data);
+    } catch(e){
+      console.error('Error cargando operaciones:', e);
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center"><em>Error de conexión</em></td></tr>';
+    }
+  }
+  
+  function renderOperaciones(data){
+    const tbody = document.querySelector('#tblOperaciones tbody');
+    if(!data || data.length === 0){
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center"><em>Sin operaciones definidas</em></td></tr>';
+      return;
+    }
+    
+    let html = '';
+    data.forEach(op => {
+      const costoOp = ((op.tiempo_estandar_minutos / 60) * (op.costo_hora || 0)).toFixed(2);
+      html += `
+        <tr>
+          <td style="text-align:center">${op.secuencia}</td>
+          <td>${op.operacion_codigo || ''}</td>
+          <td>${op.operacion_nombre || ''}</td>
+          <td>${op.centro_trabajo || ''}</td>
+          <td style="text-align:right">${op.tiempo_estandar_minutos ? op.tiempo_estandar_minutos.toFixed(2) : '0.00'} min</td>
+          <td style="text-align:right">${op.costo_hora ? op.costo_hora.toFixed(2) : '0.00'} ${op.moneda || 'ARS'}</td>
+          <td style="text-align:right">${costoOp} ${op.moneda || 'ARS'}</td>
+          <td style="text-align:center">
+            <button onclick="eliminarOperacion(${op.id})" title="Eliminar">🗑️</button>
+          </td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = html;
+  }
+  
+  async function agregarOperacion(){
+    if(!cabecera){
+      alert('Seleccione un MBOM primero');
+      return;
+    }
+    
+    const modal = document.getElementById('operacionSelector');
+    const secInput = document.getElementById('secuenciaOperacion');
+    const results = document.getElementById('resultadosOperaciones');
+    
+    // Limpiar y abrir modal
+    secInput.value = '';
+    results.innerHTML = '<em>Cargando operaciones...</em>';
+    modal.style.display = 'block';
+    
+    // Cargar catálogo de operaciones
+    try{
+      const r = await fetch('/api/operaciones/?activo=true');
+      if(!r.ok){
+        results.innerHTML = '<em>Error al cargar catálogo de operaciones</em>';
+        return;
+      }
+      const operaciones = await r.json();
+      
+      if(operaciones.length === 0){
+        results.innerHTML = '<em>No hay operaciones activas en el catálogo</em>';
+        return;
+      }
+      
+      let html = '<table style="width:100%; border-collapse:collapse;">';
+      html += '<thead><tr><th>Código</th><th>Operación</th><th>Centro</th><th>Tiempo</th><th>Costo/hora</th><th>Acción</th></tr></thead><tbody>';
+      operaciones.forEach(op => {
+        html += `
+          <tr>
+            <td>${op.codigo}</td>
+            <td>${op.nombre}</td>
+            <td>${op.centro_trabajo || ''}</td>
+            <td style="text-align:right">${op.tiempo_estandar_minutos ? op.tiempo_estandar_minutos.toFixed(2) : '0.00'}</td>
+            <td style="text-align:right">${op.costo_hora ? op.costo_hora.toFixed(2) : '0.00'} ${op.moneda || 'ARS'}</td>
+            <td style="text-align:center">
+              <button onclick="seleccionarOperacion(${op.id})">Seleccionar</button>
+            </td>
+          </tr>
+        `;
+      });
+      html += '</tbody></table>';
+      results.innerHTML = html;
+    } catch(e){
+      console.error('Error cargando operaciones:', e);
+      results.innerHTML = '<em>Error de conexión</em>';
+    }
+  }
+  
+  async function seleccionarOperacion(operacionId){
+    const secInput = document.getElementById('secuenciaOperacion');
+    const secuencia = parseInt(secInput.value);
+    
+    if(!secuencia || secuencia < 10){
+      alert('Ingrese una secuencia válida (mínimo 10, múltiplo de 10)');
+      return;
+    }
+    
+    if(secuencia % 10 !== 0){
+      alert('La secuencia debe ser múltiplo de 10');
+      return;
+    }
+    
+    try{
+      const r = await fetch(`/api/mbom/${cabecera.id}/operaciones`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          secuencia: secuencia,
+          operacion_id: operacionId
+        })
+      });
+      
+      if(!r.ok){
+        const err = await r.json();
+        alert(`Error: ${err.detail || 'No se pudo agregar la operación'}`);
+        return;
+      }
+      
+      // Cerrar modal
+      document.getElementById('operacionSelector').style.display = 'none';
+      
+      // Recargar operaciones y costos
+      await cargarOperaciones();
+      await cargarCostos();
+      
+    } catch(e){
+      console.error('Error agregando operación:', e);
+      alert('Error de conexión al agregar operación');
+    }
+  }
+  
+  async function eliminarOperacion(id){
+    if(!confirm('¿Eliminar esta operación de la ruta?')){
+      return;
+    }
+    
+    try{
+      const r = await fetch(`/api/mbom/operaciones/${id}`, {
+        method: 'DELETE'
+      });
+      
+      if(!r.ok){
+        alert('Error al eliminar operación');
+        return;
+      }
+      
+      // Recargar operaciones y costos
+      await cargarOperaciones();
+      await cargarCostos();
+      
+    } catch(e){
+      console.error('Error eliminando operación:', e);
+      alert('Error de conexión al eliminar operación');
+    }
+  }
+  
+  // Cerrar modal operaciones
+  document.getElementById('btnCancelarOperacion').addEventListener('click', () => {
+    document.getElementById('operacionSelector').style.display = 'none';
+  });
+  
+  document.getElementById('btnAgregarOperacion').addEventListener('click', agregarOperacion);
+
+  // ============================================
+  // COSTOS - Cálculo discriminado
+  // ============================================
+
+  async function cargarCostos(){
+    const costosMaterialesTabla = document.getElementById('costosMaterialesTabla');
+    const costosProcesosTabla = document.getElementById('costosProcesosTabla');
+    const costosResumen = document.getElementById('costosResumen');
+    
+    if(!cabecera){
+      costosCache = {materiales: {componentes: [], total: 0}, procesos: {operaciones: [], total: 0}, total: 0, map: new Map()};
+      if(costosMaterialesTabla) costosMaterialesTabla.innerHTML = '<em>Sin MBOM</em>';
+      if(costosProcesosTabla) costosProcesosTabla.innerHTML = '<em>Sin MBOM</em>';
+      if(costosResumen) costosResumen.innerHTML = '<em>Seleccione un producto</em>';
+      return;
+    }
+    
     try{
       const r = await fetch(`/api/mbom/${cabecera.id}/costos`);
       if(!r.ok){
-        costosCache = {componentes: [], total: 0, map: new Map()};
-        costosPanel.innerHTML = '<em>Costos no disponibles</em>';
-        costosResumen.innerHTML = '<em>No se pudieron calcular</em>';
+        costosCache = {materiales: {componentes: [], total: 0}, procesos: {operaciones: [], total: 0}, total: 0, map: new Map()};
+        if(costosMaterialesTabla) costosMaterialesTabla.innerHTML = '<em>Costos no disponibles</em>';
+        if(costosProcesosTabla) costosProcesosTabla.innerHTML = '<em>Costos no disponibles</em>';
+        if(costosResumen) costosResumen.innerHTML = '<em>No se pudieron calcular</em>';
         return;
       }
       const d = await r.json();
-      costosCache.componentes = Array.isArray(d.componentes) ? d.componentes : [];
+      
+      // Estructura discriminada: materiales y procesos
+      costosCache.materiales = d.materiales || {componentes: [], total: 0};
+      costosCache.procesos = d.procesos || {operaciones: [], total: 0};
       costosCache.total = Number(d.total) || 0;
+      costosCache.desglose = d.desglose || {materiales_pct: 0, procesos_pct: 0};
+      
+      // Map para componentes
       costosCache.map = new Map();
-      costosCache.componentes.forEach(c => {
+      (costosCache.materiales.componentes || []).forEach(c => {
         if(c && c.producto_id){
           costosCache.map.set(c.producto_id, c);
         }
       });
-      renderCostos();
+      
+      renderCostosMateriales();
+      renderCostosProcesos();
+      renderCostosTotal();
+      renderResumen();
     }catch(err){
-      costosCache = {componentes: [], total: 0, map: new Map()};
-      costosPanel.innerHTML = '<em>Error de red al obtener costos</em>';
-      costosResumen.innerHTML = '<em>Error al obtener costos</em>';
+      costosCache = {materiales: {componentes: [], total: 0}, procesos: {operaciones: [], total: 0}, total: 0, map: new Map()};
+      if(costosMaterialesTabla) costosMaterialesTabla.innerHTML = '<em>Error de red al obtener costos</em>';
+      if(costosProcesosTabla) costosProcesosTabla.innerHTML = '<em>Error de red</em>';
+      if(costosResumen) costosResumen.innerHTML = '<em>Error al obtener costos</em>';
     }
+  }
+  
+  function renderCostosMateriales(){
+    const panel = document.getElementById('costosMaterialesTabla');
+    if(!panel) return;
+    const componentes = costosCache.materiales?.componentes || [];
+    if(componentes.length === 0){
+      panel.innerHTML = '<em>Sin costos de materiales</em>';
+      return;
+    }
+    const html = [`<table class="striped"><thead><tr><th>Código</th><th>Descripción</th><th>Cant</th><th>UM</th><th>Unit.</th><th>Total</th></tr></thead><tbody>`];
+    componentes.forEach(c=>{
+      const descripcion = c.nombre || c.descripcion || '';
+      const costoUnit = parseFloat(c.costo_unitario || 0).toFixed(2);
+      const costoTotal = parseFloat(c.costo_total || 0).toFixed(2);
+      html.push(`<tr><td>${c.codigo||''}</td><td>${descripcion}</td><td class='num'>${formatMonto(c.cantidad||0)}</td><td>${c.um_codigo||''}</td><td class='num'>${costoUnit} ${c.moneda||''}</td><td class='num'>${costoTotal} ${c.moneda||''}</td></tr>`);
+    });
+    const totalFormatted = parseFloat(costosCache.materiales?.total || 0).toFixed(2);
+    const moneda = componentes[0]?.moneda || '';
+    html.push(`</tbody><tfoot><tr><th colspan='5'>Total Materiales</th><th class='num'>${totalFormatted} ${moneda}</th></tr></tfoot></table>`);
+    panel.innerHTML = html.join('');
+  }
+  
+  function renderCostosProcesos(){
+    const panel = document.getElementById('costosProcesosTabla');
+    if(!panel) return;
+    const operaciones = costosCache.procesos?.operaciones || [];
+    if(operaciones.length === 0){
+      panel.innerHTML = '<em>Sin operaciones definidas en esta MBOM</em>';
+      return;
+    }
+    const html = [`<table class="striped"><thead><tr><th>Sec</th><th>Código</th><th>Operación</th><th>Tiempo (min)</th><th>Costo/hora</th><th>Subtotal</th></tr></thead><tbody>`];
+    operaciones.forEach(op=>{
+      const tiempo = parseFloat(op.tiempo_min || 0).toFixed(2);
+      const costoHora = parseFloat(op.costo_hora || 0).toFixed(2);
+      const subtotal = parseFloat(op.subtotal || 0).toFixed(2);
+      html.push(`<tr><td>${op.secuencia}</td><td>${op.codigo||''}</td><td>${op.nombre||''}</td><td class='num'>${tiempo}</td><td class='num'>${costoHora} ${op.moneda||''}</td><td class='num'>${subtotal} ${op.moneda||''}</td></tr>`);
+    });
+    const totalFormatted = parseFloat(costosCache.procesos?.total || 0).toFixed(2);
+    const moneda = operaciones[0]?.moneda || '';
+    html.push(`</tbody><tfoot><tr><th colspan='5'>Total Procesos</th><th class='num'>${totalFormatted} ${moneda}</th></tr></tfoot></table>`);
+    panel.innerHTML = html.join('');
+  }
+  
+  function renderCostosTotal(){
+    const totalMat = document.getElementById('totalMaterialesDisplay');
+    const totalProc = document.getElementById('totalProcesosDisplay');
+    const pctMat = document.getElementById('pctMaterialesDisplay');
+    const pctProc = document.getElementById('pctProcesosDisplay');
+    const costoFinal = document.getElementById('costoFinalDisplay');
+    
+    const moneda = costosCache.materiales?.componentes[0]?.moneda || costosCache.procesos?.operaciones[0]?.moneda || '';
+    const totalMateriales = parseFloat(costosCache.materiales?.total || 0).toFixed(2);
+    const totalProcesos = parseFloat(costosCache.procesos?.total || 0).toFixed(2);
+    const total = parseFloat(costosCache.total || 0).toFixed(2);
+    const pctMateriales = (costosCache.desglose?.materiales_pct || 0).toFixed(1);
+    const pctProcesosVal = (costosCache.desglose?.procesos_pct || 0).toFixed(1);
+    
+    if(totalMat) totalMat.textContent = `${totalMateriales} ${moneda}`;
+    if(totalProc) totalProc.textContent = `${totalProcesos} ${moneda}`;
+    if(pctMat) pctMat.textContent = `(${pctMateriales}%)`;
+    if(pctProc) pctProc.textContent = `(${pctProcesosVal}%)`;
+    if(costoFinal) costoFinal.textContent = `${total} ${moneda}`;
+  }
+  
+  function renderResumen(){
+    const costosResumen = document.getElementById('costosResumen');
+    if(!costosResumen) return;
+    if(!cabecera){
+      costosResumen.innerHTML = '<em>Seleccione un producto</em>';
+      return;
+    }
+    const moneda = costosCache.materiales?.componentes[0]?.moneda || costosCache.procesos?.operaciones[0]?.moneda || '';
+    const total = parseFloat(costosCache.total || 0).toFixed(2);
+    const totalMat = parseFloat(costosCache.materiales?.total || 0).toFixed(2);
+    const totalProc = parseFloat(costosCache.procesos?.total || 0).toFixed(2);
+    costosResumen.innerHTML = `Costo total: <strong>${total} ${moneda}</strong> <span class="nota-costos">(Mat: ${totalMat} + Proc: ${totalProc})</span>`;
   }
 
   async function guardarLinea(l){
@@ -654,6 +1189,50 @@
       cerrarSelector();
       render();
     }
+
+  btnVerArbolCompleto.addEventListener('click', async ()=>{
+    const pid = sel.value;
+    if(!pid){ alert('Seleccione un producto primero'); return; }
+    
+    if(modoArbol){
+      // Volver a modo editable
+      modoArbol = false;
+      btnVerArbolCompleto.textContent = '🌲 Ver árbol completo';
+      btnVerArbolCompleto.style.background = '#2563eb';
+      btnAgregarLinea.disabled = false;
+      modoVista.textContent = '';
+      await cargar(); // Recargar datos normales
+      return;
+    }
+    
+    // Cambiar a modo árbol
+    modoVista.textContent = 'Cargando árbol completo...';
+    try{
+      const estado = cabecera?.estado || 'BORRADOR';
+      const r = await fetch(`/api/mbom/${pid}/arbol-completo?estado=${estado}`);
+      if(!r.ok){
+        let msg = 'Error al cargar árbol';
+        try{ const er = await r.json(); msg = er.detail || msg; }catch{}
+        alert(msg);
+        modoVista.textContent = '';
+        return;
+      }
+      const d = await r.json();
+      lineas = d.lineas || [];
+      modoArbol = true;
+      btnVerArbolCompleto.textContent = '📝 Volver a modo edición';
+      btnVerArbolCompleto.style.background = '#059669';
+      btnAgregarLinea.disabled = true;
+      modoVista.textContent = `Vista árbol (${d.total} líneas totales)`;
+      render();
+      ajustarAlturaLineas();
+    }catch(e){
+      console.error('Error cargando árbol', e);
+      alert('Error de red al cargar árbol completo');
+      modoVista.textContent = '';
+    }
+  });
+
   btnGrabar.addEventListener('click', async ()=>{
     if(!cabecera){ alert('Sin cabecera'); return; }
     if(cabecera.estado === 'ACTIVO'){ alert('Revisión ACTIVA no editable. Clonar para modificar.'); return; }
@@ -694,18 +1273,114 @@
     render();
   });
 
+  function setImportMsg(text, color){
+    importarFlexMsg.textContent = text || '';
+    importarFlexMsg.style.color = color || '#555';
+  }
+
   btnImpFlex.addEventListener('click', async ()=>{
     const pid = sel.value; if(!pid){ alert('Seleccione producto'); return; }
     const f = document.getElementById('archivoFlexxus');
     const file = f.files && f.files[0];
     if(!file){ alert('Seleccione archivo .csv/.xlsx'); return; }
     const form = new FormData(); form.append('archivo', file);
-    const r = await fetch(`/api/mbom/${pid}/importar-flexxus`, { method:'POST', body: form });
-    if(r.status===501){ alert('Importación pendiente de implementación'); return; }
-    const d = await r.json();
-    cabecera = d.cabecera; lineas = d.lineas || [];
-    await cargarCostos();
-    render();
+    setImportMsg('Importando MBOM...', '#555');
+    try{
+      const r = await fetch(`/api/mbom/${pid}/importar-flexxus`, { method:'POST', body: form });
+      if(r.status===501){ setImportMsg('Funcionalidad aún no implementada', '#b00'); alert('Importación pendiente de implementación'); return; }
+      if(!r.ok){
+        let msg = 'Error al importar MBOM';
+        try{
+          const er = await r.json();
+          if(er && er.detail){ msg = er.detail; }
+        }catch{
+          /* ignore parse error */
+        }
+        setImportMsg(msg, '#b00');
+        alert(msg);
+        return;
+      }
+      const d = await r.json();
+      cabecera = d.cabecera; lineas = d.lineas || [];
+      await cargarCostos();
+      render();
+      setImportMsg('Importación completada.', '#0a6');
+    }catch(err){
+      console.error('Error importando MBOM', err);
+      setImportMsg('Error de red al importar.', '#b00');
+      alert('No se pudo conectar con el servidor.');
+    }
+  });
+
+
+  const btnLimpiarMBOMs = document.getElementById('btnLimpiarMBOMs');
+  btnLimpiarMBOMs.addEventListener('click', async ()=>{
+    if(!confirm('⚠ PELIGRO: Se eliminarán TODAS las estructuras MBOM de la base de datos.\n\nEsto NO se puede deshacer.\n\n¿Continuar?')){
+      return;
+    }
+    if(!confirm('¿Está SEGURO? Esta acción es irreversible.')){
+      return;
+    }
+    setImportMsg('Eliminando MBOMs...', '#b00');
+    try{
+      const r = await fetch('/api/mbom/limpiar-todo', { method:'DELETE' });
+      if(!r.ok){
+        let msg = 'Error al limpiar';
+        try{
+          const er = await r.json();
+          if(er && er.detail){ msg = er.detail; }
+        }catch{ /* ignore */ }
+        setImportMsg(msg, '#b00');
+        alert(msg);
+        return;
+      }
+      const d = await r.json();
+      setImportMsg(`Limpieza completada: ${d.mbom_cabecera} cabeceras, ${d.mbom_detalle} detalles eliminados.`, '#0a6');
+      // Limpiar vista actual
+      cabecera = null;
+      lineas = [];
+      costosCache = { componentes: [], total: 0, map: new Map() };
+      render();
+      actualizarCostosResumen();
+      alert('MBOMs eliminadas. Puede re-importar ahora.');
+    }catch(err){
+      console.error('Error limpiando MBOMs', err);
+      setImportMsg('Error de red.', '#b00');
+      alert('No se pudo conectar con el servidor.');
+    }
+  });
+
+
+  const btnCorregirTipos30 = document.getElementById('btnCorregirTipos30');
+  btnCorregirTipos30.addEventListener('click', async ()=>{
+    if(!confirm('¿Actualizar todos los productos que empiezan con "30" a tipo WIP?\n\nEsto es útil para productos creados antes de la detección automática de tipos.')){
+      return;
+    }
+    setImportMsg('Actualizando tipos...', '#f59e0b');
+    try{
+      const r = await fetch('/api/productos/corregir-tipos-30', { method:'POST' });
+      if(!r.ok){
+        let msg = 'Error al actualizar tipos';
+        try{
+          const er = await r.json();
+          if(er && er.detail){ msg = er.detail; }
+        }catch{ /* ignore */ }
+        setImportMsg(msg, '#b00');
+        alert(msg);
+        return;
+      }
+      const d = await r.json();
+      setImportMsg(`${d.productos_actualizados} productos actualizados a WIP (total: ${d.total_productos_30})`, '#0a6');
+      alert(`✓ Tipos corregidos: ${d.productos_actualizados} productos actualizados a WIP`);
+      // Recargar estructura si hay una seleccionada
+      if(cabecera){
+        await cargar();
+      }
+    }catch(err){
+      console.error('Error corrigiendo tipos', err);
+      setImportMsg('Error de red.', '#b00');
+      alert('No se pudo conectar con el servidor.');
+    }
   });
 
 
@@ -732,13 +1407,73 @@
 
   // Cargar lista de productos al abrir y luego la estructura si hay selección
   fetchProductos().then(()=>{ if(sel.value){ cargar(); }});
+  
+  // Tabs de costos
+  const btnCostosMateriales = document.getElementById('btnCostosMateriales');
+  const btnCostosProcesos = document.getElementById('btnCostosProcesos');
+  const btnCostosTotal = document.getElementById('btnCostosTotal');
+  const panelMateriales = document.getElementById('costosMaterialesPanel');
+  const panelProcesos = document.getElementById('costosProcesosPanel');
+  const panelTotal = document.getElementById('costosTotalPanel');
+  
+  function activarTabCostos(tab){
+    [btnCostosMateriales, btnCostosProcesos, btnCostosTotal].forEach(btn => {
+      btn.style.borderBottomColor = 'transparent';
+      btn.style.fontWeight = 'normal';
+      btn.classList.remove('active');
+    });
+    [panelMateriales, panelProcesos, panelTotal].forEach(p => {
+      if(p) p.style.display = 'none';
+    });
+    
+    if(tab === 'materiales'){
+      btnCostosMateriales.style.borderBottomColor = '#2563eb';
+      btnCostosMateriales.style.fontWeight = '500';
+      btnCostosMateriales.classList.add('active');
+      if(panelMateriales) panelMateriales.style.display = 'block';
+    } else if(tab === 'procesos'){
+      btnCostosProcesos.style.borderBottomColor = '#2563eb';
+      btnCostosProcesos.style.fontWeight = '500';
+      btnCostosProcesos.classList.add('active');
+      if(panelProcesos) panelProcesos.style.display = 'block';
+    } else if(tab === 'total'){
+      btnCostosTotal.style.borderBottomColor = '#2563eb';
+      btnCostosTotal.style.fontWeight = '500';
+      btnCostosTotal.classList.add('active');
+      if(panelTotal) panelTotal.style.display = 'block';
+    }
+  }
+  
+  if(btnCostosMateriales) btnCostosMateriales.addEventListener('click', () => activarTabCostos('materiales'));
+  if(btnCostosProcesos) btnCostosProcesos.addEventListener('click', () => activarTabCostos('procesos'));
+  if(btnCostosTotal) btnCostosTotal.addEventListener('click', () => activarTabCostos('total'));
+  
   // Inyectar estilo para codigoComp si no existe
   if(!document.getElementById('styleCodigoComp')){
     const st = document.createElement('style');
     st.id='styleCodigoComp';
-    st.textContent='.codigoComp{background:#f3f3f3;border:1px solid #ccc;font-family:monospace;padding:2px 4px;height:20px;line-height:18px;font-size:12px;}';
+    st.textContent='.codigoComp{background:#f3f3f3;border:1px solid #ccc;font-family:monospace;padding:2px 4px;height:20px;line-height:18px;font-size:12px;max-width:100%;}';
     document.head.appendChild(st);
   }
+
+  // Ajuste de altura del listado de líneas según viewport
+  function ajustarAlturaLineas(){
+    const wrapper = document.getElementById('lineasWrapper');
+    if(!wrapper) return;
+    // Calcular espacio disponible hasta el footer
+    const rect = wrapper.getBoundingClientRect();
+    const footer = document.querySelector('footer');
+    const footerH = footer ? footer.offsetHeight : 0;
+    const margen = 6; // reducir margen para ganar altura efectiva
+    let disponible = window.innerHeight - rect.top - footerH - margen;
+    // Duplicar líneas visibles: ampliar un 80% la altura si hay espacio
+    disponible = Math.floor(disponible * 1.8);
+    if(disponible < 180) disponible = 180; // mínimo más compacto
+    wrapper.style.maxHeight = disponible + 'px';
+  }
+  window.addEventListener('resize', ajustarAlturaLineas);
+  // Llamar una vez al cargar la vista
+  ajustarAlturaLineas();
 })();
 </script>
 {% endblock %}

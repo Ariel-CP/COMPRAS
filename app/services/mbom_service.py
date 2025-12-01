@@ -384,3 +384,58 @@ def clonar_revision_a_borrador(db: Session, mbom_id: int) -> Dict[str, Any]:
     return get_cabecera_por_id(
         db, int(new_id_val)
     )  # type: ignore[return-value]
+
+
+def obtener_estructura_completa_recursiva(
+    db: Session,
+    producto_id: int,
+    estado: str = "BORRADOR",
+    nivel: int = 0,
+    visitados: Optional[set] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Construye una lista plana de todas las líneas MBOM con jerarquía
+    completa, incluyendo campo 'nivel' para indentación visual.
+    Evita ciclos mediante set de visitados.
+    """
+    if visitados is None:
+        visitados = set()
+    
+    # Evitar ciclos
+    if producto_id in visitados:
+        return []
+    visitados.add(producto_id)
+    
+    resultado = []
+    
+    # Buscar MBOM para este producto
+    cab = get_cabecera_preferida(db, producto_id, estado)
+    if not cab:
+        # Intentar con el otro estado común
+        cab = get_cabecera_preferida(
+            db, producto_id, "ACTIVO" if estado == "BORRADOR" else "BORRADOR"
+        )
+    
+    if not cab:
+        return resultado
+    
+    # Obtener líneas de este nivel
+    lineas = listar_lineas(db, int(cab["id"]))
+    
+    for linea in lineas:
+        # Agregar línea actual con nivel
+        linea_con_nivel = dict(linea)
+        linea_con_nivel["nivel"] = nivel
+        resultado.append(linea_con_nivel)
+        
+        # Si es WIP o PT, expandir recursivamente
+        tipo = linea.get("componente_tipo_producto")
+        comp_id = linea.get("componente_producto_id")
+        
+        if tipo in ("WIP", "PT") and comp_id:
+            sub_lineas = obtener_estructura_completa_recursiva(
+                db, comp_id, estado, nivel + 1, visitados
+            )
+            resultado.extend(sub_lineas)
+    
+    return resultado

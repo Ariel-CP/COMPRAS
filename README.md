@@ -25,7 +25,9 @@ app/
     ... ui_*           # Vistas HTML
   services/            # Lógica de negocio
     mbom_service.py    # Operaciones MBOM cabecera/detalle
-    mbom_costos.py     # Cálculo de costos (por líneas + vigencias)
+    mbom_costos.py     # Cálculo de costos discriminados (materiales + procesos)
+    operacion_service.py        # CRUD operaciones (catálogo)
+    mbom_operacion_service.py   # Gestión rutas de operaciones
     producto_service.py
     unidad_service.py
     plan_service.py
@@ -44,6 +46,8 @@ import/                # Archivos fuente de importaciones (CSV/Excel futuros)
 - `unidad_medida`: unidades base (kg, un, m, etc.)
 - `mbom_cabecera`: revisiones de la estructura (estado: BORRADOR, ACTIVO, ARCHIVADO)
 - `mbom_detalle`: componentes de la estructura con cantidad, UM, merma y renglón
+- `operacion`: catálogo de operaciones/procesos con tiempo estándar y costo por hora
+- `mbom_operacion`: secuencia de operaciones (ruta) asociada a cada MBOM
 - `costo_producto`: historial de costos unitarios vigentes por producto
 - `plan_produccion_mensual`: cantidades planificadas de PT/WIP por mes
 - `requerimiento_material_mensual`: cálculo consolidado de necesidades de componentes
@@ -73,10 +77,20 @@ MBOM:
 - `POST /api/mbom/{producto_padre_id}` → Upsert de líneas en BORRADOR (crea si falta).
 - `PUT /api/mbom/{mbom_id}` → Actualizar cabecera + líneas.
 - `DELETE /api/mbom/detalle/{detalle_id}` → Borrar línea.
-- `GET /api/mbom/{mbom_id}/costos` → Cálculo de costos sumados.
+- `GET /api/mbom/{mbom_id}/costos` → Cálculo de costos discriminados (materiales + procesos).
 - `POST /api/mbom/{mbom_id}/activar` → Activa revisión (archiva anterior ACTIVO).
 - `POST /api/mbom/{mbom_id}/clonar` → Clona revisión a nuevo BORRADOR.
 - `POST /api/mbom/demo/{codigo}` → Genera demo de MBOM con componentes MP.
+
+Operaciones (Ruta de Procesos):
+
+- `GET /api/operaciones/?activo=true` → Lista catálogo de operaciones.
+- `POST /api/operaciones/` → Crear nueva operación.
+- `PUT /api/operaciones/{id}` → Actualizar operación existente.
+- `DELETE /api/operaciones/{id}` → Eliminar operación.
+- `GET /api/mbom/{mbom_id}/operaciones` → Listar operaciones de una ruta MBOM.
+- `POST /api/mbom/{mbom_id}/operaciones` → Agregar operación a ruta (secuencia + operacion_id).
+- `DELETE /api/mbom/operaciones/{id}` → Eliminar operación de ruta.
 
 Productos / Unidades:
 
@@ -86,11 +100,39 @@ Productos / Unidades:
 
 (Planificación, stock y compras tendrán endpoints adicionales en próximas iteraciones.)
 
-## Modelo de Costos
+## Modelo de Costos Discriminados
 
+El sistema calcula costos discriminados en dos componentes principales:
+
+### Costos de Materiales
 - Se toma el costo vigente por componente (`costo_producto` con `vigencia_desde <= hoy` y `vigencia_hasta` nula o futura).
-- Costo total línea = `cantidad * costo_unitario` (se prevé ajustar por `factor_merma` en iteraciones futuras).
-- Suma total = agregación de todas las líneas.
+- Costo total línea = `cantidad * costo_unitario * (1 + factor_merma)`
+- Suma total materiales = agregación de todas las líneas de componentes.
+
+### Costos de Procesos (Operaciones)
+- Tabla `operacion`: catálogo de operaciones con `costo_hora` y `tiempo_estandar_minutos`
+- Tabla `mbom_operacion`: secuencia de operaciones asociadas a cada MBOM
+- Costo operación = `(tiempo_estandar_minutos / 60) * costo_hora`
+- Suma total procesos = agregación de todas las operaciones en la ruta
+
+### Estructura de Respuesta de Costos
+```json
+{
+  "materiales": {
+    "componentes": [...],
+    "total": 0.00
+  },
+  "procesos": {
+    "operaciones": [...],
+    "total": 0.00
+  },
+  "total": 0.00,
+  "desglose": {
+    "materiales_pct": 0.00,
+    "procesos_pct": 0.00
+  }
+}
+```
 
 ## Requerimientos y Sugerencias de Compra (Futuro)
 
@@ -173,13 +215,42 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 6. Grabar todo y activar revisión para uso en cálculos.
 7. Clonar cuando se requiera nueva modificación sin tocar la activa.
 
+## Funcionalidades Implementadas
+
+✅ **Gestión de MBOM (Bill of Materials)**
+- CRUD completo de estructuras de producto con revisiones
+- Estados: BORRADOR → ACTIVO → ARCHIVADO
+- Clonación de revisiones para nuevas versiones
+- Selector modal de componentes con búsqueda
+
+✅ **Cálculo de Costos Discriminados**
+- Costos de materiales (componentes + merma)
+- Costos de procesos (operaciones × tiempo × costo/hora)
+- Desglose porcentual materiales vs procesos
+- Panel con tabs: Materiales | Procesos | Total
+
+✅ **Gestión de Operaciones (Rutas de Proceso)**
+- Catálogo de operaciones con tiempo estándar y costo/hora
+- Asignación de secuencia de operaciones a cada MBOM
+- Cálculo automático de costos de proceso
+- UI integrada con selector modal y CRUD en línea
+
+✅ **Interfaz de Usuario Optimizada**
+- Tabla responsive con ajuste dinámico de altura
+- Columnas redimensionables manualmente
+- Sticky headers para mejor navegación
+- Búsqueda y filtrado de productos (hasta 500 registros)
+- Creación rápida de productos desde la UI
+
 ## Próximos Pasos
 
 - Implementar importación de datos externos (`/api/mbom/{producto_id}/importar-flexxus`).
+- Vincular materiales a operaciones específicas (`mbom_detalle.operacion_secuencia`).
 - Explotación MBOM + plan mensual para requerimientos materiales.
 - Generación automática de sugerencias de compra.
 - Endpoints de reportes IA y summaries comparativos.
 - Manejo de alternativas (`mbom_alternativa`) y efectividad (`mbom_detalle_efectividad`).
+- Historial de costos de operaciones (similar a `costo_producto`).
 - Tests unitarios de servicios clave (cálculo costos, activación/clonado, validación cantidades).
 
 ## Git / Versionado
@@ -211,4 +282,5 @@ Documentar cambios relevantes en este README y mantener sincronizados los script
 
 ---
 
-Última actualización: Generación inicial del README.
+**Última actualización:** 1 de diciembre de 2025  
+**Versión:** 0.2.0 - Sistema de costos discriminados con rutas de operaciones
