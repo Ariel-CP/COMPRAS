@@ -105,17 +105,20 @@ Productos / Unidades:
 El sistema calcula costos discriminados en dos componentes principales:
 
 ### Costos de Materiales
+
 - Se toma el costo vigente por componente (`costo_producto` con `vigencia_desde <= hoy` y `vigencia_hasta` nula o futura).
 - Costo total línea = `cantidad * costo_unitario * (1 + factor_merma)`
 - Suma total materiales = agregación de todas las líneas de componentes.
 
 ### Costos de Procesos (Operaciones)
+
 - Tabla `operacion`: catálogo de operaciones con `costo_hora` y `tiempo_estandar_minutos`
 - Tabla `mbom_operacion`: secuencia de operaciones asociadas a cada MBOM
 - Costo operación = `(tiempo_estandar_minutos / 60) * costo_hora`
 - Suma total procesos = agregación de todas las operaciones en la ruta
 
 ### Estructura de Respuesta de Costos
+
 ```json
 {
   "materiales": {
@@ -218,24 +221,28 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 ## Funcionalidades Implementadas
 
 ✅ **Gestión de MBOM (Bill of Materials)**
+
 - CRUD completo de estructuras de producto con revisiones
 - Estados: BORRADOR → ACTIVO → ARCHIVADO
 - Clonación de revisiones para nuevas versiones
 - Selector modal de componentes con búsqueda
 
 ✅ **Cálculo de Costos Discriminados**
+
 - Costos de materiales (componentes + merma)
 - Costos de procesos (operaciones × tiempo × costo/hora)
 - Desglose porcentual materiales vs procesos
 - Panel con tabs: Materiales | Procesos | Total
 
 ✅ **Gestión de Operaciones (Rutas de Proceso)**
+
 - Catálogo de operaciones con tiempo estándar y costo/hora
 - Asignación de secuencia de operaciones a cada MBOM
 - Cálculo automático de costos de proceso
 - UI integrada con selector modal y CRUD en línea
 
 ✅ **Interfaz de Usuario Optimizada**
+
 - Tabla responsive con ajuste dinámico de altura
 - Columnas redimensionables manualmente
 - Sticky headers para mejor navegación

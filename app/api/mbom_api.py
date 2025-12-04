@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from pydantic import BaseModel, Field
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -16,6 +17,12 @@ from ..services.mbom_operacion_service import (
     actualizar_operacion_mbom,
     eliminar_operacion_mbom,
     obtener_siguiente_secuencia,
+)
+from ..services.ruta_operacion_base_service import (
+    listar_rutas_base,
+    obtener_ruta_base,
+    crear_ruta_base_desde_mbom,
+    aplicar_ruta_base_a_mbom,
 )
 from ..services.producto_service import listar_productos, crear_producto
 from ..services.unidad_service import listar_unidades
@@ -69,6 +76,26 @@ def api_get_estructura_completa(
 
 class MBOMGuardarPayload(MBOMEstructura):
     pass
+
+
+class UsarRutaBasePayload(BaseModel):
+    ruta_id: int = Field(..., gt=0)
+    modo: str = Field(
+        "append",
+        pattern=r"^(append|replace)$",
+        description="append: agrega; replace: limpia y copia",
+    )
+    mantener_secuencia: bool = Field(
+        default=False,
+        description="Mantiene la secuencia original si no hay conflictos",
+    )
+
+
+class GuardarRutaBasePayload(BaseModel):
+    nombre: str = Field(..., min_length=3, max_length=128)
+    descripcion: Optional[str] = Field(default=None, max_length=255)
+    esta_activo: bool = Field(default=True)
+    creado_por: Optional[str] = Field(default=None, max_length=64)
 
 
 @router.post("/mbom/{producto_padre_id}", response_model=MBOMEstructura)
@@ -344,10 +371,12 @@ def api_corregir_tipos_productos_30(db: Session = Depends(get_db)):
                 "WHERE codigo LIKE '30%'"
             )
         ).scalar()
-        
+        rowcount = result.rowcount  # type: ignore[attr-defined]
+        productos_actualizados = int(rowcount or 0)
+
         return {
             "mensaje": "Tipos actualizados",
-            "productos_actualizados": result.rowcount,
+            "productos_actualizados": productos_actualizados,
             "total_productos_30": count
         }
     except Exception as e:
@@ -361,6 +390,111 @@ def api_corregir_tipos_productos_30(db: Session = Depends(get_db)):
 # ============================================================================
 # ENDPOINTS DE RUTA DE OPERACIONES (MBOM)
 # ============================================================================
+
+@router.get("/operaciones/rutas-base")
+def api_listar_rutas_base_endpoint(
+    q: Optional[str] = Query(
+        None,
+        description="Filtrar por nombre o descripción",
+    ),
+    solo_activas: Optional[bool] = Query(
+        None,
+        description="true para solo plantillas activas",
+    ),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    return listar_rutas_base(
+        db=db,
+        q=q,
+        solo_activas=solo_activas,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/operaciones/rutas-base/{ruta_id}")
+def api_obtener_ruta_base_endpoint(
+    ruta_id: int,
+    db: Session = Depends(get_db),
+):
+    ruta = obtener_ruta_base(db, ruta_id)
+    if not ruta:
+        raise HTTPException(
+            status_code=404,
+            detail="Ruta de operaciones no encontrada",
+        )
+    return ruta
+
+
+@router.post("/mbom/{mbom_id}/operaciones/usar-ruta")
+def api_usar_ruta_base(
+    mbom_id: int,
+    payload: UsarRutaBasePayload,
+    db: Session = Depends(get_db),
+):
+    cab = mbom_service.get_cabecera_por_id(db, mbom_id)
+    if not cab:
+        raise HTTPException(status_code=404, detail="MBOM no encontrada")
+
+    try:
+        operaciones = aplicar_ruta_base_a_mbom(
+            db=db,
+            ruta_id=payload.ruta_id,
+            mbom_id=mbom_id,
+            reemplazar=payload.modo == "replace",
+            mantener_secuencia=payload.mantener_secuencia,
+        )
+    except ValueError as ex:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+    except Exception as ex:  # pragma: no cover - fallback defensivo
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al aplicar ruta predeterminada: {str(ex)}",
+        ) from ex
+
+    return {"operaciones": operaciones}
+
+
+@router.post("/mbom/{mbom_id}/operaciones/guardar-ruta", status_code=201)
+def api_guardar_ruta_desde_mbom(
+    mbom_id: int,
+    payload: GuardarRutaBasePayload,
+    db: Session = Depends(get_db),
+):
+    cab = mbom_service.get_cabecera_por_id(db, mbom_id)
+    if not cab:
+        raise HTTPException(status_code=404, detail="MBOM no encontrada")
+
+    nombre = payload.nombre.strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="Nombre de ruta requerido")
+    descripcion = payload.descripcion.strip() if payload.descripcion else None
+
+    try:
+        ruta = crear_ruta_base_desde_mbom(
+            db=db,
+            mbom_id=mbom_id,
+            nombre=nombre,
+            descripcion=descripcion,
+            esta_activo=payload.esta_activo,
+            creado_por=payload.creado_por,
+        )
+    except ValueError as ex:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+    except Exception as ex:  # pragma: no cover - fallback defensivo
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Error al generar plantilla: {str(ex)}",
+        ) from ex
+
+    return ruta
+
 
 @router.get("/mbom/{mbom_id}/operaciones")
 def api_listar_operaciones_mbom(

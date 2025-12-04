@@ -1,12 +1,15 @@
 # Implementación de Costos Discriminados en MBOM
 
 ## Resumen
+
 Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura de MBOM.
 
 ## Cambios Realizados
 
 ### 1. Base de Datos
+
 **Tabla `operacion`** - Nuevas columnas:
+
 - `costo_hora` DECIMAL(18,6) - Costo por hora de la operación
 - `moneda` ENUM('ARS','USD','USD_MAY','EUR') - Moneda del costo
 - Índice en `centro_trabajo` para optimizar consultas
@@ -16,11 +19,14 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
 ### 2. Backend
 
 #### Servicios Creados
+
 - **`app/services/operacion_service.py`**
+
   - CRUD completo de operaciones
   - Funciones: `listar_operaciones`, `crear_operacion`, `actualizar_operacion`, `eliminar_operacion`
 
 - **`app/services/mbom_operacion_service.py`**
+
   - Gestión de ruta de operaciones por MBOM
   - Funciones: `listar_operaciones_mbom`, `agregar_operacion_mbom`, `eliminar_operacion_mbom`
 
@@ -30,7 +36,9 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
   - `_calcular_costos_procesos()` - **NUEVO** - Cálculo de operaciones
 
 #### APIs Creadas
+
 - **`app/api/operacion_api.py`**
+
   - `GET /api/operaciones/` - Listar operaciones
   - `POST /api/operaciones/` - Crear operación
   - `PUT /api/operaciones/{id}` - Actualizar operación
@@ -45,12 +53,15 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
 ### 3. Frontend
 
 #### Estructura del Panel de Costos
+
 **Tabs:**
+
 - **Materiales**: Tabla de componentes con costos
 - **Procesos**: Tabla de operaciones con tiempos y costos
 - **Total**: Vista consolidada con desglose porcentual
 
 #### Funciones JavaScript Actualizadas
+
 - `cargarCostos()` - Carga discriminada de materiales y procesos
 - `renderCostosMateriales()` - Renderiza tabla de materiales
 - `renderCostosProcesos()` - Renderiza tabla de operaciones
@@ -63,6 +74,7 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
 ### Endpoint `/api/mbom/{id}/costos`
 
 **Response:**
+
 ```json
 {
   "materiales": {
@@ -72,12 +84,12 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
         "nombre": "Material X",
         "cantidad": 10,
         "um_codigo": "KG",
-        "costo_unitario": 5.50,
-        "costo_total": 55.00,
+        "costo_unitario": 5.5,
+        "costo_total": 55.0,
         "moneda": "ARS"
       }
     ],
-    "total": 155.00
+    "total": 155.0
   },
   "procesos": {
     "operaciones": [
@@ -87,13 +99,13 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
         "nombre": "Corte Manual",
         "tiempo_min": 15,
         "costo_hora": 2500,
-        "subtotal": 625.00,
+        "subtotal": 625.0,
         "moneda": "ARS"
       }
     ],
-    "total": 625.00
+    "total": 625.0
   },
-  "total": 780.00,
+  "total": 780.0,
   "desglose": {
     "materiales_pct": 19.9,
     "procesos_pct": 80.1
@@ -104,11 +116,13 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
 ## Próximos Pasos
 
 ### Fase Pendiente: UI de Gestión de Operaciones
+
 1. Crear panel "Ruta de Operaciones" en `estructura.html`
 2. Permitir agregar/quitar operaciones a la secuencia del MBOM
 3. Vincular componentes a operaciones específicas (campo `operacion_secuencia` en `mbom_detalle`)
 
 ### Mejoras Sugeridas
+
 - Importar operaciones desde Flexxus
 - Historial de costos por operación (tabla `costo_operacion`)
 - Cálculo de capacidad basado en tiempos estándar
@@ -117,22 +131,26 @@ Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura 
 ## Testing
 
 ### Verificar Migración
+
 ```sql
 SELECT * FROM operacion LIMIT 5;
 ```
 
 ### Insertar Operación de Prueba
+
 ```sql
 INSERT INTO operacion (codigo, nombre, centro_trabajo, tiempo_estandar_minutos, costo_hora, moneda)
 VALUES ('CORTE01', 'Corte Manual', 'TALLER-A', 15, 2500, 'ARS');
 ```
 
 ### Probar Endpoint de Costos
+
 ```bash
 curl http://localhost:8001/api/mbom/1/costos
 ```
 
 ## Archivos Modificados
+
 - ✅ `database/migrations/001_add_costos_operacion.sql` (creado)
 - ✅ `app/core/config.py` (credenciales BD actualizadas)
 - ✅ `app/services/operacion_service.py` (creado)
