@@ -240,6 +240,8 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Asignación de secuencia de operaciones a cada MBOM
 - Cálculo automático de costos de proceso
 - UI integrada con selector modal y CRUD en línea
+- Plantillas reutilizables de rutas de operación (guardar, listar y aplicar)
+- Aplicación masiva de rutas con modo reemplazo/apéndice y control de secuencias
 
 ✅ **Interfaz de Usuario Optimizada**
 
@@ -248,6 +250,8 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Sticky headers para mejor navegación
 - Búsqueda y filtrado de productos (hasta 500 registros)
 - Creación rápida de productos desde la UI
+- Mensajes persistentes y seleccionables para operaciones y costos
+- Resaltado automático en amarillo de materiales sin costo cargado
 
 ## Próximos Pasos
 
