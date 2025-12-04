@@ -52,7 +52,30 @@
   <h3>Ruta de Operaciones</h3>
   <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
     <button id="btnAgregarOperacion" type="button" style="background:#2563eb; color:white; padding:6px 12px; border:none; border-radius:4px;">➕ Agregar Operación</button>
-    <span id="operacionesInfo" style="font-size:12px; color:#666;"></span>
+    <span id="operacionesInfo" style="font-size:12px; color:#666;">
+      El costo de la operación se calcula como:<br>
+      <strong>(Tiempo estándar en minutos / 60) × Costo/hora</strong>.<br>
+      El resultado se muestra en la columna "Costo Op." para cada operación.
+    </span>
+  </div>
+  <div id="rutaBaseControls" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+    <label for="rutaBaseSelect" style="font-size:12px; color:#4b5563; display:flex; align-items:center; gap:6px;">
+      Ruta predeterminada:
+      <select id="rutaBaseSelect" style="min-width:220px; padding:4px 6px;">
+        <option value="">-- Seleccione --</option>
+      </select>
+    </label>
+    <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:#4b5563;">
+      <input type="checkbox" id="chkRutaReemplazar" style="margin:0;" />
+      Reemplazar actuales
+    </label>
+    <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:#4b5563;">
+      <input type="checkbox" id="chkRutaMantener" style="margin:0;" checked />
+      Mantener secuencia
+    </label>
+    <button id="btnAplicarRutaBase" type="button" style="background:#10b981; color:white; border:none; padding:6px 12px; border-radius:4px;">Aplicar ruta</button>
+    <button id="btnGuardarRutaBase" type="button" style="background:#6b7280; color:white; border:none; padding:6px 12px; border-radius:4px;">Guardar como plantilla</button>
+    <div id="rutaBaseMsg" style="display:none; font-size:12px; min-height:18px; padding:4px 8px; border-radius:4px; background:#f3f4f6; color:#1f2937; white-space:pre-line; cursor:text;" role="status" tabindex="0"></div>
   </div>
   <div id="operacionesWrapper" style="max-height:240px; overflow-y:auto; border:1px solid #d0d7de; border-radius:6px; background:#fff;">
     <table id="tblOperaciones" class="striped" style="width:100%; margin-bottom:0;">
@@ -79,9 +102,13 @@
       <button type="button" id="btnCerrarOperacionSelector" style="padding:4px 8px;">✕</button>
     </div>
     <div style="margin-bottom:8px;">
-      <label>Secuencia (múltiplo de 10):
-        <input type="number" id="opSecuencia" value="10" step="10" min="10" style="width:100px; margin-left:8px;" />
-      </label>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <label for="opSecuencia" style="margin:0;">Secuencia (múltiplo de 10)</label>
+        <button type="button" id="opSecuenciaHelp" title="Usar múltiplos de 10 permite insertar operaciones intermedias sin reordenar toda la secuencia." aria-label="Ayuda sobre la secuencia" aria-controls="opSecuenciaHelpText" aria-expanded="false" style="border:none; background:#e6e6e6; color:#333; border-radius:50%; width:22px; height:22px; font-weight:bold; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;">?</button>
+      </div>
+      <input type="number" id="opSecuencia" value="10" step="10" min="10" style="width:100px; margin-top:6px;" />
+      <div id="opSecuenciaHelpText" style="display:none; margin-top:4px; font-size:0.9em; color:#4d4d4d;">Usa secuencias como 10, 20 o 30 para poder insertar operaciones intermedias más adelante sin tener que renumerar todas.</div>
+      <div id="opSecuenciaError" style="color:red; font-size:0.95em; margin-top:2px; display:none;"></div>
     </div>
     <div id="opResultados" style="margin-top:10px; max-height:400px; overflow-y:auto;"></div>
   </div>
@@ -148,6 +175,7 @@
       button:not(:disabled):hover { filter:brightness(1.1); cursor:pointer; }
       /* Compactar también tablas de subestructuras */
       table.subTabla th, table.subTabla td { padding:2px 6px; font-size:11px; line-height:1.1; }
+      .fila-sin-precio { background:#fef3c7; color:#4b5563; }
       
       /* Estilos para tabla de operaciones */
       #operacionesWrapper { border:1px solid #d0d7de; border-radius:6px; }
@@ -269,6 +297,7 @@
 <script>
 (function(){
   const sel = document.getElementById('productoSelect');
+  sel.addEventListener('change', cargar);
   const btnAct = document.getElementById('btnActualizar');
   const tbody = document.querySelector('#tblLineas tbody');
   const cabeceraInfo = document.getElementById('cabeceraInfo');
@@ -277,20 +306,63 @@
   const btnEliminar = document.getElementById('btnEliminar');
   const btnActivar = document.getElementById('btnActivar');
   const btnClonarRev = document.getElementById('btnClonarRevision');
-  const btnImpFlex = document.getElementById('btnImportarFlexxus');
-  const importarFlexMsg = document.getElementById('importarFlexMsg');
   const inpBuscar = document.getElementById('prodBuscar');
   const chkSolo = document.getElementById('soloPtWip');
   const prodCount = document.getElementById('prodCount');
   const btnRefrescarProductos = document.getElementById('btnRefrescarProductos');
-  const nuevoCodigo = document.getElementById('nuevoCodigo');
-  const nuevoNombre = document.getElementById('nuevoNombre');
-  const nuevoTipo = document.getElementById('nuevoTipo');
-  const nuevoUM = document.getElementById('nuevoUM');
-  const btnCrearProducto = document.getElementById('btnCrearProducto');
-  const crearProdMsg = document.getElementById('crearProdMsg');
-  const costosPanel = document.getElementById('costosPanel');
-  const costosResumen = document.getElementById('costosResumen');
+  const btnImpFlex = document.getElementById('btnImportarFlexxus');
+  const importarFlexMsg = document.getElementById('importarFlexMsg');
+  const btnLimpiarMBOMs = document.getElementById('btnLimpiarMBOMs');
+  const btnCorregirTipos30 = document.getElementById('btnCorregirTipos30');
+  const btnCostosMateriales = document.getElementById('btnCostosMateriales');
+  const btnCostosProcesos = document.getElementById('btnCostosProcesos');
+  const btnCostosTotal = document.getElementById('btnCostosTotal');
+  const panelMateriales = document.getElementById('costosMaterialesPanel');
+  const panelProcesos = document.getElementById('costosProcesosPanel');
+  const panelTotal = document.getElementById('costosTotalPanel');
+  const rutaBaseSelect = document.getElementById('rutaBaseSelect');
+  const btnAplicarRutaBase = document.getElementById('btnAplicarRutaBase');
+  const btnGuardarRutaBase = document.getElementById('btnGuardarRutaBase');
+  const chkRutaReemplazar = document.getElementById('chkRutaReemplazar');
+  const chkRutaMantener = document.getElementById('chkRutaMantener');
+  const rutaBaseMsg = document.getElementById('rutaBaseMsg');
+  const btnSecuenciaHelp = document.getElementById('opSecuenciaHelp');
+  const secuenciaHelpText = document.getElementById('opSecuenciaHelpText');
+
+  if(btnSecuenciaHelp && secuenciaHelpText){
+    const showSecuenciaHelp = () => {
+      secuenciaHelpText.style.display = 'block';
+      btnSecuenciaHelp.setAttribute('aria-expanded', 'true');
+    };
+    const hideSecuenciaHelp = () => {
+      secuenciaHelpText.style.display = 'none';
+      btnSecuenciaHelp.setAttribute('aria-expanded', 'false');
+    };
+    const toggleSecuenciaHelp = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const isVisible = secuenciaHelpText.style.display === 'block';
+      if(isVisible){
+        hideSecuenciaHelp();
+      }else{
+        showSecuenciaHelp();
+      }
+    };
+    btnSecuenciaHelp.addEventListener('click', toggleSecuenciaHelp);
+    btnSecuenciaHelp.addEventListener('keydown', (event) => {
+      if(event.key === 'Enter' || event.key === ' '){
+        toggleSecuenciaHelp(event);
+      }
+    });
+    document.addEventListener('click', (event) => {
+      if(event.target === btnSecuenciaHelp || secuenciaHelpText.contains(event.target)){
+        return;
+      }
+      hideSecuenciaHelp();
+    });
+    btnSecuenciaHelp.addEventListener('blur', hideSecuenciaHelp);
+  }
+
   // Modal selector componentes
   const selector = document.getElementById('componenteSelector');
   const btnCerrarSelector = document.getElementById('btnCerrarSelector');
@@ -341,10 +413,82 @@
     });
   }
 
+  // Accesibilidad: asegurar id/name en campos de formulario
+  function ensureFormFieldAttributes(){
+    // Asignar name basado en data-field si falta
+    document.querySelectorAll('input[data-field], select[data-field], textarea[data-field]').forEach(el=>{
+      const df = el.getAttribute('data-field');
+      if(df && !el.name){ el.name = df; }
+      if(!el.id){
+        // Generar id único estable usando data-field y posición
+        const idx = Array.prototype.indexOf.call(el.parentElement ? el.parentElement.children : [], el);
+        el.id = `${df || 'field'}_${idx}_${Math.random().toString(36).slice(2,7)}`;
+      }
+    });
+    // Asegurar id/name en inputs sin data-field mínimos del encabezado
+    [['prodBuscar','prodBuscar'], ['soloPtWip','soloPtWip'], ['opSecuencia','opSecuencia']].forEach(([id,name])=>{
+      const el = document.getElementById(id);
+      if(el){ if(!el.name) el.name = name; if(!el.id) el.id = id; }
+    });
+  }
+
   let cabecera = null; // {id, estado, revision, ...}
   let lineas = [];     // array de líneas
   let costosCache = { componentes: [], total: 0, map: new Map() };
   let modoArbol = false; // false = editable, true = vista árbol completo
+  let rutaBaseMsgTimer = null;
+
+  function setRutaBaseMsg(msg, color = '#2563eb'){
+    if(!rutaBaseMsg) return;
+    rutaBaseMsg.textContent = msg;
+    rutaBaseMsg.style.color = color;
+    rutaBaseMsg.style.display = msg ? 'block' : 'none';
+    if(rutaBaseMsgTimer){
+      clearTimeout(rutaBaseMsgTimer);
+      rutaBaseMsgTimer = null;
+    }
+    const shouldAutoClear = Boolean(msg) && color !== '#b91c1c';
+    if(shouldAutoClear){
+      rutaBaseMsgTimer = window.setTimeout(()=>{
+        if(rutaBaseMsg.textContent === msg){
+          rutaBaseMsg.textContent = '';
+          rutaBaseMsg.style.display = 'none';
+        }
+      }, 4000);
+    }
+  }
+
+  async function cargarRutasBase(){
+    if(!rutaBaseSelect) return;
+    const current = rutaBaseSelect.value || '';
+    rutaBaseSelect.innerHTML = '<option value="">-- Seleccione --</option>';
+    try{
+      const resp = await fetch('/api/operaciones/rutas-base?limit=200&solo_activas=true');
+      if(!resp.ok){
+        rutaBaseSelect.innerHTML = '<option value="">(Error al cargar)</option>';
+        return;
+      }
+      const data = await resp.json();
+      if(!Array.isArray(data) || data.length === 0){
+        rutaBaseSelect.innerHTML = '<option value="">(Sin plantillas)</option>';
+        return;
+      }
+      data.forEach(ruta => {
+        if(!ruta || ruta.id == null) return;
+        const opt = document.createElement('option');
+        opt.value = String(ruta.id);
+        const total = typeof ruta.total_operaciones === 'number' ? ruta.total_operaciones : 0;
+        const resumen = total ? ` (${total} ops)` : '';
+        const nombreRuta = ruta.nombre || `Ruta ${ruta.id}`;
+        opt.textContent = `${nombreRuta}${resumen}`;
+        rutaBaseSelect.appendChild(opt);
+      });
+      if(current){ rutaBaseSelect.value = current; }
+    }catch(err){
+      console.error('Error cargando rutas base', err);
+      rutaBaseSelect.innerHTML = '<option value="">(Error al cargar)</option>';
+    }
+  }
 
   const umMap = JSON.parse(document.getElementById('um-map').dataset.um);
   const unidadesList = JSON.parse(document.getElementById('unidades-data').dataset.list || '[]');
@@ -450,6 +594,7 @@
     });
     ajustarAlturaLineas();
     enableColumnResizing();
+    ensureFormFieldAttributes();
   }
 
   function renderArbolCompleto(){
@@ -494,6 +639,7 @@
     });
     ajustarAlturaLineas();
     enableColumnResizing();
+    ensureFormFieldAttributes();
   }
 
   async function toggleSubestructura(l, tr){
@@ -699,6 +845,7 @@
   async function cargar(){
     const pid = sel.value;
     if(!pid){ cabecera=null; lineas=[]; render(); cabeceraInfo.textContent=''; return; }
+    setRutaBaseMsg('');
     const resp = await fetch(`/api/mbom/${pid}?estado=ACTIVO`);
     if(resp.status===404){
       // crear borrador vacío
@@ -734,16 +881,43 @@
     const t0 = performance.now();
     try{
       if(solo){
-        const r1 = await fetch(`/api/productos/?activo=true&tipo=PT&limit=500&q=${encodeURIComponent(q)}`);
+        // La API acepta máximo limit=200
+        const r1 = await fetch(`/api/productos/?activo=true&tipo=PT&limit=200&q=${encodeURIComponent(q)}`);
+        if(!r1.ok){
+          console.error('Error en API productos PT:', r1.status, r1.statusText);
+          throw new Error(`API error: ${r1.status}`);
+        }
         items = await r1.json();
+        console.log('Productos PT recibidos:', items);
+        // Normalizar respuesta en caso de que la API devuelva {items: [...]} u otra envoltura
+        if(items && !Array.isArray(items)){
+          items = Array.isArray(items.items) ? items.items : [];
+        }
         countPT = items.length;
       }else{
-        const r = await fetch(`/api/productos/?activo=true&limit=500&q=${encodeURIComponent(q)}`);
+        // La API acepta máximo limit=200
+        const r = await fetch(`/api/productos/?activo=true&limit=200&q=${encodeURIComponent(q)}`);
+        if(!r.ok){
+          console.error('Error en API productos:', r.status, r.statusText);
+          throw new Error(`API error: ${r.status}`);
+        }
         items = await r.json();
+        console.log('Productos recibidos:', items);
+        if(items && !Array.isArray(items)){
+          items = Array.isArray(items.items) ? items.items : [];
+        }
       }
-    }catch(e){ items = []; }
+    }catch(e){ 
+      console.error('Error en fetchProductos:', e);
+      items = []; 
+    }
     // Ordenar por código
-    items.sort((a,b)=> (a.codigo||'').localeCompare(b.codigo||''));
+    if(Array.isArray(items)){
+      items.sort((a,b)=> (a.codigo||'').localeCompare(b.codigo||''));
+    } else {
+      items = [];
+    }
+    console.log('Items a renderizar en select:', items.length);
     // Repoblar select
     const current = sel.value;
     sel.innerHTML = '<option value="">-- Seleccione --</option>';
@@ -752,12 +926,13 @@
       opt.value = p.id; opt.textContent = `${p.codigo}`;
       sel.appendChild(opt);
     });
+    console.log('Opciones agregadas al select:', sel.children.length);
     // Restaurar selección si aplica
     if(current){ sel.value = current; }
     if(solo){ 
-      prodCount.textContent = countPT >= 500 ? `PT: ${countPT} (límite alcanzado, use búsqueda)` : `PT: ${countPT}`; 
+      prodCount.textContent = countPT >= 200 ? `PT: ${countPT} (límite alcanzado, use búsqueda)` : `PT: ${countPT}`; 
     } else { 
-      prodCount.textContent = items.length >= 500 ? `${items.length} productos (límite, use búsqueda)` : `${items.length} productos`; 
+      prodCount.textContent = items.length >= 200 ? `${items.length} productos (límite, use búsqueda)` : `${items.length} productos`; 
     }
     if(items.length === 0){ prodCount.textContent = solo ? 'PT: 0 (verifique que estén activos)' : '0 productos'; }
     const t1 = performance.now();
@@ -818,6 +993,7 @@
       `;
     });
     tbody.innerHTML = html;
+    ensureFormFieldAttributes();
   }
   
   async function agregarOperacion(){
@@ -827,8 +1003,8 @@
     }
     
     const modal = document.getElementById('operacionSelector');
-    const secInput = document.getElementById('secuenciaOperacion');
-    const results = document.getElementById('resultadosOperaciones');
+    const secInput = document.getElementById('opSecuencia');
+    const results = document.getElementById('opResultados');
     
     // Limpiar y abrir modal
     secInput.value = '';
@@ -874,32 +1050,52 @@
   }
   
   async function seleccionarOperacion(operacionId){
-    const secInput = document.getElementById('secuenciaOperacion');
-    const secuencia = parseInt(secInput.value);
-    
-    if(!secuencia || secuencia < 10){
-      alert('Ingrese una secuencia válida (mínimo 10, múltiplo de 10)');
-      return;
+    const secInput = document.getElementById('opSecuencia');
+    const secuencia = Number(secInput.value);
+    const errorDiv = document.getElementById('opSecuenciaError');
+    let errorMsg = '';
+    if(!secInput.value || isNaN(secuencia)){
+      errorMsg = 'Debe ingresar una secuencia válida.';
+    } else if(secuencia < 10){
+      errorMsg = 'Ingrese una secuencia válida (mínimo 10, múltiplo de 10)';
+    } else if(secuencia % 10 !== 0){
+      errorMsg = 'La secuencia debe ser múltiplo de 10';
+    } else if(!cabecera || !cabecera.id){
+      errorMsg = 'MBOM no cargado. Seleccione un producto padre primero.';
+    } else if(typeof operacionId !== 'number' || !operacionId || isNaN(operacionId)){
+      errorMsg = 'Operación inválida.';
     }
-    
-    if(secuencia % 10 !== 0){
-      alert('La secuencia debe ser múltiplo de 10');
+    if(errorMsg){
+      errorDiv.textContent = errorMsg;
+      errorDiv.style.display = 'block';
       return;
+    } else {
+      errorDiv.textContent = '';
+      errorDiv.style.display = 'none';
     }
-    
+    // Depuración
+    console.log('Enviando operación:', { secuencia, operacionId });
+
     try{
-      const r = await fetch(`/api/mbom/${cabecera.id}/operaciones`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          secuencia: secuencia,
-          operacion_id: operacionId
-        })
-      });
+      const url = `/api/mbom/${cabecera.id}/operaciones?operacion_id=${encodeURIComponent(operacionId)}&secuencia=${encodeURIComponent(secuencia)}`;
+      const r = await fetch(url, { method: 'POST' });
       
       if(!r.ok){
-        const err = await r.json();
-        alert(`Error: ${err.detail || 'No se pudo agregar la operación'}`);
+        const parseErrorMessage = async (resp) => {
+          let j, t;
+          try { j = await resp.clone().json(); } catch {}
+          if (j && typeof j === 'object') {
+            if (typeof j.detail === 'string') return j.detail;
+            if (Array.isArray(j.detail) && j.detail.length && typeof j.detail[0]?.msg === 'string') return j.detail[0].msg;
+            if (typeof j.message === 'string') return j.message;
+          }
+          try { t = await resp.clone().text(); } catch {}
+          if (t && t.trim()) return t.trim();
+          if (j !== undefined) return JSON.stringify(j);
+          return `HTTP ${resp.status} ${resp.statusText}`;
+        };
+        const msg = await parseErrorMessage(r);
+        alert(`Error: ${msg}`);
         return;
       }
       
@@ -942,11 +1138,139 @@
   }
   
   // Cerrar modal operaciones
-  document.getElementById('btnCancelarOperacion').addEventListener('click', () => {
+  document.getElementById('btnCerrarOperacionSelector').addEventListener('click', () => {
     document.getElementById('operacionSelector').style.display = 'none';
   });
-  
+
+  if(btnAplicarRutaBase){
+    btnAplicarRutaBase.addEventListener('click', async ()=>{
+      if(!cabecera){
+        setRutaBaseMsg('Seleccione un producto antes de aplicar la ruta.', '#b91c1c');
+        return;
+      }
+      if(!rutaBaseSelect){
+        return;
+      }
+      const rutaId = parseInt(rutaBaseSelect.value || '0', 10);
+      if(!rutaId){
+        setRutaBaseMsg('Seleccione una ruta para aplicar.', '#b91c1c');
+        return;
+      }
+      setRutaBaseMsg('Aplicando ruta...', '#2563eb');
+      try{
+        const body = {
+          ruta_id: rutaId,
+          modo: chkRutaReemplazar && chkRutaReemplazar.checked ? 'replace' : 'append',
+          mantener_secuencia: chkRutaMantener ? !!chkRutaMantener.checked : false,
+        };
+        const resp = await fetch(
+          `/api/mbom/${cabecera.id}/operaciones/usar-ruta`,
+          {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+          },
+        );
+        if(!resp.ok){
+          let detail = 'No se pudo aplicar la ruta';
+          try{
+            const err = await resp.json();
+            if(err && err.detail){ detail = err.detail; }
+          }catch{/* ignore */}
+          setRutaBaseMsg(detail, '#b91c1c');
+          return;
+        }
+        await cargarOperaciones();
+        await cargarCostos();
+        setRutaBaseMsg('Ruta aplicada correctamente.', '#047857');
+      }catch(err){
+        console.error('Error aplicando ruta base', err);
+        setRutaBaseMsg('Error de conexión al aplicar ruta.', '#b91c1c');
+      }
+    });
+  }
+
+  if(btnGuardarRutaBase){
+    btnGuardarRutaBase.addEventListener('click', async ()=>{
+      if(!cabecera){
+        setRutaBaseMsg('Seleccione un producto antes de guardar la plantilla.', '#b91c1c');
+        return;
+      }
+      let sugerencia = '';
+      if(sel && sel.selectedIndex >= 0){
+        const optSel = sel.options[sel.selectedIndex];
+        sugerencia = (optSel ? optSel.textContent : '') || '';
+      }
+      const nombrePrompt = prompt(
+        'Nombre para la plantilla de ruta',
+        sugerencia ? `${sugerencia.trim()} - Ruta` : ''
+      );
+      if(nombrePrompt === null){
+        return;
+      }
+      const nombre = (nombrePrompt || '').trim();
+      if(!nombre){
+        setRutaBaseMsg('El nombre de la plantilla no puede quedar vacío.', '#b91c1c');
+        return;
+      }
+      const descripcionPrompt = prompt('Descripción breve (opcional)', '') || '';
+      const descripcion = descripcionPrompt.trim();
+      setRutaBaseMsg('Guardando plantilla...', '#2563eb');
+      try{
+        let operacionesActuales = [];
+        try{
+          const respOps = await fetch(`/api/mbom/${cabecera.id}/operaciones`);
+          if(respOps.ok){
+            operacionesActuales = await respOps.json();
+          }
+        }catch(fetchErr){
+          console.error('Error obteniendo operaciones actuales', fetchErr);
+        }
+        if(!Array.isArray(operacionesActuales) || operacionesActuales.length === 0){
+          setRutaBaseMsg('No hay operaciones para guardar.', '#b91c1c');
+          return;
+        }
+        const payload = {
+          nombre,
+          descripcion: descripcion || null,
+          esta_activo: true,
+          creado_por: null,
+        };
+        const resp = await fetch(
+          `/api/mbom/${cabecera.id}/operaciones/guardar-ruta`,
+          {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+          },
+        );
+        if(!resp.ok){
+          let detail = 'No se pudo guardar la plantilla';
+          try{
+            const err = await resp.json();
+            if(err && err.detail){ detail = err.detail; }
+          }catch{/* ignore */}
+          setRutaBaseMsg(detail, '#b91c1c');
+          return;
+        }
+        const rutaCreada = await resp.json();
+        await cargarRutasBase();
+        if(rutaBaseSelect && rutaCreada && rutaCreada.id){
+          rutaBaseSelect.value = String(rutaCreada.id);
+        }
+        setRutaBaseMsg('Plantilla guardada correctamente.', '#047857');
+      }catch(err){
+        console.error('Error guardando ruta base', err);
+        setRutaBaseMsg('Error de conexión al guardar plantilla.', '#b91c1c');
+      }
+    });
+  }
+
   document.getElementById('btnAgregarOperacion').addEventListener('click', agregarOperacion);
+
+  // Exponer funciones al scope global para onclick inline
+  window.eliminarOperacion = eliminarOperacion;
+  window.seleccionarOperacion = seleccionarOperacion;
 
   // ============================================
   // COSTOS - Cálculo discriminado
@@ -1013,11 +1337,16 @@
     const html = [`<table class="striped"><thead><tr><th>Código</th><th>Descripción</th><th>Cant</th><th>UM</th><th>Unit.</th><th>Total</th></tr></thead><tbody>`];
     componentes.forEach(c=>{
       const descripcion = c.nombre || c.descripcion || '';
-      const costoUnit = parseFloat(c.costo_unitario || 0).toFixed(2);
-      const costoTotal = parseFloat(c.costo_total || 0).toFixed(2);
-      html.push(`<tr><td>${c.codigo||''}</td><td>${descripcion}</td><td class='num'>${formatMonto(c.cantidad||0)}</td><td>${c.um_codigo||''}</td><td class='num'>${costoUnit} ${c.moneda||''}</td><td class='num'>${costoTotal} ${c.moneda||''}</td></tr>`);
+      const costoUnitarioNum = Number(c.costo_unitario);
+      const costoTotalNum = Number(c.costo_total);
+      const tienePrecio = Number.isFinite(costoUnitarioNum) && costoUnitarioNum > 0;
+      const costoUnit = Number.isFinite(costoUnitarioNum) ? formatMoneda2(costoUnitarioNum) : '0.00';
+      const costoTotal = Number.isFinite(costoTotalNum) ? formatMoneda2(costoTotalNum) : '0.00';
+      const claseFila = tienePrecio ? '' : " class='fila-sin-precio'";
+      html.push(`<tr${claseFila}><td>${c.codigo||''}</td><td>${descripcion}</td><td class='num'>${formatMonto(c.cantidad||0)}</td><td>${c.um_codigo||''}</td><td class='num'>${costoUnit} ${c.moneda||''}</td><td class='num'>${costoTotal} ${c.moneda||''}</td></tr>`);
     });
-    const totalFormatted = parseFloat(costosCache.materiales?.total || 0).toFixed(2);
+    const totalNum = Number(costosCache.materiales?.total || 0);
+    const totalFormatted = Number.isFinite(totalNum) ? formatMoneda2(totalNum) : '0.00';
     const moneda = componentes[0]?.moneda || '';
     html.push(`</tbody><tfoot><tr><th colspan='5'>Total Materiales</th><th class='num'>${totalFormatted} ${moneda}</th></tr></tfoot></table>`);
     panel.innerHTML = html.join('');
@@ -1313,7 +1642,6 @@
   });
 
 
-  const btnLimpiarMBOMs = document.getElementById('btnLimpiarMBOMs');
   btnLimpiarMBOMs.addEventListener('click', async ()=>{
     if(!confirm('⚠ PELIGRO: Se eliminarán TODAS las estructuras MBOM de la base de datos.\n\nEsto NO se puede deshacer.\n\n¿Continuar?')){
       return;
@@ -1351,7 +1679,6 @@
   });
 
 
-  const btnCorregirTipos30 = document.getElementById('btnCorregirTipos30');
   btnCorregirTipos30.addEventListener('click', async ()=>{
     if(!confirm('¿Actualizar todos los productos que empiezan con "30" a tipo WIP?\n\nEsto es útil para productos creados antes de la detección automática de tipos.')){
       return;
@@ -1407,15 +1734,9 @@
 
   // Cargar lista de productos al abrir y luego la estructura si hay selección
   fetchProductos().then(()=>{ if(sel.value){ cargar(); }});
+  cargarRutasBase();
   
   // Tabs de costos
-  const btnCostosMateriales = document.getElementById('btnCostosMateriales');
-  const btnCostosProcesos = document.getElementById('btnCostosProcesos');
-  const btnCostosTotal = document.getElementById('btnCostosTotal');
-  const panelMateriales = document.getElementById('costosMaterialesPanel');
-  const panelProcesos = document.getElementById('costosProcesosPanel');
-  const panelTotal = document.getElementById('costosTotalPanel');
-  
   function activarTabCostos(tab){
     [btnCostosMateriales, btnCostosProcesos, btnCostosTotal].forEach(btn => {
       btn.style.borderBottomColor = 'transparent';
@@ -1472,8 +1793,18 @@
     wrapper.style.maxHeight = disponible + 'px';
   }
   window.addEventListener('resize', ajustarAlturaLineas);
-  // Llamar una vez al cargar la vista
+  
+  // Inicialización: cargar datos al estar listo el DOM
   ajustarAlturaLineas();
+  
+  // Poblar listado de productos padres al cargar la página
+  // Usar setTimeout para asegurar que el DOM esté completamente listo
+  setTimeout(() => {
+    fetchProductos().catch(err => {
+      console.error('Error cargando productos:', err);
+      if(prodCount) prodCount.textContent = 'Error al cargar productos';
+    });
+  }, 0);
 })();
 </script>
 {% endblock %}
