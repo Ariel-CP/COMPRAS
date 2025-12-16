@@ -253,9 +253,25 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Mensajes persistentes y seleccionables para operaciones y costos
 - Resaltado automático en amarillo de materiales sin costo cargado
 
+
 ## Avances recientes
 
-- Implementación de ABM completo para Plan de Producción Mensual, con selector de productos terminados (PT) activos, validaciones backend y paginación en la tabla.
+### Diciembre 2025
+
+- **Plan de Producción Mensual**: ahora editable en tabla completa, con navegación por Enter y edición rápida de cantidades para todos los productos terminados (PT) activos.
+- **Importación/Exportación masiva**: soporte para cargar y descargar el plan mensual en formato Excel/CSV, con plantilla de ejemplo y validación de datos.
+- **Análisis de variación**: resumen de diferencias entre plan actual y anterior, con visualización de variaciones por producto y totales.
+- **Mejoras de usabilidad**:
+  - Navegación con Enter entre celdas de la tabla.
+  - Al enfocar la celda de cantidad, si el valor es 0, se limpia automáticamente para agilizar la carga.
+  - Feedback visual tras guardar/importar/exportar.
+- **Refactor backend**:
+  - Endpoints para resumen, edición masiva, importación y descarga de plantilla.
+  - Validaciones robustas y mensajes claros de error.
+  - Alineación estricta con el schema de base de datos.
+- **Documentación**: actualización de este README y plantillas de importación.
+
+### Anteriores
 - Integración de IA (OpenAI) para generación de reportes y análisis automáticos.
 - Importación de stock y precios desde ERP Flexxus (CSV/Excel).
 - Limpieza de archivos y refactorización de servicios no utilizados.
@@ -303,5 +319,5 @@ Documentar cambios relevantes en este README y mantener sincronizados los script
 
 ---
 
-**Última actualización:** 1 de diciembre de 2025  
-**Versión:** 0.2.0 - Sistema de costos discriminados con rutas de operaciones
+**Última actualización:** 8 de diciembre de 2025  
+**Versión:** 0.3.0 - Plan de Producción Mensual editable, importación/exportación masiva y análisis de variación

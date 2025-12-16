@@ -1,186 +1,234 @@
-{% extends "base.html" %}
-{% block title %}Plan de Producción Mensual{% endblock %}
-{% block content %}
+{% extends "base.html" %} {% block title %}Plan de Producción Mensual{% endblock
+%} {% block content %}
 <section class="panel">
   <h2>Plan de Producción Mensual</h2>
-  <form id="formPlan" class="form-grid">
-    <label for="producto">Producto PT</label>
-    <input id="producto" name="producto" type="search" placeholder="Buscar código o nombre..." autocomplete="off" required />
-    <input type="hidden" id="producto_id" name="producto_id" />
-
+  <div class="form-grid">
     <label for="mes">Mes</label>
-    <input id="mes" name="mes" type="number" min="1" max="12" required />
+    <input
+      id="mes"
+      name="mes"
+      type="number"
+      min="1"
+      max="12"
+      value="{{ (request.query_params.get('mes') or '') }}"
+    />
 
     <label for="anio">Año</label>
-    <input id="anio" name="anio" type="number" min="2020" max="2100" required />
+    <input
+      id="anio"
+      name="anio"
+      type="number"
+      min="2000"
+      max="2100"
+      value="{{ (request.query_params.get('anio') or '') }}"
+    />
 
-    <label for="cantidad">Cantidad</label>
-    <input id="cantidad" name="cantidad" type="number" min="0.01" step="0.01" required />
-
-    <button type="submit">Guardar</button>
+    <button id="btnCargar" type="button">Cargar período</button>
+    <button id="btnGuardar" type="button">Guardar cambios</button>
     <span id="planFeedback" class="nota"></span>
-  </form>
+  </div>
+  <div class="acciones-tabla" style="gap: 0.5rem; flex-wrap: wrap">
+    <button id="btnDescargarXlsx" type="button">
+      Descargar plantilla Excel
+    </button>
+    <button id="btnDescargarCsv" type="button">Descargar plantilla CSV</button>
+    <label class="upload-btn">
+      Importar Excel/CSV
+      <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden />
+    </label>
+    <button id="btnImportar" type="button">Subir e importar</button>
+    <span id="importFeedback" class="nota"></span>
+  </div>
 </section>
 
 <section class="panel">
-  <h3>Planes cargados</h3>
+  <h3>Listado de Productos Terminados (editable)</h3>
   <div class="tabla-wrapper">
     <table id="tablaPlanes" class="striped">
       <thead>
         <tr>
-          <th>Producto</th>
-          <th>Mes</th>
-          <th>Año</th>
-          <th>Cantidad</th>
-          <th>Acciones</th>
+          <th>Código</th>
+          <th>Detalle</th>
+          <th>Mes actual</th>
+          <th>Mes anterior</th>
+          <th>Variación</th>
+          <th>% Variación</th>
         </tr>
       </thead>
       <tbody></tbody>
+      <tfoot>
+        <tr>
+          <th colspan="2">Total general</th>
+          <th id="totalActual">0</th>
+          <th id="totalPrevio">0</th>
+          <th colspan="2"></th>
+        </tr>
+      </tfoot>
     </table>
   </div>
-  <div class="acciones-tabla">
-    <button id="btnAnterior" type="button">Anterior</button>
-    <span id="paginacionInfo" class="nota"></span>
-    <button id="btnSiguiente" type="button">Siguiente</button>
-  </div>
 </section>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script>
-(function () {
-  const API_PT = '/api/productos/pt-activos';
-  const API_PLAN = '/api/plan-produccion-mensual';
-  let pagina = 0;
-  let limite = 10;
-  let total = 0;
+  (function () {
+    const API_RESUMEN = "/api/plan-produccion-mensual/resumen";
+    const API_BULK = "/api/plan-produccion-mensual/bulk";
+    const API_IMPORT = "/api/plan-produccion-mensual/import";
+    const API_PLANTILLA_XLSX = "/api/plan-produccion-mensual/plantilla.xlsx";
+    const API_PLANTILLA_CSV = "/api/plan-produccion-mensual/plantilla.csv";
 
-  const form = document.getElementById('formPlan');
-  const inputProducto = document.getElementById('producto');
-  const inputProductoId = document.getElementById('producto_id');
-  const inputMes = document.getElementById('mes');
-  const inputAnio = document.getElementById('anio');
-  const inputCantidad = document.getElementById('cantidad');
-  const feedback = document.getElementById('planFeedback');
-  const tablaPlanesBody = document.querySelector('#tablaPlanes tbody');
-  const paginacionInfo = document.getElementById('paginacionInfo');
-  const btnAnterior = document.getElementById('btnAnterior');
-  const btnSiguiente = document.getElementById('btnSiguiente');
+    const inputMes = document.getElementById("mes");
+    const inputAnio = document.getElementById("anio");
+    const btnCargar = document.getElementById("btnCargar");
+    const btnGuardar = document.getElementById("btnGuardar");
+    const feedback = document.getElementById("planFeedback");
+    const tablaBody = document.querySelector("#tablaPlanes tbody");
+    const totalActualEl = document.getElementById("totalActual");
+    const totalPrevioEl = document.getElementById("totalPrevio");
+    const btnImportar = document.getElementById("btnImportar");
+    const inputArchivo = document.getElementById("inputArchivo");
+    const importFeedback = document.getElementById("importFeedback");
+    const btnDescargarXlsx = document.getElementById("btnDescargarXlsx");
+    const btnDescargarCsv = document.getElementById("btnDescargarCsv");
 
-  // Autocompletar productos PT activos
-  let productosPT = [];
-  inputProducto.addEventListener('input', async function () {
-    const q = inputProducto.value.trim();
-    if (q.length < 2) return;
-    const resp = await fetch(API_PT + '?q=' + encodeURIComponent(q));
-    if (!resp.ok) return;
-    productosPT = await resp.json();
-    // Mostrar sugerencias (simple dropdown)
-    let datalist = document.getElementById('productosPTList');
-    if (!datalist) {
-      datalist = document.createElement('datalist');
-      datalist.id = 'productosPTList';
-      document.body.appendChild(datalist);
-      inputProducto.setAttribute('list', 'productosPTList');
+    function fmt(n) {
+      const num = Number(n || 0);
+      return num.toLocaleString("es-AR", { maximumFractionDigits: 2 });
     }
-    datalist.innerHTML = '';
-    productosPT.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = `${p.codigo} - ${p.nombre}`;
-      opt.dataset.id = p.id;
-      datalist.appendChild(opt);
-    });
-  });
-  inputProducto.addEventListener('change', function () {
-    const val = inputProducto.value;
-    const prod = productosPT.find(p => val.startsWith(p.codigo));
-    inputProductoId.value = prod ? prod.id : '';
-  });
 
-  async function cargarPlanes() {
-    const resp = await fetch(`${API_PLAN}?limit=${limite}&offset=${pagina*limite}`);
-    if (!resp.ok) return;
-    const datos = await resp.json();
-    tablaPlanesBody.innerHTML = '';
-    (datos.items || []).forEach(plan => {
-      const fila = document.createElement('tr');
-      fila.innerHTML = `
-        <td>${plan.producto_codigo} - ${plan.producto_nombre}</td>
-        <td>${plan.mes}</td>
-        <td>${plan.anio}</td>
-        <td>${plan.cantidad}</td>
-        <td>
-          <button data-id="${plan.id}" class="btnEditar">Editar</button>
-          <button data-id="${plan.id}" class="btnBorrar">Borrar</button>
-        </td>
+    async function cargarTabla() {
+      feedback.textContent = "";
+      const mes = Number(inputMes.value);
+      const anio = Number(inputAnio.value);
+      if (!mes || !anio) {
+        feedback.textContent = "Indica mes y año.";
+        return;
+      }
+      tablaBody.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
+      const url = `${API_RESUMEN}?mes=${mes}&anio=${anio}`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        tablaBody.innerHTML =
+          '<tr><td colspan="6"><em>Error consultando datos</em></td></tr>';
+        return;
+      }
+      const data = await resp.json();
+      renderTabla(data.items || []);
+      totalActualEl.textContent = fmt(data.total_general || 0);
+      const totalPrevio = (data.items || []).reduce(
+        (acc, it) => acc + (it.cantidad_prev || 0),
+        0
+      );
+      totalPrevioEl.textContent = fmt(totalPrevio);
+    }
+
+    function renderTabla(items) {
+      tablaBody.innerHTML = "";
+      if (!items.length) {
+        tablaBody.innerHTML =
+          '<tr><td colspan="6"><em>No hay productos</em></td></tr>';
+        return;
+      }
+      items.forEach((it) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+        <td>${it.codigo}</td>
+        <td>${it.nombre}</td>
+        <td><input type="number" step="0.01" min="0" value="${it.cantidad}" data-producto-id="${it.producto_id}" class="input-cantidad" /></td>
+        <td>${fmt(it.cantidad_prev)}</td>
+        <td>${fmt(it.variacion_abs)}</td>
+        <td>${it.variacion_pct === null ? "-" : fmt(it.variacion_pct) + " %"}</td>
       `;
-      tablaPlanesBody.appendChild(fila);
-    });
-    total = datos.total || 0;
-    paginacionInfo.textContent = `Página ${pagina+1} de ${Math.ceil(total/limite) || 1} (Total: ${total})`;
-    btnAnterior.disabled = pagina === 0;
-    btnSiguiente.disabled = (pagina+1)*limite >= total;
-  }
-
-  form.addEventListener('submit', async function (e) {
-    e.preventDefault();
-    feedback.textContent = '';
-    const producto_id = inputProductoId.value;
-    if (!producto_id) {
-      feedback.textContent = 'Seleccione un producto válido.';
-      return;
+        tablaBody.appendChild(tr);
+      });
+      // Permitir avanzar con Enter y limpiar 0 al enfocar
+      const inputs = tablaBody.querySelectorAll('.input-cantidad');
+      inputs.forEach((inp, idx) => {
+        inp.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const next = inputs[idx + 1];
+            if (next) next.focus();
+          }
+        });
+        inp.addEventListener('focus', function(e) {
+          if (inp.value === '0' || inp.value === '0.0' || inp.value === '0.00') {
+            inp.value = '';
+          }
+        });
+      });
     }
-    const plan = {
-      producto_id: Number(producto_id),
-      mes: Number(inputMes.value),
-      anio: Number(inputAnio.value),
-      cantidad: Number(inputCantidad.value)
-    };
-    const resp = await fetch(API_PLAN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(plan)
-    });
-    if (resp.ok) {
-      feedback.textContent = 'Plan guardado correctamente.';
-      cargarPlanes();
-      form.reset();
-      inputProductoId.value = '';
-    } else {
-      const err = await resp.json();
-      feedback.textContent = err.detail || 'Error al guardar.';
-    }
-  });
 
-  tablaPlanesBody.addEventListener('click', async function (e) {
-    if (e.target.classList.contains('btnBorrar')) {
-      const id = e.target.dataset.id;
-      if (!confirm('¿Eliminar este plan?')) return;
-      const resp = await fetch(`${API_PLAN}/${id}`, { method: 'DELETE' });
+    async function guardarCambios() {
+      const mes = Number(inputMes.value);
+      const anio = Number(inputAnio.value);
+      if (!mes || !anio) {
+        feedback.textContent = "Indica mes y año.";
+        return;
+      }
+      const inputs = tablaBody.querySelectorAll(".input-cantidad");
+      const items = [];
+      inputs.forEach((inp) => {
+        items.push({
+          producto_id: Number(inp.dataset.productoId),
+          cantidad: Number(inp.value || 0),
+        });
+      });
+      feedback.textContent = "Guardando...";
+      const resp = await fetch(`${API_BULK}?mes=${mes}&anio=${anio}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(items),
+      });
       if (resp.ok) {
-        feedback.textContent = 'Plan eliminado.';
-        cargarPlanes();
+        feedback.textContent = "Guardado correcto.";
+        cargarTabla();
       } else {
-        feedback.textContent = 'Error al eliminar.';
+        feedback.textContent = "Error al guardar.";
       }
     }
-    // Edición (opcional: puedes expandir para editar en línea)
-  });
 
-  btnAnterior.addEventListener('click', function () {
-    if (pagina > 0) {
-      pagina--;
-      cargarPlanes();
+    async function importarArchivo() {
+      if (!inputArchivo.files.length) {
+        importFeedback.textContent = "Selecciona un archivo .xlsx o .csv";
+        return;
+      }
+      importFeedback.textContent = "Importando...";
+      const formData = new FormData();
+      formData.append("file", inputArchivo.files[0]);
+      const resp = await fetch(API_IMPORT, { method: "POST", body: formData });
+      if (resp.ok) {
+        const data = await resp.json();
+        importFeedback.textContent = `Importadas ${data.procesadas} filas.`;
+        cargarTabla();
+      } else {
+        importFeedback.textContent = "Error al importar.";
+      }
     }
-  });
-  btnSiguiente.addEventListener('click', function () {
-    if ((pagina+1)*limite < total) {
-      pagina++;
-      cargarPlanes();
-    }
-  });
 
-  cargarPlanes();
-})();
+    function descargar(url) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    btnCargar.addEventListener("click", cargarTabla);
+    btnGuardar.addEventListener("click", guardarCambios);
+    btnImportar.addEventListener("click", importarArchivo);
+    btnDescargarXlsx.addEventListener("click", () =>
+      descargar(API_PLANTILLA_XLSX)
+    );
+    btnDescargarCsv.addEventListener("click", () =>
+      descargar(API_PLANTILLA_CSV)
+    );
+
+    // Carga inicial con mes/año actuales si están vacíos
+    const hoy = new Date();
+    if (!inputMes.value) inputMes.value = hoy.getMonth() + 1;
+    if (!inputAnio.value) inputAnio.value = hoy.getFullYear();
+    cargarTabla();
+  })();
 </script>
 {% endblock %}

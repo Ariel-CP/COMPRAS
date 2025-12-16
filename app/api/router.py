@@ -11,6 +11,7 @@ from . import (
         operacion_api,
         precios,
         tipo_cambio,
+        plan_produccion,
 )
 
 api_router = APIRouter()
@@ -29,6 +30,9 @@ api_router.include_router(
 )
 api_router.include_router(
         informes.router
+)
+api_router.include_router(
+        plan_produccion.router
 )
 api_router.include_router(
         operacion_api.router
