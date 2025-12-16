@@ -43,3 +43,11 @@ async def ui_plan(
             "db_status": status,
         },
     )
+
+
+@router.get("/plan-mensual", response_class=HTMLResponse)
+async def ui_plan_mensual(request: Request):
+    return templates.TemplateResponse(
+        "plan/plan_mensual.html",
+        {"request": request},
+    )

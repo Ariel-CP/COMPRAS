@@ -123,3 +123,21 @@ def api_actualizar_producto(
         raise HTTPException(
             status_code=500, detail=str(getattr(ex, "orig", ex))
         ) from ex
+
+
+@router.get("/pt-activos", response_model=list)
+def listar_pt_activos(q: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    sql = """
+        SELECT id, codigo, nombre FROM producto
+        WHERE tipo_producto = 'PT' AND activo = 1
+        {filtro}
+        ORDER BY nombre ASC
+    """
+    params = {}
+    filtro = ''
+    if q:
+        filtro = "AND (codigo LIKE :q OR nombre LIKE :q)"
+        params['q'] = f"%{q}%"
+    sql = sql.format(filtro=filtro)
+    rows = db.execute(sql, params).fetchall()
+    return [dict(row) for row in rows]

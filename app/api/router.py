@@ -7,6 +7,7 @@ from . import (
         productos,
         unidades,
         mbom_api,
+        informes,
         operacion_api,
         precios,
         tipo_cambio,
@@ -25,6 +26,9 @@ api_router.include_router(
 )
 api_router.include_router(
         mbom_api.router, tags=["mbom"]
+)
+api_router.include_router(
+        informes.router
 )
 api_router.include_router(
         operacion_api.router

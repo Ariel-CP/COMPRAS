@@ -253,6 +253,16 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Mensajes persistentes y seleccionables para operaciones y costos
 - Resaltado automático en amarillo de materiales sin costo cargado
 
+## Avances recientes
+
+- Implementación de ABM completo para Plan de Producción Mensual, con selector de productos terminados (PT) activos, validaciones backend y paginación en la tabla.
+- Integración de IA (OpenAI) para generación de reportes y análisis automáticos.
+- Importación de stock y precios desde ERP Flexxus (CSV/Excel).
+- Limpieza de archivos y refactorización de servicios no utilizados.
+- Mejoras en la interfaz: feedback visual tras guardar, editar o eliminar planes, y autocompletado de productos por código/nombre.
+- Validaciones robustas: no duplicar producto+mes+año, cantidad > 0, mensajes claros de error.
+- Documentación y estructura del proyecto actualizada.
+
 ## Próximos Pasos
 
 - Implementar importación de datos externos (`/api/mbom/{producto_id}/importar-flexxus`).

@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Costos PT{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <h2>Informe de costos de Productos Terminados</h2>
+  <p>Consulta los costos de MBOM activos y selecciona artículos para comparar sus componentes.</p>
+  <form id="filtroForm" class="form-grid">
+    <label for="buscar">Buscar por código o detalle</label>
+    <input id="buscar" name="q" type="search" placeholder="Ej. PT-0001" />
+
+    <label for="limite">Cantidad máxima de resultados</label>
+    <input id="limite" name="limit" type="number" min="1" max="200" value="50" />
+
+    <button type="submit">Actualizar</button>
+    <button id="btnLimpiarSeleccion" type="button">Limpiar selección</button>
+    <span id="estadoConsulta" class="nota"></span>
+  </form>
+</section>
+
+<section class="panel">
+  <h3>Listado</h3>
+  <p>Marca los productos para compararlos. Sólo se muestran productos terminados con MBOM activa.</p>
+  <div class="tabla-wrapper">
+    <table id="tablaCostos" class="striped">
+      <thead>
+        <tr>
+          <th scope="col">Código</th>
+          <th scope="col">Detalle</th>
+          <th scope="col">Revisión</th>
+          <th scope="col">Materiales</th>
+          <th scope="col">Procesos</th>
+          <th scope="col">Total</th>
+          <th scope="col">Alertas</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="acciones-tabla">
+    <button id="btnComparar" type="button" disabled>Comparar seleccionados</button>
+    <span id="seleccionInfo" class="nota"></span>
+  </div>
+</section>
+
+<section class="panel" id="panelComparacion" style="display: none;">
+  <h3>Comparación</h3>
+  <div class="tabla-wrapper">
+    <table id="tablaComparacion" class="striped">
+      <thead>
+        <tr>
+          <th scope="col">Código</th>
+          <th scope="col">Detalle</th>
+          <th scope="col">Revisión</th>
+          <th scope="col">Materiales</th>
+          <th scope="col">Procesos</th>
+          <th scope="col">Total</th>
+          <th scope="col">Alertas</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const API_LISTADO = '/api/informes/costos-pt';
+  const API_COMPARAR = '/api/informes/costos-pt/comparar';
+
+  const form = document.getElementById('filtroForm');
+  const inputBuscar = document.getElementById('buscar');
+  const inputLimite = document.getElementById('limite');
+  const estadoConsulta = document.getElementById('estadoConsulta');
+  const btnComparar = document.getElementById('btnComparar');
+  const btnLimpiar = document.getElementById('btnLimpiarSeleccion');
+  const seleccionInfo = document.getElementById('seleccionInfo');
+  const tablaCostosBody = document.querySelector('#tablaCostos tbody');
+  const panelComparacion = document.getElementById('panelComparacion');
+  const tablaComparacionBody = document.querySelector('#tablaComparacion tbody');
+
+  // Mapear selección actual para mantener el estado entre búsquedas
+  const seleccionActual = new Map();
+
+  function formatCurrency(value) {
+    const numero = Number(value || 0);
+    return numero.toLocaleString('es-AR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function actualizarSeleccionInfo() {
+    const cantidad = seleccionActual.size;
+    seleccionInfo.textContent = cantidad
+      ? `Seleccionados: ${cantidad} producto(s)`
+      : 'Sin productos seleccionados';
+    btnComparar.disabled = cantidad === 0;
+  }
+
+  function limpiarComparacion() {
+    panelComparacion.style.display = 'none';
+    tablaComparacionBody.innerHTML = '';
+  }
+
+  function crearCelda(texto, clase) {
+    const td = document.createElement('td');
+    if (clase) {
+      td.className = clase;
+    }
+    td.textContent = texto;
+    return td;
+  }
+
+  function renderTabla(items) {
+    tablaCostosBody.innerHTML = '';
+    // Filtrar productos con total_general distinto de 0
+    const filtrados = (items || []).filter(item => Number(item.total_general) !== 0);
+    if (!filtrados.length) {
+      const fila = document.createElement('tr');
+      const celda = document.createElement('td');
+      celda.colSpan = 7;
+      celda.innerHTML = '<em>No se encontraron productos.</em>';
+      fila.appendChild(celda);
+      tablaCostosBody.appendChild(fila);
+      return;
+    }
+
+    filtrados.forEach((item) => {
+      const fila = document.createElement('tr');
+
+      const celdaCodigo = document.createElement('td');
+      const etiqueta = document.createElement('label');
+      etiqueta.className = 'fila-seleccion';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.dataset.productoId = String(item.producto_id);
+      checkbox.title = 'Incluir en la comparación';
+      if (seleccionActual.has(item.producto_id)) {
+        checkbox.checked = true;
+      }
+      checkbox.addEventListener('change', (evento) => {
+        const id = Number(evento.currentTarget.dataset.productoId);
+        if (evento.currentTarget.checked) {
+          seleccionActual.set(id, {
+            producto_id: id,
+            codigo: item.codigo,
+            nombre: item.nombre,
+          });
+        } else {
+          seleccionActual.delete(id);
+        }
+        actualizarSeleccionInfo();
+        limpiarComparacion();
+      });
+      const codigoSpan = document.createElement('span');
+      codigoSpan.textContent = item.codigo || '';
+      etiqueta.appendChild(checkbox);
+      etiqueta.appendChild(codigoSpan);
+      celdaCodigo.appendChild(etiqueta);
+      fila.appendChild(celdaCodigo);
+
+      fila.appendChild(crearCelda(item.nombre || '', 'col-detalle'));
+      fila.appendChild(crearCelda(item.mbom_revision || '-', 'col-revision'));
+      fila.appendChild(
+        crearCelda(
+          `${formatCurrency(item.total_materiales)} ${item.moneda_materiales || ''}`.trim(),
+          'col-numero'
+        )
+      );
+      fila.appendChild(
+        crearCelda(
+          `${formatCurrency(item.total_procesos)} ${item.moneda_procesos || ''}`.trim(),
+          'col-numero'
+        )
+      );
+      fila.appendChild(
+        crearCelda(
+          `${formatCurrency(item.total_general)} ${item.moneda_materiales || ''}`.trim(),
+          'col-numero'
+        )
+      );
+      fila.appendChild(crearCelda(item.alerta_fx ? 'Sí' : 'No', 'col-alerta'));
+
+      tablaCostosBody.appendChild(fila);
+    });
+  }
+
+  function renderComparacion(items) {
+    tablaComparacionBody.innerHTML = '';
+    if (!items || !items.length) {
+      panelComparacion.style.display = 'none';
+      return;
+    }
+    items.forEach((item) => {
+      const fila = document.createElement('tr');
+      fila.appendChild(crearCelda(item.codigo || '', 'col-codigo'));
+      fila.appendChild(crearCelda(item.nombre || '', 'col-detalle'));
+      fila.appendChild(crearCelda(item.mbom_revision || '-', 'col-revision'));
+      fila.appendChild(
+        crearCelda(
+          `${formatCurrency(item.total_materiales)} ${item.moneda_materiales || ''}`.trim(),
+          'col-numero'
+        )
+      );
+      fila.appendChild(
+        crearCelda(
+          `${formatCurrency(item.total_procesos)} ${item.moneda_procesos || ''}`.trim(),
+          'col-numero'
+        )
+      );
+      fila.appendChild(
+        crearCelda(
+          `${formatCurrency(item.total_general)} ${item.moneda_materiales || ''}`.trim(),
+          'col-numero'
+        )
+      );
+      fila.appendChild(crearCelda(item.alerta_fx ? 'Sí' : 'No', 'col-alerta'));
+      tablaComparacionBody.appendChild(fila);
+    });
+    panelComparacion.style.display = 'block';
+  }
+
+  async function cargarListado(params) {
+    try {
+      estadoConsulta.textContent = 'Consultando...';
+      const query = new URLSearchParams(params || {});
+      const queryString = query.toString();
+      const url = queryString ? `${API_LISTADO}?${queryString}` : API_LISTADO;
+      const respuesta = await fetch(url);
+      if (!respuesta.ok) {
+        throw new Error('No se pudo obtener el informe');
+      }
+      const datos = await respuesta.json();
+      renderTabla(datos.items || []);
+      estadoConsulta.textContent = `Resultados: ${datos.count || 0}`;
+    } catch (error) {
+      console.error(error);
+      estadoConsulta.textContent = 'Error consultando el informe';
+      tablaCostosBody.innerHTML = '';
+      limpiarComparacion();
+    }
+  }
+
+  async function compararSeleccion() {
+    if (!seleccionActual.size) {
+      return;
+    }
+    try {
+      btnComparar.disabled = true;
+      estadoConsulta.textContent = 'Comparando...';
+      const respuesta = await fetch(API_COMPARAR, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          producto_ids: Array.from(seleccionActual.keys()),
+          codigos: [],
+        }),
+      });
+      if (!respuesta.ok) {
+        throw new Error('No se pudo obtener la comparación');
+      }
+      const datos = await respuesta.json();
+      renderComparacion(datos.items || []);
+      estadoConsulta.textContent = `Resultados: ${datos.items ? datos.items.length : 0}`;
+    } catch (error) {
+      console.error(error);
+      estadoConsulta.textContent = 'Error al comparar los productos seleccionados';
+      limpiarComparacion();
+    } finally {
+      actualizarSeleccionInfo();
+    }
+  }
+
+  form.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    const params = {};
+    const texto = inputBuscar.value.trim();
+    const limite = Number(inputLimite.value || 50);
+    if (texto) {
+      params.q = texto;
+    }
+    if (Number.isFinite(limite)) {
+      params.limit = limite;
+    }
+    cargarListado(params);
+  });
+
+  btnComparar.addEventListener('click', compararSeleccion);
+
+  btnLimpiar.addEventListener('click', () => {
+    seleccionActual.clear();
+    actualizarSeleccionInfo();
+    limpiarComparacion();
+    const params = {};
+    const texto = inputBuscar.value.trim();
+    const limite = Number(inputLimite.value || 50);
+    if (texto) {
+      params.q = texto;
+    }
+    if (Number.isFinite(limite)) {
+      params.limit = limite;
+    }
+    estadoConsulta.textContent = 'Selección limpia. Actualizando listado...';
+    cargarListado(params);
+  });
+
+  // Carga inicial
+  actualizarSeleccionInfo();
+  cargarListado({ limit: Number(inputLimite.value || 50) });
+})();
+</script>
+{% endblock %}

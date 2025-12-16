@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Plan de Producción Mensual{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Plan de Producción Mensual</h2>
+  <form id="formPlan" class="form-grid">
+    <label for="producto">Producto PT</label>
+    <input id="producto" name="producto" type="search" placeholder="Buscar código o nombre..." autocomplete="off" required />
+    <input type="hidden" id="producto_id" name="producto_id" />
+
+    <label for="mes">Mes</label>
+    <input id="mes" name="mes" type="number" min="1" max="12" required />
+
+    <label for="anio">Año</label>
+    <input id="anio" name="anio" type="number" min="2020" max="2100" required />
+
+    <label for="cantidad">Cantidad</label>
+    <input id="cantidad" name="cantidad" type="number" min="0.01" step="0.01" required />
+
+    <button type="submit">Guardar</button>
+    <span id="planFeedback" class="nota"></span>
+  </form>
+</section>
+
+<section class="panel">
+  <h3>Planes cargados</h3>
+  <div class="tabla-wrapper">
+    <table id="tablaPlanes" class="striped">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Mes</th>
+          <th>Año</th>
+          <th>Cantidad</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="acciones-tabla">
+    <button id="btnAnterior" type="button">Anterior</button>
+    <span id="paginacionInfo" class="nota"></span>
+    <button id="btnSiguiente" type="button">Siguiente</button>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const API_PT = '/api/productos/pt-activos';
+  const API_PLAN = '/api/plan-produccion-mensual';
+  let pagina = 0;
+  let limite = 10;
+  let total = 0;
+
+  const form = document.getElementById('formPlan');
+  const inputProducto = document.getElementById('producto');
+  const inputProductoId = document.getElementById('producto_id');
+  const inputMes = document.getElementById('mes');
+  const inputAnio = document.getElementById('anio');
+  const inputCantidad = document.getElementById('cantidad');
+  const feedback = document.getElementById('planFeedback');
+  const tablaPlanesBody = document.querySelector('#tablaPlanes tbody');
+  const paginacionInfo = document.getElementById('paginacionInfo');
+  const btnAnterior = document.getElementById('btnAnterior');
+  const btnSiguiente = document.getElementById('btnSiguiente');
+
+  // Autocompletar productos PT activos
+  let productosPT = [];
+  inputProducto.addEventListener('input', async function () {
+    const q = inputProducto.value.trim();
+    if (q.length < 2) return;
+    const resp = await fetch(API_PT + '?q=' + encodeURIComponent(q));
+    if (!resp.ok) return;
+    productosPT = await resp.json();
+    // Mostrar sugerencias (simple dropdown)
+    let datalist = document.getElementById('productosPTList');
+    if (!datalist) {
+      datalist = document.createElement('datalist');
+      datalist.id = 'productosPTList';
+      document.body.appendChild(datalist);
+      inputProducto.setAttribute('list', 'productosPTList');
+    }
+    datalist.innerHTML = '';
+    productosPT.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = `${p.codigo} - ${p.nombre}`;
+      opt.dataset.id = p.id;
+      datalist.appendChild(opt);
+    });
+  });
+  inputProducto.addEventListener('change', function () {
+    const val = inputProducto.value;
+    const prod = productosPT.find(p => val.startsWith(p.codigo));
+    inputProductoId.value = prod ? prod.id : '';
+  });
+
+  async function cargarPlanes() {
+    const resp = await fetch(`${API_PLAN}?limit=${limite}&offset=${pagina*limite}`);
+    if (!resp.ok) return;
+    const datos = await resp.json();
+    tablaPlanesBody.innerHTML = '';
+    (datos.items || []).forEach(plan => {
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
+        <td>${plan.producto_codigo} - ${plan.producto_nombre}</td>
+        <td>${plan.mes}</td>
+        <td>${plan.anio}</td>
+        <td>${plan.cantidad}</td>
+        <td>
+          <button data-id="${plan.id}" class="btnEditar">Editar</button>
+          <button data-id="${plan.id}" class="btnBorrar">Borrar</button>
+        </td>
+      `;
+      tablaPlanesBody.appendChild(fila);
+    });
+    total = datos.total || 0;
+    paginacionInfo.textContent = `Página ${pagina+1} de ${Math.ceil(total/limite) || 1} (Total: ${total})`;
+    btnAnterior.disabled = pagina === 0;
+    btnSiguiente.disabled = (pagina+1)*limite >= total;
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    feedback.textContent = '';
+    const producto_id = inputProductoId.value;
+    if (!producto_id) {
+      feedback.textContent = 'Seleccione un producto válido.';
+      return;
+    }
+    const plan = {
+      producto_id: Number(producto_id),
+      mes: Number(inputMes.value),
+      anio: Number(inputAnio.value),
+      cantidad: Number(inputCantidad.value)
+    };
+    const resp = await fetch(API_PLAN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(plan)
+    });
+    if (resp.ok) {
+      feedback.textContent = 'Plan guardado correctamente.';
+      cargarPlanes();
+      form.reset();
+      inputProductoId.value = '';
+    } else {
+      const err = await resp.json();
+      feedback.textContent = err.detail || 'Error al guardar.';
+    }
+  });
+
+  tablaPlanesBody.addEventListener('click', async function (e) {
+    if (e.target.classList.contains('btnBorrar')) {
+      const id = e.target.dataset.id;
+      if (!confirm('¿Eliminar este plan?')) return;
+      const resp = await fetch(`${API_PLAN}/${id}`, { method: 'DELETE' });
+      if (resp.ok) {
+        feedback.textContent = 'Plan eliminado.';
+        cargarPlanes();
+      } else {
+        feedback.textContent = 'Error al eliminar.';
+      }
+    }
+    // Edición (opcional: puedes expandir para editar en línea)
+  });
+
+  btnAnterior.addEventListener('click', function () {
+    if (pagina > 0) {
+      pagina--;
+      cargarPlanes();
+    }
+  });
+  btnSiguiente.addEventListener('click', function () {
+    if ((pagina+1)*limite < total) {
+      pagina++;
+      cargarPlanes();
+    }
+  });
+
+  cargarPlanes();
+})();
+</script>
+{% endblock %}
