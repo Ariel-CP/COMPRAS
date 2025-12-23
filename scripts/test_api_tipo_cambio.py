@@ -4,9 +4,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.db import _engine
-from app.schemas.tipo_cambio import TipoCambioFiltro
-from app.services.tipo_cambio_service import listar_tipos_cambio
+from app.db import _engine  # noqa: E402
+from app.schemas.tipo_cambio import TipoCambioFiltro  # noqa: E402
+from app.services.tipo_cambio_service import listar_tipos_cambio  # noqa: E402
 
 filtro = TipoCambioFiltro(moneda=None, tipo=None, desde=None, hasta=None)
 

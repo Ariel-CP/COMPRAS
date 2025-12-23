@@ -1,6 +1,6 @@
 from typing import Optional, List
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PrecioCompraOut(BaseModel):
@@ -17,8 +17,7 @@ class PrecioCompraOut(BaseModel):
     referencia_doc: Optional[str] = None
     notas: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PrecioImportResult(BaseModel):

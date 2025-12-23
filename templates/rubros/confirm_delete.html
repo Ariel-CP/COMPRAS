@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Confirmar eliminación</h2>
+<p>¿Está seguro que desea eliminar el rubro <strong>{{ rubro.nombre }}</strong>?</p>
+<form method="post">
+    <button type="submit" class="btn btn-danger">Eliminar</button>
+    <a href="/ui/rubros" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}

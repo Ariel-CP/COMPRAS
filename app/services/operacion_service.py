@@ -30,7 +30,7 @@ def listar_operaciones(
     where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
     query = text(f"""
-        SELECT 
+        SELECT
             o.id,
             o.codigo,
             o.nombre,
@@ -66,7 +66,7 @@ def listar_operaciones(
 def obtener_operacion(db: Session, operacion_id: int) -> Optional[dict]:
     """Obtiene una operación por ID."""
     query = text("""
-        SELECT 
+        SELECT
             o.id,
             o.codigo,
             o.nombre,
@@ -79,11 +79,11 @@ def obtener_operacion(db: Session, operacion_id: int) -> Optional[dict]:
         FROM operacion o
         WHERE o.id = :id
     """)
-    
+
     row = db.execute(query, {"id": operacion_id}).fetchone()
     if not row:
         return None
-    
+
     return {
         "id": row.id,
         "codigo": row.codigo,
@@ -108,12 +108,12 @@ def crear_operacion(
 ) -> dict:
     """Crea una nueva operación."""
     query = text("""
-        INSERT INTO operacion 
+        INSERT INTO operacion
         (codigo, nombre, centro_trabajo, tiempo_estandar_minutos, costo_hora, moneda)
-        VALUES 
+        VALUES
         (:codigo, :nombre, :centro, :tiempo, :costo, :moneda)
     """)
-    
+
     result = db.execute(query, {
         "codigo": codigo,
         "nombre": nombre,
@@ -123,7 +123,7 @@ def crear_operacion(
         "moneda": moneda,
     })
     db.commit()
-    
+
     return obtener_operacion(db, result.lastrowid)
 
 
@@ -140,46 +140,46 @@ def actualizar_operacion(
     """Actualiza una operación existente."""
     updates = []
     params = {"id": operacion_id}
-    
+
     if codigo is not None:
         updates.append("codigo = :codigo")
         params["codigo"] = codigo
-    
+
     if nombre is not None:
         updates.append("nombre = :nombre")
         params["nombre"] = nombre
-    
+
     if centro_trabajo is not None:
         updates.append("centro_trabajo = :centro")
         params["centro"] = centro_trabajo
-    
+
     if tiempo_estandar_minutos is not None:
         updates.append("tiempo_estandar_minutos = :tiempo")
         params["tiempo"] = tiempo_estandar_minutos
-    
+
     if costo_hora is not None:
         updates.append("costo_hora = :costo")
         params["costo"] = costo_hora
-    
+
     if moneda is not None:
         updates.append("moneda = :moneda")
         params["moneda"] = moneda
-    
+
     if not updates:
         return obtener_operacion(db, operacion_id)
-    
+
     updates.append("fecha_actualizacion = CURRENT_TIMESTAMP")
     update_sql = ", ".join(updates)
-    
+
     query = text(f"""
-        UPDATE operacion 
+        UPDATE operacion
         SET {update_sql}
         WHERE id = :id
     """)
-    
+
     db.execute(query, params)
     db.commit()
-    
+
     return obtener_operacion(db, operacion_id)
 
 

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Sesiones{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="sessions-header">
+    <div>
+      <h3>Sesiones activas</h3>
+      <div class="muted small">Lista de dispositivos y sesiones activas. Revoca sesiones remotas si es necesario.</div>
+    </div>
+    <div class="sessions-actions">
+      <button id="refresh-btn" class="btn-ghost">Actualizar</button>
+      <button id="logout-others" class="btn-danger">Revocar remotas</button>
+    </div>
+  </div>
+  <div class="panel-listado">
+    <table class="productos-table sessions-table" id="sessions-table">
+      <thead>
+        <tr>
+          <th>Dispositivo</th>
+          <th>IP</th>
+          <th>User-Agent</th>
+          <th>Creada</th>
+          <th>Último uso</th>
+          <th>Expira</th>
+          <th>Persistente</th>
+          <th>Revocada</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- filas generadas por JS -->
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function fmtDate(s) {
+  if (!s) return '';
+  const d = new Date(s + 'Z');
+  return d.toLocaleString();
+}
+
+async function loadSessions() {
+  const tbody = document.querySelector('#sessions-table tbody');
+  tbody.innerHTML = '<tr><td colspan="9">Cargando...</td></tr>';
+  try {
+    const resp = await fetch('/api/auth/sessions');
+    if (!resp.ok) throw new Error('Error al cargar');
+    const data = await resp.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9">No se encontraron sesiones</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    for (const s of data) {
+      const tr = document.createElement('tr');
+      if (s.current) tr.classList.add('current-session');
+      tr.innerHTML = `
+        <td><div class="chip">${s.device_name || 'Desconocido'}</div></td>
+        <td class="small">${s.ip || '-'}</td>
+        <td class="truncate" title="${(s.user_agent||'').replace(/"/g, '\\"')}">${s.user_agent || '-'}</td>
+        <td class="small">${await fmtDate(s.created_at)}</td>
+        <td class="small">${await fmtDate(s.last_used_at)}</td>
+        <td class="small">${await fmtDate(s.expires_at)}</td>
+        <td class="small">${s.persistent ? 'Sí' : 'No'}</td>
+        <td class="small">${s.revoked ? 'Sí' : 'No'}</td>
+        <td>${s.revoked ? '' : `<button data-jti="${s.jti}" class="btn-danger revoke">Revocar</button>`}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    document.querySelectorAll('.revoke').forEach(btn => {
+      btn.addEventListener('click', async (ev) => {
+        const jti = ev.target.dataset.jti;
+        if (!confirm('Revocar sesión?')) return;
+        try {
+          const r = await fetch(`/api/auth/sessions/${jti}`, { method: 'DELETE' });
+          if (!r.ok) throw new Error('no ok');
+          await loadSessions();
+        } catch (err) {
+          alert('Error al revocar la sesión');
+        }
+      });
+    });
+    // acciones globales
+    document.getElementById('refresh-btn').onclick = loadSessions;
+    document.getElementById('logout-others').onclick = async () => {
+      if (!confirm('Revocar todas las sesiones excepto la actual?')) return;
+      try {
+        const r = await fetch('/api/auth/sessions', { method: 'DELETE' });
+        if (!r.ok) throw new Error('no ok');
+        await loadSessions();
+      } catch (err) {
+        alert('Error al revocar sesiones');
+      }
+    }
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="9">Error al cargar sesiones</td></tr>';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadSessions();
+});
+</script>
+{% endblock %}

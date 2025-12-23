@@ -1,0 +1,240 @@
+{% extends "base.html" %} {% block title %}Permisos por rol{% endblock %} {%
+block content %}
+<section class="productos-wrapper">
+  <h2>Permisos por rol</h2>
+
+  <div class="panel panel-alta">
+    <h3>Roles</h3>
+    <form id="form-rol" class="form-alta" onsubmit="return crearRol(event);">
+      <input
+        required
+        name="nombre"
+        placeholder="Nombre de rol"
+        maxlength="64"
+      />
+      <input name="descripcion" placeholder="Descripción" maxlength="255" />
+      <button type="submit" class="btn-accion">Crear rol</button>
+      <span id="rol-status" class="hint"></span>
+    </form>
+
+    <div class="tabla-controles">
+      <label
+        >Seleccionar rol:
+        <select id="select-rol" onchange="cambiarRol()">
+          {% for r in roles %}
+          <option
+            value="{{ r.id }}"
+            {%
+            if
+            selected_role
+            and
+            selected_role.id=""
+            ="r.id"
+            %}selected{%
+            endif
+            %}
+          >
+            {{ r.nombre }} ({{ r.user_count or 0 }} usuarios)
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="btn-accion" type="button" onclick="renombrarRol()">
+        Renombrar/Editar
+      </button>
+      <button class="btn-accion" type="button" onclick="borrarRol()">
+        Borrar rol
+      </button>
+    </div>
+  </div>
+
+  <div class="panel panel-listado">
+    <div class="tabla-controles">
+      <button class="btn-accion" type="button" onclick="agregarFila()">
+        Agregar permiso
+      </button>
+      <button class="btn-accion" type="button" onclick="guardarPermisos()">
+        Guardar
+      </button>
+      <span id="perm-status" class="hint"></span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="productos-table table-center" id="tablaPerms">
+        <thead>
+          <tr>
+            <th>form_key</th>
+            <th>Leer</th>
+            <th>Escribir</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+  let roles = {{ roles|tojson }};
+  let permisos = {{ permisos|tojson }};
+  let selectedRole = {{ selected_role|tojson }};
+
+  function renderPerms(data){
+    const tbody = document.querySelector('#tablaPerms tbody');
+    tbody.innerHTML = '';
+    data.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.dataset.id = p.id || '';
+      tr.innerHTML = `
+        <td><input name="form_key" value="${escapeHtml(p.form_key)}" maxlength="64" /></td>
+        <td><input type="checkbox" name="leer" ${p.puede_leer ? 'checked':''} /></td>
+        <td><input type="checkbox" name="escribir" ${p.puede_escribir ? 'checked':''} /></td>
+        <td><button class="btn-accion" type="button" onclick="eliminarFila(this)">Eliminar</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function agregarFila(){
+    permisos.push({id:null, form_key:'', puede_leer:true, puede_escribir:false});
+    renderPerms(permisos);
+  }
+
+  function eliminarFila(btn){
+    const tr = btn.closest('tr');
+    const idx = Array.from(tr.parentNode.children).indexOf(tr);
+    if(idx>=0){
+      permisos.splice(idx,1);
+      renderPerms(permisos);
+    }
+  }
+
+  function dataDesdeTabla(){
+    const rows = document.querySelectorAll('#tablaPerms tbody tr');
+    return Array.from(rows).map(tr => {
+      return {
+        id: tr.dataset.id || null,
+        form_key: tr.querySelector('input[name="form_key"]').value.trim(),
+        puede_leer: tr.querySelector('input[name="leer"]').checked,
+        puede_escribir: tr.querySelector('input[name="escribir"]').checked,
+      };
+    }).filter(p => p.form_key.length > 0);
+  }
+
+  async function guardarPermisos(){
+    if(!selectedRole){ alert('Seleccione un rol'); return; }
+    const statusEl = document.getElementById('perm-status');
+    statusEl.textContent = 'Guardando...';
+    const payload = dataDesdeTabla();
+    const res = await fetch(`/api/roles/${selectedRole.id}/perms`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      statusEl.textContent = err.detail || 'Error';
+      statusEl.className = 'err';
+      return;
+    }
+    const data = await res.json();
+    permisos = data.permisos || [];
+    renderPerms(permisos);
+    statusEl.textContent = 'Guardado';
+    statusEl.className = 'ok';
+  }
+
+  async function cambiarRol(){
+    const sel = document.getElementById('select-rol');
+    const id = sel.value;
+    selectedRole = roles.find(r => String(r.id) === String(id));
+    if(!selectedRole){ permisos = []; renderPerms(permisos); return; }
+    const res = await fetch(`/api/roles/${id}/perms`);
+    if(!res.ok){
+      alert('No se pudieron cargar permisos');
+      return;
+    }
+    const data = await res.json();
+    permisos = data.permisos || [];
+    renderPerms(permisos);
+  }
+
+  async function crearRol(ev){
+    ev.preventDefault();
+    const statusEl = document.getElementById('rol-status');
+    statusEl.textContent = 'Creando...';
+    const fd = new FormData(ev.target);
+    const payload = {
+      nombre: fd.get('nombre'),
+      descripcion: fd.get('descripcion') || null,
+    };
+    const res = await fetch('/api/roles/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      statusEl.textContent = err.detail || 'Error';
+      statusEl.className = 'err';
+      return false;
+    }
+    const rol = await res.json();
+    roles.push(rol);
+    document.getElementById('select-rol').innerHTML = roles.map(r => `<option value="${r.id}">${r.nombre} (${r.user_count||0} usuarios)</option>`).join('');
+    document.getElementById('select-rol').value = rol.id;
+    selectedRole = rol;
+    permisos = [];
+    renderPerms(permisos);
+    ev.target.reset();
+    statusEl.textContent = 'Rol creado';
+    statusEl.className = 'ok';
+    return false;
+  }
+
+  async function renombrarRol(){
+    if(!selectedRole){ alert('Seleccione un rol'); return; }
+    const nuevo = prompt('Nuevo nombre de rol', selectedRole.nombre);
+    if(!nuevo) return;
+    const desc = prompt('Descripción', selectedRole.descripcion || '');
+    const res = await fetch(`/api/roles/${selectedRole.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: nuevo, descripcion: desc })
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      alert(err.detail || 'Error al actualizar rol');
+      return;
+    }
+    const rol = await res.json();
+    const idx = roles.findIndex(r => r.id === rol.id);
+    if(idx>=0) roles[idx] = rol; else roles.push(rol);
+    selectedRole = rol;
+    document.getElementById('select-rol').innerHTML = roles.map(r => `<option value="${r.id}">${r.nombre} (${r.user_count||0} usuarios)</option>`).join('');
+    document.getElementById('select-rol').value = rol.id;
+  }
+
+  async function borrarRol(){
+    if(!selectedRole){ alert('Seleccione un rol'); return; }
+    if(!confirm('¿Borrar rol? (solo si no tiene usuarios)')) return;
+    const res = await fetch(`/api/roles/${selectedRole.id}`, { method: 'DELETE' });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      alert(err.detail || 'No se pudo borrar (¿tiene usuarios asociados?)');
+      return;
+    }
+    roles = roles.filter(r => r.id !== selectedRole.id);
+    document.getElementById('select-rol').innerHTML = roles.map(r => `<option value="${r.id}">${r.nombre} (${r.user_count||0} usuarios)</option>`).join('');
+    selectedRole = roles[0] || null;
+    if(selectedRole){ await cambiarRol(); }
+    else { permisos = []; renderPerms(permisos); }
+  }
+
+  function escapeHtml(str){
+    return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+  }
+
+  renderPerms(permisos || []);
+</script>
+{% endblock %}

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..services.informe_costos_service import costos_por_productos, listar_costos_pt
+from .deps_auth import require_permission
 
 router = APIRouter(prefix="/informes", tags=["informes"])
 
@@ -29,6 +30,7 @@ def obtener_costos_pt(
     limit: int = Query(default=50, ge=1, le=200, description="Cantidad máxima de registros a devolver"),
     offset: int = Query(default=0, ge=0, description="Desplazamiento para paginado"),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("informes", False)),
 ) -> dict:
     """Devuelve el listado de productos terminados con su costo agregado."""
 
@@ -40,6 +42,7 @@ def obtener_costos_pt(
 def comparar_costos_pt(
     payload: InformeCostosComparacionIn,
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("informes", False)),
 ) -> dict:
     """Devuelve la comparación de costos para los productos solicitados."""
 

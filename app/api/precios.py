@@ -16,6 +16,7 @@ from ..services.precio_service import (
 
 
 router = APIRouter()
+from .deps_auth import require_permission
 
 
 @router.get("/historial", response_model=list[PrecioCompraOut])
@@ -34,6 +35,7 @@ def api_historial_precios(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("precios", False)),
 ):
     try:
         return listar_precios_compra(
@@ -69,10 +71,13 @@ def descargar_template_precios():
     )
 
 
+
+
 @router.post("/import", response_model=PrecioImportResult)
 def importar_precios(
     archivo: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("precios", True)),
 ):
     if not archivo.filename:
         raise HTTPException(status_code=400, detail="Archivo requerido")

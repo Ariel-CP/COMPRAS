@@ -95,7 +95,7 @@ def actualizar_operacion_endpoint(
     operacion = operacion_service.obtener_operacion(db, operacion_id)
     if not operacion:
         raise HTTPException(status_code=404, detail="Operación no encontrada")
-    
+
     try:
         return operacion_service.actualizar_operacion(
             db=db,

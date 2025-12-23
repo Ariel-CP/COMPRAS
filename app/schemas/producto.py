@@ -9,6 +9,7 @@ class ProductoBase(BaseModel):
     codigo: str = Field(min_length=1, max_length=64)
     nombre: str = Field(min_length=1, max_length=128)
     tipo_producto: TipoProducto = Field(default="MP")
+    rubro: str | None = Field(default=None, max_length=64)
     unidad_medida_id: int = Field(gt=0)
     activo: bool = True
 

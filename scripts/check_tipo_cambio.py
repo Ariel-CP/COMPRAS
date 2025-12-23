@@ -19,7 +19,7 @@ def main():
                 ORDER BY moneda, fecha DESC
             """)
         )
-        
+
         current_moneda = None
         for row in result:
             if current_moneda != row.moneda:
@@ -27,9 +27,9 @@ def main():
                     print()
                 current_moneda = row.moneda
                 print(f"--- {row.moneda} ---")
-            
+
             print(f"{row.fecha} | {row.tipo:8s} | {row.tasa:12.6f} | {row.origen}")
-        
+
         print("\n=== Productos con precio en USD_MAY ===\n")
         result2 = db.execute(
             text("""
@@ -41,10 +41,10 @@ def main():
                 LIMIT 10
             """)
         )
-        
+
         for row in result2:
             print(f"{row.codigo:15s} | {row.nombre[:40]:40s} | {row.precio_unitario:10.4f} | {row.fecha_precio}")
-        
+
     finally:
         db.close()
 

@@ -1,5 +1,4 @@
 from typing import List
-from decimal import Decimal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 

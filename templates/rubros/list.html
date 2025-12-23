@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Rubros</h2>
+<a href="/ui/rubros/nuevo" class="btn btn-primary">Agregar Rubro</a>
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for rubro in rubros %}
+        <tr>
+            <td>{{ rubro.id }}</td>
+            <td>{{ rubro.nombre }}</td>
+            <td>
+                <a href="/ui/rubros/editar/{{ rubro.id }}" class="btn btn-sm btn-warning">Editar</a>
+                <a href="/ui/rubros/eliminar/{{ rubro.id }}" class="btn btn-sm btn-danger">Eliminar</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

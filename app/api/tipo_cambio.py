@@ -1,5 +1,5 @@
 from datetime import date
-from io import StringIO, BytesIO
+from io import BytesIO
 from fastapi import (
     APIRouter,
     Depends,
@@ -40,6 +40,7 @@ from ..services.tipo_cambio_sync_service import (
 
 router = APIRouter()
 settings = get_settings()
+from .deps_auth import require_permission
 
 
 @router.get("/", response_model=list[TipoCambioOut])
@@ -57,6 +58,7 @@ def api_listar_tipos_cambio(
         default=None, description="Fecha hasta (YYYY-MM-DD)"
     ),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("tipo_cambio", False)),
 ):
     desde_dt = date.fromisoformat(desde) if desde else None
     hasta_dt = date.fromisoformat(hasta) if hasta else None
@@ -76,8 +78,8 @@ def api_upsert_tipo_cambio(
     data: TipoCambioCreate, db: Session = Depends(get_db)
 ):
     try:
-        creado, id_ = upsert_tipo_cambio(db, data)
-        obj = obtener_por_id(db, id_)
+        _, tipo_cambio_id = upsert_tipo_cambio(db, data)
+        obj = obtener_por_id(db, tipo_cambio_id)
         if not obj:
             raise HTTPException(
                 status_code=500, detail="No se pudo obtener el registro"
@@ -87,19 +89,23 @@ def api_upsert_tipo_cambio(
         raise HTTPException(
             status_code=500, detail=str(getattr(ex, "orig", ex))
         ) from ex
+    
 
 
-@router.put("/{id}", response_model=TipoCambioOut)
+@router.put("/{tipo_cambio_id}", response_model=TipoCambioOut)
 def api_actualizar_tipo_cambio(
-    id: int, data: TipoCambioUpdate, db: Session = Depends(get_db)
+    tipo_cambio_id: int,
+    data: TipoCambioUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("tipo_cambio", True)),
 ):
     try:
-        ok = actualizar_tipo_cambio(db, id, data)
+        ok = actualizar_tipo_cambio(db, tipo_cambio_id, data)
         if not ok:
             raise HTTPException(
                 status_code=404, detail="Registro no encontrado o sin cambios"
             )
-        obj = obtener_por_id(db, id)
+        obj = obtener_por_id(db, tipo_cambio_id)
         if not obj:
             raise HTTPException(
                 status_code=404,
@@ -121,6 +127,7 @@ def api_importar_csv(
     tipo: str = Body("VENTA", embed=True),
     origen: str = Body("MANUAL", embed=True),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("tipo_cambio", True)),
 ):
     try:
         insertados, actualizados, errores = bulk_import_csv(
@@ -146,6 +153,7 @@ async def api_importar_xlsx(
     origen: str = Form("MANUAL"),
     sheet_name: str | None = Form(None),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("tipo_cambio", True)),
 ):
     try:
         contenido = await file.read()
@@ -187,7 +195,7 @@ def descargar_plantilla_csv():
 @router.get("/plantilla-xlsx")
 def descargar_plantilla_xlsx():
     """Descarga plantilla Excel vacía con encabezados."""
-    from openpyxl import Workbook
+    from openpyxl import Workbook  # type: ignore[import-not-found]
 
     wb = Workbook()
     ws = wb.active

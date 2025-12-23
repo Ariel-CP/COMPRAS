@@ -15,11 +15,11 @@ SQLConn = Union[Connection, Session]
 
 
 def listar_tipos_cambio(
-    conn: Connection, filtro: TipoCambioFiltro
+    conn: SQLConn, filtro: TipoCambioFiltro
 ) -> List[dict]:
     """Lista tipos de cambio con filtros opcionales."""
     clauses = []
-    params = {}
+    params: dict[str, object] = {}
     if filtro.moneda:
         clauses.append("moneda = :moneda")
         params["moneda"] = filtro.moneda
@@ -55,7 +55,7 @@ def listar_tipos_cambio(
     return rows
 
 
-def obtener_resumen_ultimas_tasas(conn: Connection) -> List[dict]:
+def obtener_resumen_ultimas_tasas(conn: SQLConn) -> List[dict]:
     """Devuelve la última fecha y tasa por moneda/tipo."""
     sql = text(
         """
@@ -83,7 +83,7 @@ def obtener_resumen_ultimas_tasas(conn: Connection) -> List[dict]:
 
 
 def upsert_tipo_cambio(
-    conn: Connection, data: TipoCambioCreate
+    conn: SQLConn, data: TipoCambioCreate
 ) -> Tuple[bool, int]:
     """Inserta o actualiza (si existe por PK única) un tipo de cambio.
     Devuelve (insertado, id).
@@ -129,7 +129,7 @@ def upsert_tipo_cambio(
 
 
 def actualizar_tipo_cambio(
-    conn: Connection, id_: int, data: TipoCambioUpdate
+    conn: SQLConn, id_: int, data: TipoCambioUpdate
 ) -> bool:
     set_parts = []
     params = {"id": id_}
@@ -148,10 +148,11 @@ def actualizar_tipo_cambio(
         f"UPDATE tipo_cambio_hist SET {', '.join(set_parts)} WHERE id=:id"
     )
     res = conn.execute(sql, params)
-    return res.rowcount > 0
+    rowcount = getattr(res, "rowcount", 0)
+    return bool(rowcount)
 
 
-def obtener_por_id(conn: Connection, id_: int) -> Optional[dict]:
+def obtener_por_id(conn: SQLConn, id_: int) -> Optional[dict]:
     sql = text("""
         SELECT id, fecha, moneda, tipo, tasa, origen, notas, fecha_creacion
         FROM tipo_cambio_hist WHERE id=:id
@@ -171,7 +172,7 @@ def obtener_por_id(conn: Connection, id_: int) -> Optional[dict]:
 
 
 def bulk_import_csv(
-    conn: Connection,
+    conn: SQLConn,
     contenido_csv: str,
     moneda: str = "USD",
     tipo: str = "VENTA",
@@ -196,27 +197,20 @@ def bulk_import_csv(
     reader = csv.reader(f)
 
     # Detectar encabezado
-    first_row_peek: List[str] = []
     try:
         first_row_peek = next(reader)
     except StopIteration:
         return 0, 0, ["Archivo vacío"]
 
-    has_header = False
-    if first_row_peek and any(
-        h.lower() in ("fecha", "tasa") for h in first_row_peek
-    ):
-        has_header = True
-    else:
-        # procesar como datos, retroceder
-        f.seek(0)
-        reader = csv.reader(f)
+    has_header = bool(
+        first_row_peek and any(h.lower() in ("fecha", "tasa") for h in first_row_peek)
+    )
 
     if has_header:
         # Re-crear reader para después del encabezado
         f.seek(0)
-        reader = csv.DictReader(f)
-        for idx, row in enumerate(reader, start=2):
+        dict_reader = csv.DictReader(f)
+        for idx, row in enumerate(dict_reader, start=2):
             try:
                 fecha_str = row.get("fecha") or row.get("Fecha")
                 tasa_str = row.get("tasa") or row.get("Tasa")
@@ -244,7 +238,8 @@ def bulk_import_csv(
                 errores.append(f"Línea {idx}: {e}")
     else:
         # Sin encabezado: columnas esperadas fecha,tasa
-        for idx, cols in enumerate(reader, start=1):
+        f.seek(0)
+        for idx, cols in enumerate(csv.reader(f), start=1):
             if not cols or len(cols) < 2:
                 continue
             try:
@@ -272,7 +267,7 @@ def bulk_import_csv(
 
 
 def bulk_import_xlsx(
-    conn: Connection,
+    conn: SQLConn,
     file_bytes: bytes,
     moneda: str = "USD",
     tipo: str = "VENTA",
@@ -283,7 +278,7 @@ def bulk_import_xlsx(
     Se espera columnas con encabezados 'fecha' y 'tasa' (case-insensitive).
     Si no se encuentra sheet_name se usa la primera hoja.
     """
-    from openpyxl import load_workbook  # lazy import
+    from openpyxl import load_workbook  # type: ignore[import-not-found]
 
     insertados = 0
     actualizados = 0

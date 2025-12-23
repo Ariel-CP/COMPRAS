@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional, List
 from decimal import Decimal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class TipoCambioBase(BaseModel):
@@ -49,8 +49,7 @@ class TipoCambioOut(TipoCambioBase):
     id: int
     fecha_creacion: Optional[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TipoCambioFiltro(BaseModel):

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from .deps_auth import require_permission
 from ..schemas.plan import PlanItemIn, PlanItemOut, PlanUpsertIn, PlanUpsertResult
 from ..services.plan_service import (
     get_plan_periodo,
@@ -15,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/{anio}/{mes}", response_model=List[PlanItemOut])
-def listar_plan(anio: int, mes: int, db: Session = Depends(get_db)):
+def listar_plan(anio: int, mes: int, db: Session = Depends(get_db), current_user=Depends(require_permission("plan", False))):
     if not (1 <= mes <= 12):
         raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
     return get_plan_periodo(db, anio, mes)
@@ -28,6 +29,7 @@ def upsert_plan(
     payload: PlanUpsertIn,
     sobrescribir: bool = Query(False, description="Si true, borra y re-inserta el periodo"),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("plan", True)),
 ):
     if not (1 <= mes <= 12):
         raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
@@ -35,12 +37,12 @@ def upsert_plan(
 
 
 @router.put("/{item_id}", response_model=PlanItemOut)
-def actualizar_item(item_id: int, body: PlanItemIn, db: Session = Depends(get_db)):
+def actualizar_item(item_id: int, body: PlanItemIn, db: Session = Depends(get_db), current_user=Depends(require_permission("plan", True))):
     return update_plan_item(db, item_id, body)
 
 
 @router.delete("/{anio}/{mes}")
-def borrar_periodo(anio: int, mes: int, confirmar: bool = Query(False), db: Session = Depends(get_db)):
+def borrar_periodo(anio: int, mes: int, confirmar: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(require_permission("plan", True))):
     if not confirmar:
         raise HTTPException(status_code=400, detail="Confirmar=true requerido para borrar el periodo")
     delete_plan_periodo(db, anio, mes)

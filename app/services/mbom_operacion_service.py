@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 def listar_operaciones_mbom(db: Session, mbom_id: int) -> list[dict]:
     """Lista las operaciones de un MBOM en orden de secuencia."""
     query = text("""
-        SELECT 
+        SELECT
             mo.id,
             mo.mbom_id,
             mo.secuencia,
@@ -26,7 +26,7 @@ def listar_operaciones_mbom(db: Session, mbom_id: int) -> list[dict]:
         WHERE mo.mbom_id = :mbom_id
         ORDER BY mo.secuencia
     """)
-    
+
     rows = db.execute(query, {"mbom_id": mbom_id}).fetchall()
     return [
         {
@@ -55,12 +55,12 @@ def agregar_operacion_mbom(
 ) -> dict:
     """Agrega una operación a la ruta del MBOM."""
     query = text("""
-        INSERT INTO mbom_operacion 
+        INSERT INTO mbom_operacion
         (mbom_id, operacion_id, secuencia, notas)
-        VALUES 
+        VALUES
         (:mbom_id, :operacion_id, :secuencia, :notas)
     """)
-    
+
     result = db.execute(query, {
         "mbom_id": mbom_id,
         "operacion_id": operacion_id,
@@ -68,13 +68,13 @@ def agregar_operacion_mbom(
         "notas": notas,
     })
     db.commit()
-    
+
     # Retornar la operación completa
     ops = listar_operaciones_mbom(db, mbom_id)
     for op in ops:
         if op["id"] == result.lastrowid:
             return op
-    
+
     return {"id": result.lastrowid, "mbom_id": mbom_id, "secuencia": secuencia}
 
 
@@ -87,25 +87,25 @@ def actualizar_operacion_mbom(
     """Actualiza una operación en la ruta del MBOM."""
     updates = []
     params = {"id": mbom_operacion_id}
-    
+
     if secuencia is not None:
         updates.append("secuencia = :secuencia")
         params["secuencia"] = secuencia
-    
+
     if notas is not None:
         updates.append("notas = :notas")
         params["notas"] = notas
-    
+
     if not updates:
         return True
-    
+
     update_sql = ", ".join(updates)
     query = text(f"""
-        UPDATE mbom_operacion 
+        UPDATE mbom_operacion
         SET {update_sql}
         WHERE id = :id
     """)
-    
+
     db.execute(query, params)
     db.commit()
     return True
@@ -126,6 +126,6 @@ def obtener_siguiente_secuencia(db: Session, mbom_id: int) -> int:
         FROM mbom_operacion
         WHERE mbom_id = :mbom_id
     """)
-    
+
     row = db.execute(query, {"mbom_id": mbom_id}).fetchone()
     return row.next_seq if row else 10

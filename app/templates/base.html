@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Compras{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/estilos.css" />
+  {% block styles %}{% endblock %}
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
 </head>
 <body>
   <header>
     <h1>Compras</h1>
     <nav>
-      <a href="/ui">Inicio</a>
+      <a href="/ui" class="inicio-verde">Inicio</a>
       <a href="/ui/plan">Plan</a>
       <a href="/ui/stock">Stock</a>
       <a href="/ui/productos">Artículos</a>
@@ -19,7 +20,24 @@
       <a href="/ui/informes/costos-pt">Costos PT</a>
       <a href="/ui/precios">Precios</a>
       <a href="/ui/tipo-cambio">Tipo Cambio</a>
+      <span class="import-dropdown" style="vertical-align:middle;">
+        <button class="btn-accion dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Configuración ▾</button>
+        <div class="dropdown-menu hidden" role="menu">
+          <a class="dropdown-item" href="/ui/admin/usuarios">Admin</a>
+          <a class="dropdown-item" href="/ui/admin/permisos">Permisos</a>
+          <a class="dropdown-item" href="/ui/admin/roles">Roles</a>
+        </div>
+      </span>
     </nav>
+    <div class="header-right">
+      {% set _user = current_user or request.state.current_user %}
+      {% if _user %}
+        <div class="menu-user">Hola, {{ _user.nombre }}</div>
+        <a class="btn-accion" href="/ui/logout">Logout</a>
+      {% else %}
+        <a class="btn-accion" href="/ui/login">Login</a>
+      {% endif %}
+    </div>
     <div class="db-status">
       {% if db_status and db_status.ok == 'true' %}
         <span class="ok">DB: {{ db_status.database }} (OK)</span>
@@ -30,6 +48,14 @@
       {% endif %}
     </div>
   </header>
+    <!-- Modal container para login -->
+    <div id="login-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" id="login-modal-backdrop"></div>
+      <div class="modal-content" id="login-modal-content" role="dialog" aria-modal="true">
+        <button id="login-modal-close" class="btn-ghost" aria-label="Cerrar">✕</button>
+        <div id="login-modal-body"></div>
+      </div>
+    </div>
   <main>
     {% block content %}{% endblock %}
   </main>

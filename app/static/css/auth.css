@@ -1,0 +1,120 @@
+/* auth.css - estilos para la página de login moderno
+   Variables, layout split, inputs con iconos SVG, estados y responsive.
+*/
+:root{
+  --bg-start: #f6f9fc;
+  --bg-end: #eef6ff;
+  --brand-blue: #0B5CAB;
+  --brand-blue-dark: #094C90;
+  --muted-gray: #6B7280;
+  --card-border: #E6EEFB;
+  --card-bg: #ffffff;
+  --accent: #E67E22;
+  --error: #d13636;
+  --text: #0f172a;
+}
+
+/* Layout general */
+.global-font{font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;}
+body{background: linear-gradient(180deg,var(--bg-start),var(--bg-end));-webkit-font-smoothing:antialiased}
+.auth-page, .auth-card, .auth-left, .auth-right, .form-wrap { font-family: var(--auth-font, system-ui); }
+.auth-page{min-height:80vh;display:flex;align-items:center;justify-content:center;padding:28px}
+.auth-card{width:100%;max-width:980px;border-radius:12px;display:grid;grid-template-columns:1fr 1fr;gap:0;box-shadow:0 10px 40px rgba(11,92,171,0.08);background:linear-gradient(180deg,var(--card-bg),#fbfdff);border:1px solid var(--card-border);overflow:hidden;align-items:stretch;transform-origin:center;animation:card-enter .36s cubic-bezier(.2,.9,.2,1) both}
+
+/* Left: Branding */
+.auth-left{padding:48px 44px;background:linear-gradient(180deg,rgba(11,92,171,0.04),transparent);display:flex;flex-direction:column;justify-content:center}
+.brand h1{margin:0;font-size:30px;color:var(--brand-blue);letter-spacing:0.2px;font-weight:700}
+.brand-sub{color:var(--muted-gray);margin-top:8px}
+.brand-bullets{margin-top:22px;padding-left:18px;color:var(--muted-gray);line-height:1.7;margin-bottom:0;opacity:0;transform:translateY(6px);animation:bullets-in .5s ease-out .12s both}
+.brand-bullets li{margin-bottom:10px}
+
+/* Right: Form */
+.auth-right{padding:36px 44px;display:flex;align-items:center}
+.form-wrap{max-width:420px;width:100%;margin:0 auto}
+.auth-form{display:flex;flex-direction:column;gap:14px}
+.auth-message{min-height:1.6em;margin-bottom:10px;color:var(--error);font-size:14px}
+
+/* Improve spacing of inputs */
+.input-group{display:flex;align-items:center;border:1px solid #e6eefb;border-radius:10px;padding:10px 12px;background:transparent;transition:box-shadow .18s,transform .14s,border-color .14s}
+.input-group:focus-within{box-shadow:0 10px 30px rgba(11,92,171,0.08);transform:translateY(-2px);border-color:var(--brand-blue)}
+.input-group input{border:0;outline:0;flex:1;font-size:15px;color:var(--text);background:transparent;padding:8px 4px}
+
+/* subtle input highlight on hover for desktop */
+.input-group:hover{box-shadow:0 6px 20px rgba(11,92,171,0.04)}
+.input-icon{display:inline-flex;align-items:center;justify-content:center;color:var(--muted-gray);margin-right:10px;flex:0 0 28px}
+.input-group input{border:0;outline:0;flex:1;font-size:15px;color:var(--text);background:transparent;padding:8px 4px}
+
+/* Make form actions align neatly */
+.form-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.form-actions{margin-top:6px}
+
+/* smaller headings and text */
+.form-wrap h2{margin:0 0 8px 0;color:var(--text);font-size:18px}
+.muted{color:var(--muted-gray)}
+
+/* ensure error elements have clearance */
+.input-error{color:var(--error);font-size:13px;margin-top:6px;min-height:18px}
+
+/* Responsive: stack columns on small screens */
+@media (max-width:840px){
+  .auth-card{grid-template-columns:1fr;max-width:740px}
+  .auth-left{padding:20px}
+  .auth-right{padding:20px}
+  .form-wrap{max-width:100%;}
+}
+
+/* Input group with icon */
+.input-group{display:flex;align-items:center;border:1px solid #e6eefb;border-radius:10px;padding:10px 12px;background:transparent;transition:box-shadow .14s,transform .12s}
+.input-group.is-invalid{border-color:var(--error)!important}
+.input-group:focus-within{box-shadow:0 6px 20px rgba(11,92,171,0.08);transform:translateY(-1px)}
+.input-icon{display:inline-flex;align-items:center;justify-content:center;color:var(--muted-gray);margin-right:8px}
+.input-group input{border:0;outline:0;flex:1;font-size:15px;color:var(--text);background:transparent}
+
+/* Visually hidden label for accessibility */
+.visually-hidden{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
+
+.form-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.remember{font-size:13px;color:var(--muted-gray)}
+
+.btn-primary{background:var(--brand-blue);color:#fff;border:none;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:700;transition:background .16s,transform .12s,box-shadow .12s}
+.btn-primary:hover{background:var(--brand-blue-dark);transform:translateY(-2px);box-shadow:0 8px 26px rgba(11,92,171,0.12)}
+.btn-primary[disabled]{opacity:.7;cursor:default}
+
+/* Loader inside button */
+.btn-primary.loading{position:relative;color:transparent}
+.btn-primary.loading:after{content:'';position:absolute;inset:6px;border-radius:8px;border:3px solid rgba(255,255,255,0.2);border-top-color:#fff;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@keyframes card-enter{
+  from{opacity:0;transform:translateY(12px) scale(.995)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
+@keyframes bullets-in{
+  from{opacity:0;transform:translateY(6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* Respect user preference for reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .auth-card, .brand-bullets, .input-group, .btn-primary{animation:none;transition:none}
+}
+
+/* Error styles */
+.is-invalid{outline:none}
+.input-error{color:var(--error);font-size:13px;margin-top:6px}
+.input-error{color:var(--error);font-size:13px;margin-top:6px}
+
+/* Responsive: stack columns on small screens */
+@media (max-width:840px){
+  .auth-card{grid-template-columns:1fr;max-width:680px}
+  .auth-left{padding:20px}
+  .auth-right{padding:20px}
+}
+
+/* Dark-friendly adjustments (prefers-color-scheme) */
+@media (prefers-color-scheme: dark){
+  :root{--bg-start:#071026;--bg-end:#071a2b;--card-bg:#071026;--card-border:rgba(255,255,255,0.04);--text:#e6eef8;--muted-gray:#9aa6b2}
+  .auth-card{box-shadow:0 10px 40px rgba(0,0,0,0.6)}
+  .input-group{border-color:rgba(255,255,255,0.04)}
+}

@@ -33,7 +33,7 @@ def main():
         # Ejecutar DROP
         conn.execute(text("DROP TABLE IF EXISTS tipo_cambio_hist"))
         print("✓ Tabla tipo_cambio_hist eliminada (si existía)")
-        
+
         # Ejecutar CREATE
         create_sql = """
         CREATE TABLE tipo_cambio_hist (
@@ -53,7 +53,7 @@ def main():
         """
         conn.execute(text(create_sql))
         print("✓ Tabla tipo_cambio_hist creada exitosamente")
-        
+
         # Verificar
         result = conn.execute(text("SHOW TABLES LIKE 'tipo_cambio_hist'"))
         if result.fetchone():

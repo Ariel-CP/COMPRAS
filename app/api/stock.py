@@ -10,6 +10,7 @@ from ..services.stock_import_service import (
     resumen_stock_periodo,
 )
 from fastapi.responses import FileResponse
+from .deps_auth import require_permission
 
 router = APIRouter()
 
@@ -26,6 +27,8 @@ def descargar_template_xlsx():
     return FileResponse(file_path, filename="template_stock_mensual.xlsx")
 
 
+
+
 @router.post("/{anio}/{mes}/import", response_model=StockImportResult)
 def importar_stock(
     anio: int,
@@ -33,6 +36,7 @@ def importar_stock(
     archivo: UploadFile = File(...),
     fecha_corte: str = Form(..., description="Fecha de corte YYYY-MM-DD"),
     db: Session = Depends(get_db),
+    current_user: dict = Depends(require_permission("stock", True)),
 ):
     if not 1 <= mes <= 12:
         raise HTTPException(
@@ -49,7 +53,8 @@ def listar_stock(
     anio: int,
     mes: int,
     q: str | None = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("stock", False)),
 ):
     if not (1 <= mes <= 12):
         raise HTTPException(

@@ -1,3 +1,24 @@
+/* Color verde para la palabra Inicio con mayor especificidad */
+header nav a.inicio-verde,
+header a.inicio-verde,
+.inicio-verde {
+	color: #28a745 !important;
+	font-weight: bold;
+}
+.btn-guardar {
+	background: #e67e22;
+	color: #fff;
+	border: none;
+	padding: 6px 16px;
+	border-radius: 4px;
+	font-weight: 600;
+	font-size: 15px;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+.btn-guardar:hover {
+	background: #ca6f1e;
+}
 body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;padding:0}
 header{background:#0b5cab;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:16px}
 header nav a{color:#fff;margin-right:12px;text-decoration:none}
@@ -18,6 +39,7 @@ th{background:#f4f6f8;text-align:center;font-weight:600}
 .card{display:block;border:1px solid #ddd;border-radius:6px;padding:12px;background:#fff;text-decoration:none;color:#111}
 .card:hover{border-color:#0b5cab;box-shadow:0 0 0 2px rgba(11,92,171,.1)}
 button{margin-right:8px}
+.acciones-tabla{display:flex;align-items:center;gap:12px;justify-content:flex-start;flex-wrap:nowrap}
 /* Productos layout */
 .productos-wrapper{display:grid;gap:16px}
 .panel{background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:12px}
@@ -26,9 +48,52 @@ button{margin-right:8px}
 .panel-listado table.productos tbody tr.edit-mode{outline:2px solid #0b5cab;background:#eef6ff}
 .btn-accion{background:#0b5cab;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px}
 .btn-accion:hover{background:#094c90}
+/* Login modern */
+.login-wrapper{display:flex;align-items:center;justify-content:center;min-height:68vh;padding:24px}
+.login-card{width:100%;max-width:420px;background:linear-gradient(180deg,#ffffff 0%, #f7fbff 100%);border-radius:12px;padding:28px;border:1px solid #e6eefb;box-shadow:0 6px 20px rgba(11,92,171,0.12)}
+.login-brand{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.login-brand h2{margin:0;color:#0b5cab}
+.login-field{display:flex;flex-direction:column;margin-bottom:12px}
+.login-field label{font-size:13px;color:#334155;margin-bottom:6px}
+.login-field input{padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;font-size:14px}
+.login-input{width:100%;box-sizing:border-box}
+.login-actions{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.login-actions .btn-accion{padding:8px 14px;border-radius:8px;font-size:14px}
+.login-status{font-size:13px;margin-left:8px}
+.login-footer{margin-top:12px;font-size:13px;color:#6b7280;text-align:center}
+/* status styles */
+.ok{color:#0b5cab;font-weight:600}
+.err{color:#b10000;font-weight:600}
+.btn-link-graficos{background:#6f42c1;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600}
+.btn-link-graficos:hover{background:#5a35a0}
 .error-banner{background:#ffecec;color:#b10000;border:1px solid #ffb3b3;padding:6px;margin:8px 0;border-radius:4px}
+.import-dropdown{position:relative;display:inline-block}
+.dropdown-menu{position:absolute;top:100%;left:0;background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:6px 8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:9999;min-width:auto;white-space:nowrap}
+.dropdown-item{display:flex;align-items:center;gap:8px;text-align:left;border:none;background:transparent;padding:6px 8px;border-radius:4px;font-size:13px;cursor:pointer}
+.dropdown-item:hover{background:#f4f6f8}
+.dropdown-menu a, .dropdown-menu .dropdown-item {
+	/* Evitar heredar color blanco del header */
+	color: #111 !important;
+}
+.dropdown-menu {
+	/* Aumentar prioridad visual por si está dentro de header */
+	z-index: 9999;
+}
+.dropdown-toggle {
+	z-index: 10000; /* asegurar que el botón quede por encima */
+}
+.hidden{display:none}
+.item-icon{width:16px;flex:0 0 16px;text-align:center;color:#6f42c1;font-weight:700}
 /* Centrado de la tabla productos */
-table.productos-table th, table.productos-table td { text-align:center; }
+table.productos-table th, table.productos-table td,
+table.striped th, table.striped td,
+#tablaPlanes th, #tablaPlanes td {
+	text-align: center;
+}
+.input-cantidad {text-align: center;}
+.var-icon-cell, .valorVariacion, .var-num {
+	text-align: center;
+}
 /* Scroll contenedor tabla */
 .tabla-scroll { max-height:60vh; overflow-y:auto; border:1px solid #d0d7de; border-radius:6px; }
 .tabla-scroll { overflow-x:auto; }
@@ -38,3 +103,44 @@ table.productos-table th, table.productos-table td { text-align:center; }
 .tabla-scroll table.productos-table thead th { position:sticky; top:0; z-index:2; }
 /* Asegurar ancho completo */
 table.productos-table { width:100%; }
+.input-cantidad{text-align:center}
+.var-cell{display:flex;align-items:center;gap:6px;justify-content:center}
+.var-icon{font-weight:700;font-size:18px;line-height:1;display:inline-flex;align-items:center;justify-content:center;}
+.var-up svg{color:#1f9c4d;fill:#1f9c4d}
+.var-down svg{color:#d63626;fill:#d63626}
+.var-equal svg{color:#b8860b;fill:#b8860b}
+.var-neutral svg{color:#6c757d;fill:#6c757d}
+.var-num{white-space:nowrap}
+.var-up{color:#1f9c4d}
+.var-down{color:#d63626}
+.var-equal{color:#b8860b}
+.var-neutral{color:#6c757d}
+
+/* Sesiones UI */
+.sessions-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.sessions-count{font-weight:600;color:#0b5cab}
+.sessions-actions{margin-left:auto;display:flex;gap:8px}
+.sessions-table thead th{background:#fbfcfe}
+.sessions-table td{font-size:13px}
+.truncate{max-width:360px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.chip{display:inline-block;padding:4px 8px;border-radius:999px;background:#f1f5f9;color:#0b5cab;font-weight:600;font-size:12px}
+.btn-danger{background:#d13636;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px}
+.btn-danger:hover{background:#b02b2b}
+.btn-ghost{background:transparent;border:1px solid #d0d7de;padding:6px 10px;border-radius:6px;cursor:pointer}
+.muted{color:#6b7280;font-size:13px}
+.current-session{outline:2px solid rgba(11,92,171,0.12);background:#f0f7ff}
+.small{font-size:12px}
+
+@media (max-width: 880px) {
+	.truncate{max-width:160px}
+	.sessions-actions{display:flex;flex-direction:column;align-items:flex-end}
+}
+
+/* Modal login */
+.modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1200}
+.modal.hidden{display:none}
+.modal-backdrop{position:absolute;inset:0;background:rgba(2,6,23,0.45)}
+.modal-content{position:relative;background:transparent;border-radius:10px;z-index:1201;width:100%;max-width:520px;padding:18px}
+.modal-card{box-shadow:0 6px 30px rgba(11,92,171,0.18);background:linear-gradient(180deg,#fff 0%, #f7fbff 100%);border-radius:12px;padding:20px;border:1px solid #e6eefb}
+.modal-card .login-brand{margin-bottom:6px}
+#login-modal-close{position:absolute;right:6px;top:6px}

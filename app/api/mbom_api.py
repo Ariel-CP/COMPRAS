@@ -29,6 +29,7 @@ from ..services.unidad_service import listar_unidades
 
 
 router = APIRouter()
+from .deps_auth import require_permission
 
 
 @router.get("/mbom/cabecera", response_model=Optional[MBOMCabecera])
@@ -36,6 +37,7 @@ def api_get_cabecera(
     producto_padre_id: int = Query(..., description="ID de producto padre"),
     preferir: str = Query("ACTIVO", description="ACTIVO|BORRADOR|ARCHIVADO"),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", False)),
 ):
     cab = mbom_service.get_cabecera_preferida(db, producto_padre_id, preferir)
     return cab
@@ -46,6 +48,7 @@ def api_get_estructura(
     producto_padre_id: int,
     estado: str = Query("ACTIVO", description="ACTIVO|BORRADOR (preferido)"),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", False)),
 ):
     cab = mbom_service.get_cabecera_preferida(db, producto_padre_id, estado)
     if not cab:
@@ -63,6 +66,7 @@ def api_get_estructura_completa(
     producto_padre_id: int,
     estado: str = Query("BORRADOR", description="ACTIVO|BORRADOR (preferido)"),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", False)),
 ):
     """
     Devuelve estructura MBOM completa con todos los niveles anidados.
@@ -103,6 +107,7 @@ def api_post_estructura(
     producto_padre_id: int,
     payload: MBOMGuardarPayload,
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", True)),
 ):
     cab = mbom_service.obtener_o_crear_borrador(db, producto_padre_id)
     mbom_id = int(cab["id"])  # type: ignore[index]
@@ -131,6 +136,7 @@ def api_put_estructura(
     mbom_id: int,
     payload: MBOMGuardarPayload,
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", True)),
 ):
     cab = mbom_service.get_cabecera_por_id(db, mbom_id)
     if not cab:
@@ -168,7 +174,7 @@ def api_put_estructura(
 
 
 @router.delete("/mbom/detalle/{detalle_id}")
-def api_delete_detalle(detalle_id: int, db: Session = Depends(get_db)):
+def api_delete_detalle(detalle_id: int, db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
     mbom_service.borrar_linea(db, detalle_id)
     return {"ok": True}
 
@@ -189,6 +195,7 @@ def api_importar_flexxus(
     producto_padre_id: int,
     archivo: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", True)),
 ):
     return importar_mbom_desde_flexxus(db, producto_padre_id, archivo)
 
@@ -203,6 +210,7 @@ def api_crear_demo_mbom(
         ),
     ),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", True)),
 ):
     """Crear (si no existe) producto padre PT + MBOM BORRADOR demo."""
     codigo = codigo.strip().upper()
@@ -229,6 +237,7 @@ def api_crear_demo_mbom(
                 codigo=codigo,
                 nombre=f"Producto {codigo}",
                 tipo_producto="PT",
+                rubro=None,
                 unidad_medida_id=um_id,
                 activo=True,
             )
@@ -289,7 +298,7 @@ def api_crear_demo_mbom(
 
 
 @router.post("/mbom/{mbom_id}/activar", response_model=MBOMEstructura)
-def api_activar_revision(mbom_id: int, db: Session = Depends(get_db)):
+def api_activar_revision(mbom_id: int, db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
     """Activar la revisión indicada y devolver estructura completa."""
     cab = mbom_service.get_cabecera_por_id(db, mbom_id)
     if not cab:
@@ -303,7 +312,7 @@ def api_activar_revision(mbom_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/mbom/{mbom_id}/clonar", response_model=MBOMEstructura)
-def api_clonar_revision(mbom_id: int, db: Session = Depends(get_db)):
+def api_clonar_revision(mbom_id: int, db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
     """Clonar revisión existente a nueva BORRADOR (incrementa revision)."""
     cab = mbom_service.get_cabecera_por_id(db, mbom_id)
     if not cab:
@@ -317,7 +326,7 @@ def api_clonar_revision(mbom_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/mbom/limpiar-todo")
-def api_limpiar_mbom_test(db: Session = Depends(get_db)):
+def api_limpiar_mbom_test(db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
     """
     PELIGRO: Elimina TODAS las estructuras MBOM de la base de datos.
     Solo para desarrollo/testing. NO usar en producción.
@@ -328,14 +337,14 @@ def api_limpiar_mbom_test(db: Session = Depends(get_db)):
         # Eliminar todos los encabezados
         db.execute(text("DELETE FROM mbom_cabecera"))
         db.commit()
-        
+
         count_det = db.execute(
             text("SELECT COUNT(*) as c FROM mbom_detalle")
         ).scalar()
         count_cab = db.execute(
             text("SELECT COUNT(*) as c FROM mbom_cabecera")
         ).scalar()
-        
+
         return {
             "mensaje": "MBOMs eliminadas",
             "mbom_detalle": count_det,
@@ -350,7 +359,7 @@ def api_limpiar_mbom_test(db: Session = Depends(get_db)):
 
 
 @router.post("/productos/corregir-tipos-30")
-def api_corregir_tipos_productos_30(db: Session = Depends(get_db)):
+def api_corregir_tipos_productos_30(db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
     """
     Actualiza todos los productos que empiezan con '30' a tipo WIP.
     Útil para corregir productos creados antes de implementar
@@ -364,7 +373,7 @@ def api_corregir_tipos_productos_30(db: Session = Depends(get_db)):
             )
         )
         db.commit()
-        
+
         count = db.execute(
             text(
                 "SELECT COUNT(*) as c FROM producto "
@@ -516,7 +525,7 @@ def api_agregar_operacion_mbom(
     """Agrega una operación a la ruta del MBOM."""
     if secuencia is None:
         secuencia = obtener_siguiente_secuencia(db, mbom_id)
-    
+
     try:
         return agregar_operacion_mbom(
             db=db,

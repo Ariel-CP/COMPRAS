@@ -4,8 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.db import _engine
-from sqlalchemy import text
+from app.db import _engine  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 with _engine.connect() as conn:
     result = conn.execute(text("SELECT * FROM tipo_cambio_hist LIMIT 3"))

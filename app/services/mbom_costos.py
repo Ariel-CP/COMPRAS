@@ -14,7 +14,7 @@ from app.services.tipo_cambio_service import (
 
 BASE_MONEDA = "USD"
 ALERTA_MSG = (
-    "Algunas líneas fueron convertidas con tasa estimada; "
+    "Algunas lÃ­neas fueron convertidas con tasa estimada; "
     "verifique tipo de cambio."
 )
 
@@ -63,7 +63,7 @@ def _convertir_base_a_ars(
     valor_base: float,
     moneda_base: str,
 ) -> Dict[str, Any]:
-    """Convierte el valor base a ARS usando la tasa vigente más cercana."""
+    """Convierte el valor base a ARS usando la tasa vigente mÃ¡s cercana."""
 
     if moneda_base == "ARS":
         return {
@@ -185,7 +185,7 @@ def _get_costo_vigente(
                 memo_costos[producto_id] = data
                 return data
 
-            # USD_MAY: convertir a ARS usando tasa histórica, luego a USD base
+            # USD_MAY: convertir a ARS usando tasa histÃ³rica, luego a USD base
             if moneda_origen == "USD_MAY":
                 tasa_hist = obtener_tasa_cercana_flexible(
                     db,
@@ -193,9 +193,9 @@ def _get_costo_vigente(
                     fecha_precio,
                 )
                 if tasa_hist and tasa_hist.get("tasa"):
-                    # Convertir USD_MAY a ARS histórico
+                    # Convertir USD_MAY a ARS histÃ³rico
                     ars_hist = valor_origen * float(tasa_hist["tasa"])
-                    # Convertir ARS histórico a USD base
+                    # Convertir ARS histÃ³rico a USD base
                     conversion = _convertir_ars_a_usd(
                         db,
                         ars_hist,
@@ -233,7 +233,7 @@ def _get_costo_vigente(
                     }
                     memo_costos[producto_id] = data
                     return data
-                # Sin tasa histórica para USD_MAY
+                # Sin tasa histÃ³rica para USD_MAY
                 data = {
                     "valor_base": valor_origen,
                     "moneda_base": moneda_origen,
@@ -247,7 +247,7 @@ def _get_costo_vigente(
                 memo_costos[producto_id] = data
                 return data
 
-            # Otras monedas (EUR, etc.): convertir a USD estándar
+            # Otras monedas (EUR, etc.): convertir a USD estÃ¡ndar
             if moneda_origen != BASE_MONEDA:
                 tasa_hist = obtener_tasa_cercana(
                     db,
@@ -256,7 +256,7 @@ def _get_costo_vigente(
                     "PROMEDIO",
                 )
                 if tasa_hist and tasa_hist.get("tasa"):
-                    # Convertir a ARS histórico y luego a USD
+                    # Convertir a ARS histÃ³rico y luego a USD
                     ars_hist = valor_origen * float(tasa_hist["tasa"])
                     conversion = _convertir_ars_a_usd(
                         db,
@@ -294,7 +294,7 @@ def _get_costo_vigente(
                     }
                     memo_costos[producto_id] = data
                     return data
-                # Sin tasa histórica para USD_MAY u otras monedas
+                # Sin tasa histÃ³rica para USD_MAY u otras monedas
                 data = {
                     "valor_base": valor_origen,
                     "moneda_base": moneda_origen,
@@ -308,7 +308,7 @@ def _get_costo_vigente(
                 memo_costos[producto_id] = data
                 return data
 
-            # USD estándar
+            # USD estÃ¡ndar
             data = {
                 "valor_base": valor_origen,
                 "moneda_base": moneda_origen,
@@ -351,11 +351,11 @@ def _get_costo_vigente(
 def calcular_costos(db: Session, mbom_id: int) -> Dict[str, Any]:
     """
     Calcula costos completos del MBOM: materiales + procesos.
-    Retorna estructura discriminada con totales por categoría.
+    Retorna estructura discriminada con totales por categorÃ­a.
     """
     memo_costos: Dict[int, Dict[str, Any]] = {}
     en_stack: Set[int] = set()
-    
+
     # Costos de materiales
     resultado_mat = _calcular_costos_internal(
         db,
@@ -363,15 +363,15 @@ def calcular_costos(db: Session, mbom_id: int) -> Dict[str, Any]:
         memo_costos,
         en_stack,
     )
-    
+
     # Costos de procesos
     resultado_proc = _calcular_costos_procesos(db, mbom_id)
-    
+
     # Totales
     total_materiales = resultado_mat["total"]
     total_procesos = resultado_proc["total"]
     total_general = total_materiales + total_procesos
-    
+
     # Porcentajes
     if total_general > 0:
         pct_mat = (total_materiales / total_general * 100)
@@ -379,9 +379,9 @@ def calcular_costos(db: Session, mbom_id: int) -> Dict[str, Any]:
     else:
         pct_mat = 0
         pct_proc = 0
-    
+
     alerta_fx = resultado_mat["alerta_fx"]
-    
+
     return {
         "mbom_id": mbom_id,
         "materiales": {
@@ -401,7 +401,7 @@ def calcular_costos(db: Session, mbom_id: int) -> Dict[str, Any]:
         },
         "alerta_fx": alerta_fx,
         "detalle_alerta": ALERTA_MSG if alerta_fx else None,
-        # Mantener compatibilidad con código anterior
+        # Mantener compatibilidad con cÃ³digo anterior
         "componentes": resultado_mat["componentes"],
     }
 
@@ -541,9 +541,9 @@ def _calcular_costos_procesos(
     """
     operaciones: List[Dict[str, Any]] = []
     total = 0.0
-    
+
     query = text("""
-        SELECT 
+        SELECT
             mo.secuencia,
             o.codigo,
             o.nombre,
@@ -556,25 +556,25 @@ def _calcular_costos_procesos(
         WHERE mo.mbom_id = :mbom_id
         ORDER BY mo.secuencia
     """)
-    
+
     rows = db.execute(query, {"mbom_id": mbom_id}).fetchall()
-    
+
     for r in rows:
         tiempo_min = float(r.tiempo_estandar_minutos or 0)
         costo_hora_orig = float(r.costo_hora or 0)
         moneda_orig = r.moneda or "ARS"
-        
+
         # Calcular costo en moneda original
         costo_op_orig = (tiempo_min / 60.0) * costo_hora_orig
-        
+
         # Convertir a ARS si es necesario
         if moneda_orig == "ARS":
             costo_ars = costo_op_orig
         else:
-            # Usar tasa actual para conversión
+            # Usar tasa actual para conversiÃ³n
             conv = _convertir_base_a_ars(db, costo_op_orig, moneda_orig)
             costo_ars = conv["valor_ars"]
-        
+
         operaciones.append({
             "secuencia": r.secuencia,
             "codigo": r.codigo,
@@ -586,9 +586,8 @@ def _calcular_costos_procesos(
             "subtotal": costo_ars,
         })
         total += costo_ars
-    
+
     return {
         "operaciones": operaciones,
         "total": total,
     }
-

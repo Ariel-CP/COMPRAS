@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Login - Compras{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', path='css/auth.css') }}">
+{% endblock %}
+
+{% block content %}
+<main class="auth-page">
+  <section class="auth-card" role="main" aria-labelledby="auth-title">
+    <div class="auth-left">
+      <div class="brand">
+        <h1 id="auth-title">Compras</h1>
+        <p class="brand-sub">Planificación • Compras • Control</p>
+        <ul class="brand-bullets">
+          <li>Visibilidad de stocks y plan</li>
+          <li>Historial de precios</li>
+          <li>Recomendaciones de compra</li>
+        </ul>
+      </div>
+    </div>
+    <div class="auth-right">
+      <div class="form-wrap">
+        <h2 class="muted">Accede a tu cuenta</h2>
+        <div id="auth-message" class="auth-message" aria-live="polite"></div>
+        <form id="auth-form" class="auth-form" novalidate>
+          <label for="username" class="visually-hidden">Usuario</label>
+          <div class="input-group" id="grp-username">
+            <span class="input-icon" aria-hidden="true"><!-- svg user icon -->
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM3 21a9 9 0 0 1 18 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <input id="username" name="username" type="text" autocomplete="username" placeholder="Usuario o email" required aria-describedby="username-error" />
+          </div>
+          <div class="input-error" id="username-error" aria-live="polite"></div>
+          </div>
+
+          <label for="password" class="visually-hidden">Contraseña</label>
+          <div class="input-group" id="grp-password">
+            <span class="input-icon" aria-hidden="true"> <!-- svg lock icon -->
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Contraseña" required aria-describedby="password-error" />
+          </div>
+          <div class="input-error" id="password-error" aria-live="polite"></div>
+          </div>
+
+          <div class="form-row form-actions">
+            <label class="remember"><input type="checkbox" name="remember_me" id="remember_me" /> Recuérdame</label>
+            <button id="auth-submit" class="btn-primary" type="submit">Ingresar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', path='js/auth.js') }}" defer></script>
+{% endblock %}

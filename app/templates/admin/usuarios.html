@@ -1,0 +1,258 @@
+{% extends "base.html" %} {% block title %}Admin Usuarios{% endblock %} {% block
+content %}
+<section class="productos-wrapper">
+  <h2>Administración de usuarios</h2>
+
+  <div class="panel panel-alta">
+    <h3>Nuevo usuario</h3>
+    <form
+      id="form-nuevo"
+      class="form-alta"
+      onsubmit="return crearUsuario(event);"
+    >
+      <input required type="email" name="email" placeholder="Email" />
+      <input required name="nombre" placeholder="Nombre" maxlength="128" />
+      <input
+        required
+        type="password"
+        name="password"
+        placeholder="Contraseña"
+        minlength="6"
+      />
+      <label><input type="checkbox" name="activo" checked /> Activo</label>
+      <div class="roles-box">
+        {% for r in roles %}
+        <label
+          ><input type="checkbox" name="roles" value="{{ r.nombre }}" /> {{
+          r.nombre }}</label
+        >
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn-accion">Crear</button>
+      <span id="nuevo-status" class="hint"></span>
+    </form>
+  </div>
+
+  <div class="panel panel-listado">
+    <div class="tabla-controles">
+      <input type="text" id="filtro" placeholder="Buscar email o nombre" />
+      <select id="filtro-activo">
+        <option value="">Todos</option>
+        <option value="true">Activos</option>
+        <option value="false">Inactivos</option>
+      </select>
+      <button class="btn-accion" type="button" onclick="filtrar()">
+        Filtrar
+      </button>
+    </div>
+    <div class="tabla-scroll">
+      <table class="productos-table table-center" id="tablaUsuarios">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Nombre</th>
+            <th>Roles</th>
+            <th>Activo</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+  const rolesCatalogo = {{ roles|tojson }};
+  let usuarios = {{ usuarios|tojson }};
+
+  function renderTabla(data){
+    const tbody = document.querySelector('#tablaUsuarios tbody');
+    tbody.innerHTML = '';
+    data.forEach(u => {
+      const tr = document.createElement('tr');
+      tr.dataset.id = u.id;
+      tr.dataset.email = u.email;
+      tr.dataset.nombre = u.nombre;
+      tr.dataset.activo = u.activo ? 'true' : 'false';
+      tr.dataset.roles = JSON.stringify(u.roles || []);
+      tr.innerHTML = `
+        <td>${u.email}</td>
+        <td>${u.nombre}</td>
+        <td>${(u.roles || []).join(', ') || '—'}</td>
+        <td>${u.activo ? 'Sí' : 'No'}</td>
+        <td class="acciones-tabla">
+          <button class="btn-accion" type="button" onclick="editarFila(this)">Editar</button>
+          <button class="btn-accion" type="button" onclick="resetPassword(this)">Reset pass</button>
+          <button class="btn-accion" type="button" onclick="desactivar(this)">Desactivar</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function rolesCheckboxes(selected){
+    const set = new Set(selected || []);
+    return rolesCatalogo.map(r => {
+      const checked = set.has(r.nombre) ? 'checked' : '';
+      return `<label><input type="checkbox" name="roles" value="${r.nombre}" ${checked}/> ${r.nombre}</label>`;
+    }).join(' ');
+  }
+
+  async function crearUsuario(ev){
+    ev.preventDefault();
+    const statusEl = document.getElementById('nuevo-status');
+    statusEl.textContent = 'Creando...';
+    const fd = new FormData(ev.target);
+    const roles = fd.getAll('roles');
+    const payload = {
+      email: fd.get('email'),
+      nombre: fd.get('nombre'),
+      password: fd.get('password'),
+      activo: fd.get('activo') === 'on',
+      roles,
+    };
+    const res = await fetch('/api/users/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      statusEl.textContent = err.detail || 'Error';
+      statusEl.className = 'err';
+      return false;
+    }
+    const nuevo = await res.json();
+    usuarios.unshift(nuevo);
+    renderTabla(usuarios);
+    ev.target.reset();
+    statusEl.textContent = 'Creado';
+    statusEl.className = 'ok';
+    return false;
+  }
+
+  function editarFila(btn){
+    const tr = btn.closest('tr');
+    if(tr.classList.contains('edit-mode')) return;
+    tr.classList.add('edit-mode');
+    const nombre = tr.dataset.nombre;
+    const rolesSel = JSON.parse(tr.dataset.roles || '[]');
+    const activo = tr.dataset.activo === 'true';
+    tr.children[1].innerHTML = `<input name="nombre" value="${escapeHtml(nombre)}" />`;
+    tr.children[2].innerHTML = `<div class="roles-box">${rolesCheckboxes(rolesSel)}</div>`;
+    tr.children[3].innerHTML = `<label><input type="checkbox" name="activo" ${activo?'checked':''}/> Activo</label>`;
+    tr.children[4].innerHTML = `
+      <button class="btn-accion" type="button" onclick="guardarFila(this)">Guardar</button>
+      <button class="btn-accion" type="button" onclick="cancelarFila(this)">Cancelar</button>
+    `;
+  }
+
+  async function guardarFila(btn){
+    const tr = btn.closest('tr');
+    const id = tr.dataset.id;
+    const nombre = tr.querySelector('input[name="nombre"]').value.trim();
+    const roles = Array.from(tr.querySelectorAll('input[name="roles"]:checked')).map(el=>el.value);
+    const activo = tr.querySelector('input[name="activo"]').checked;
+    const payload = { nombre, roles, activo };
+    const res = await fetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      alert(err.detail || 'Error guardando');
+      return;
+    }
+    const actualizado = await res.json();
+    const idx = usuarios.findIndex(u=>u.id===actualizado.id);
+    if(idx>=0) usuarios[idx] = actualizado;
+    tr.dataset.nombre = actualizado.nombre;
+    tr.dataset.roles = JSON.stringify(actualizado.roles || []);
+    tr.dataset.activo = actualizado.activo ? 'true':'false';
+    tr.children[0].textContent = actualizado.email;
+    tr.children[1].textContent = actualizado.nombre;
+    tr.children[2].textContent = (actualizado.roles || []).join(', ') || '—';
+    tr.children[3].textContent = actualizado.activo ? 'Sí' : 'No';
+    tr.children[4].innerHTML = `
+      <button class="btn-accion" type="button" onclick="editarFila(this)">Editar</button>
+      <button class="btn-accion" type="button" onclick="resetPassword(this)">Reset pass</button>
+      <button class="btn-accion" type="button" onclick="desactivar(this)">Desactivar</button>
+    `;
+    tr.classList.remove('edit-mode');
+  }
+
+  function cancelarFila(btn){
+    const tr = btn.closest('tr');
+    const nombre = tr.dataset.nombre;
+    const roles = JSON.parse(tr.dataset.roles || '[]');
+    const activo = tr.dataset.activo === 'true';
+    tr.children[1].textContent = nombre;
+    tr.children[2].textContent = roles.join(', ') || '—';
+    tr.children[3].textContent = activo ? 'Sí' : 'No';
+    tr.children[4].innerHTML = `
+      <button class="btn-accion" type="button" onclick="editarFila(this)">Editar</button>
+      <button class="btn-accion" type="button" onclick="resetPassword(this)">Reset pass</button>
+      <button class="btn-accion" type="button" onclick="desactivar(this)">Desactivar</button>
+    `;
+    tr.classList.remove('edit-mode');
+  }
+
+  async function resetPassword(btn){
+    const tr = btn.closest('tr');
+    const id = tr.dataset.id;
+    const email = tr.dataset.email;
+    const nuevo = prompt(`Nueva contraseña para ${email}`);
+    if(!nuevo) return;
+    const res = await fetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: nuevo })
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      alert(err.detail || 'Error al cambiar contraseña');
+    } else {
+      alert('Contraseña actualizada');
+    }
+  }
+
+  async function desactivar(btn){
+    const tr = btn.closest('tr');
+    const id = tr.dataset.id;
+    if(!confirm('¿Desactivar usuario?')) return;
+    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      alert(err.detail || 'Error');
+      return;
+    }
+    const idx = usuarios.findIndex(u=>u.id==id);
+    if(idx>=0) usuarios[idx].activo = false;
+    tr.dataset.activo = 'false';
+    tr.children[3].textContent = 'No';
+  }
+
+  async function filtrar(){
+    const q = document.getElementById('filtro').value.trim();
+    const activo = document.getElementById('filtro-activo').value;
+    const params = new URLSearchParams();
+    if(q) params.set('q', q);
+    if(activo) params.set('activo', activo);
+    const res = await fetch('/api/users/?' + params.toString());
+    if(!res.ok){
+      alert('Error obteniendo usuarios');
+      return;
+    }
+    usuarios = await res.json();
+    renderTabla(usuarios);
+  }
+
+  function escapeHtml(str){
+    return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
+  }
+
+  renderTabla(usuarios);
+</script>
+{% endblock %}

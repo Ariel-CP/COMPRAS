@@ -16,6 +16,10 @@ class Settings:
     mysql_pool_size: int = 10
     mysql_max_overflow: int = 10
     max_upload_mb: int = 10
+    auth_secret_key: str = "change-me"
+    auth_access_token_minutes: int = 120
+    auth_cookie_secure: bool = False
+    auth_remember_days: int = 30
     # 'anthropic' | 'openai' | 'azure-openai'
     ai_provider: Optional[str] = None
     openai_api_key: Optional[str] = None
@@ -73,6 +77,30 @@ def get_settings() -> Settings:
         os.environ.get("MAX_UPLOAD_MB", cfg.get("max_upload_mb", 10))
     )
 
+    auth_secret_key = (
+        os.environ.get("AUTH_SECRET_KEY")
+        or cfg.get("auth_secret_key")
+        or "dev-secret-change-me"
+    )
+    auth_access_token_minutes = int(
+        os.environ.get(
+            "AUTH_ACCESS_TOKEN_MINUTES",
+            cfg.get("auth_access_token_minutes", 120),
+        )
+    )
+    auth_cookie_secure = bool(
+        str(os.environ.get(
+            "AUTH_COOKIE_SECURE",
+            cfg.get("auth_cookie_secure", False),
+        )).lower()
+        in ("1", "true", "yes")
+    )
+
+    # Forzar cookie secure en entornos de producción si no fue explícitamente seteado
+    env_name = os.environ.get("ENV", os.environ.get("ENVIRONMENT", "")).lower()
+    if not os.environ.get("AUTH_COOKIE_SECURE") and env_name == "production":
+        auth_cookie_secure = True
+
     ai_provider = os.environ.get("AI_PROVIDER") or cfg.get("ai_provider")
 
     openai_api_key = (
@@ -92,12 +120,17 @@ def get_settings() -> Settings:
         or cfg.get("bcra_api_base_url")
         or "https://api.estadisticasbcra.com"
     )
-    bcra_api_token = os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
+    bcra_api_token = (
+        os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
+    )
     bcra_sync_days = int(
         os.environ.get("BCRA_SYNC_DAYS", cfg.get("bcra_sync_days", 5))
     )
     sync_job_token = (
         os.environ.get("SYNC_JOB_TOKEN") or cfg.get("sync_job_token")
+    )
+    auth_remember_days = int(
+        os.environ.get("AUTH_REMEMBER_DAYS", cfg.get("auth_remember_days", 30))
     )
 
     return Settings(
@@ -105,6 +138,10 @@ def get_settings() -> Settings:
         mysql_pool_size=mysql_pool_size,
         mysql_max_overflow=mysql_max_overflow,
         max_upload_mb=max_upload_mb,
+        auth_secret_key=auth_secret_key,
+        auth_access_token_minutes=auth_access_token_minutes,
+        auth_cookie_secure=auth_cookie_secure,
+        auth_remember_days=auth_remember_days,
         ai_provider=ai_provider,
         openai_api_key=openai_api_key,
         openai_model=openai_model,

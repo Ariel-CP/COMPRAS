@@ -253,7 +253,6 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Mensajes persistentes y seleccionables para operaciones y costos
 - Resaltado automático en amarillo de materiales sin costo cargado
 
-
 ## Avances recientes
 
 ### Diciembre 2025
@@ -272,6 +271,7 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - **Documentación**: actualización de este README y plantillas de importación.
 
 ### Anteriores
+
 - Integración de IA (OpenAI) para generación de reportes y análisis automáticos.
 - Importación de stock y precios desde ERP Flexxus (CSV/Excel).
 - Limpieza de archivos y refactorización de servicios no utilizados.
@@ -321,3 +321,57 @@ Documentar cambios relevantes en este README y mantener sincronizados los script
 
 **Última actualización:** 8 de diciembre de 2025  
 **Versión:** 0.3.0 - Plan de Producción Mensual editable, importación/exportación masiva y análisis de variación
+
+## Cambios recientes (13 de febrero de 2026)
+
+Resumen de cambios aplicados en esta sesión de desarrollo:
+
+- Autenticación y autorización:
+  - Añadido soporte para usuarios, roles, sesiones y permisos por formulario.
+  - Endpoints: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`.
+  - Script de semilla: `scripts/seed_admin.py` para crear usuario administrador y permisos iniciales.
+  - Archivo de migración inicial para auth (ver `database/migrations/`).
+
+- Protección de endpoints (guards):
+  - Se aplicó la dependencia `require_permission` en routers clave para forzar permisos por formulario:
+    - `app/api/stock.py`, `app/api/precios.py`, `app/api/tipo_cambio.py`, `app/api/unidades.py`, `app/api/mbom_api.py`, `app/api/informes.py`, `app/api/plan.py`.
+
+- Frontend / UX:
+  - Plantilla de login actualizada en `app/templates/auth/login.html` para mostrar mensajes de error legibles (evita "[object Object]").
+
+- Servicios y utilidades:
+  - Nuevo servicio de autenticación en `app/services/auth_service.py` (hashing, JWT, sesiones).
+  - Dependencias y esquemas añadidos en `app/schemas` y `app/api/deps_auth.py`.
+
+- Dependencias:
+  - Actualizado `requirements.txt` para incluir `passlib[bcrypt]`, `PyJWT`, `email-validator` y mantener compatibilidad con `bcrypt`.
+
+Archivos modificados (ejemplos):
+
+- `app/templates/auth/login.html`
+- `app/api/deps_auth.py`
+- `app/services/auth_service.py`
+- `app/api/auth.py`
+- `scripts/seed_admin.py`
+- `app/api/stock.py`, `app/api/precios.py`, `app/api/tipo_cambio.py`, `app/api/unidades.py`, `app/api/mbom_api.py`, `app/api/informes.py`, `app/api/plan.py`
+
+Comandos rápidos para probar localmente:
+
+```powershell
+# (desde la raíz del proyecto, con venv activado)
+python scripts/seed_admin.py --email admin@example.com --password admin123 --nombre "Admin"
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# Probar login (dev):
+curl -i -c cookies.txt -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"admin123"}' http://127.0.0.1:8000/api/auth/login
+
+# Probar endpoint protegido usando la cookie recibida:
+curl -b cookies.txt http://127.0.0.1:8000/api/stock/2025/01
+```
+
+Notas y recomendaciones:
+
+- Asegúrate de aplicar las migraciones SQL que crean las tablas de `usuario`, `rol`, `usuario_rol`, `permiso_form` antes de ejecutar el `seed_admin.py`.
+- Reinicia `uvicorn` cuando actualices plantillas para evitar caché de reloader en algunos entornos.
+- Considerar agregar CSRF y rate-limiting para endpoints de autenticación y de importación de archivos en producción.
+

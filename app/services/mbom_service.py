@@ -400,14 +400,14 @@ def obtener_estructura_completa_recursiva(
     """
     if visitados is None:
         visitados = set()
-    
+
     # Evitar ciclos
     if producto_id in visitados:
         return []
     visitados.add(producto_id)
-    
-    resultado = []
-    
+
+    resultado: List[Dict[str, Any]] = []
+
     # Buscar MBOM para este producto
     cab = get_cabecera_preferida(db, producto_id, estado)
     if not cab:
@@ -415,27 +415,27 @@ def obtener_estructura_completa_recursiva(
         cab = get_cabecera_preferida(
             db, producto_id, "ACTIVO" if estado == "BORRADOR" else "BORRADOR"
         )
-    
+
     if not cab:
         return resultado
-    
+
     # Obtener líneas de este nivel
     lineas = listar_lineas(db, int(cab["id"]))
-    
+
     for linea in lineas:
         # Agregar línea actual con nivel
         linea_con_nivel = dict(linea)
         linea_con_nivel["nivel"] = nivel
         resultado.append(linea_con_nivel)
-        
+
         # Si es WIP o PT, expandir recursivamente
         tipo = linea.get("componente_tipo_producto")
         comp_id = linea.get("componente_producto_id")
-        
+
         if tipo in ("WIP", "PT") and comp_id:
             sub_lineas = obtener_estructura_completa_recursiva(
                 db, comp_id, estado, nivel + 1, visitados
             )
             resultado.extend(sub_lineas)
-    
+
     return resultado

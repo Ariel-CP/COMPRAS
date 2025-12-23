@@ -1,9 +1,12 @@
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from .deps_auth import require_permission
 from ..schemas.producto import ProductoIn, ProductoOut
 from ..services.producto_service import (
     listar_productos,
@@ -20,10 +23,12 @@ router = APIRouter()
 def api_listar_productos(
     q: Optional[str] = Query(default=None),
     tipo: Optional[str] = Query(default=None),
+    rubro: Optional[str] = Query(default=None),
     activo: Optional[str] = Query(default=None, description="true|false"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("productos", False)),
 ):
     # Normalizar activo: '', None -> None; true/1 -> True; false/0 -> False
     activo_val: Optional[bool]
@@ -45,6 +50,7 @@ def api_listar_productos(
             db,
             q=q,
             tipo=tipo,
+            rubro=rubro,
             activo=activo_val,
             limit=limit,
             offset=offset,
@@ -61,6 +67,7 @@ def api_listar_productos(
 
 @router.get("/{prod_id}", response_model=ProductoOut)
 def api_get_producto(prod_id: int, db: Session = Depends(get_db)):
+    current_user=Depends(require_permission("productos", False)),
     try:
         prod = get_producto(db, prod_id)
         if not prod:
@@ -80,12 +87,14 @@ def api_get_producto(prod_id: int, db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
 )
 def api_crear_producto(payload: ProductoIn, db: Session = Depends(get_db)):
+    current_user=Depends(require_permission("productos", True)),
     try:
         return crear_producto(
             db,
             codigo=payload.codigo,
             nombre=payload.nombre,
             tipo_producto=payload.tipo_producto,
+            rubro=payload.rubro,
             unidad_medida_id=payload.unidad_medida_id,
             activo=payload.activo,
         )
@@ -104,6 +113,7 @@ def api_actualizar_producto(
     prod_id: int,
     payload: ProductoIn,
     db: Session = Depends(get_db),
+    current_user=Depends(require_permission("productos", True)),
 ):
     try:
         return actualizar_producto(
@@ -112,6 +122,7 @@ def api_actualizar_producto(
             codigo=payload.codigo,
             nombre=payload.nombre,
             tipo_producto=payload.tipo_producto,
+            rubro=payload.rubro,
             unidad_medida_id=payload.unidad_medida_id,
             activo=payload.activo,
         )
@@ -126,7 +137,11 @@ def api_actualizar_producto(
 
 
 @router.get("/pt-activos", response_model=list)
-def listar_pt_activos(q: Optional[str] = Query(None), db: Session = Depends(get_db)):
+def listar_pt_activos(
+    q: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("productos", False)),
+):
     sql = """
         SELECT id, codigo, nombre FROM producto
         WHERE tipo_producto = 'PT' AND activo = 1
@@ -134,10 +149,10 @@ def listar_pt_activos(q: Optional[str] = Query(None), db: Session = Depends(get_
         ORDER BY nombre ASC
     """
     params = {}
-    filtro = ''
+    filtro = ""
     if q:
         filtro = "AND (codigo LIKE :q OR nombre LIKE :q)"
-        params['q'] = f"%{q}%"
+        params["q"] = f"%{q}%"
     sql = sql.format(filtro=filtro)
-    rows = db.execute(sql, params).fetchall()
+    rows = db.execute(text(sql), params).fetchall()
     return [dict(row) for row in rows]

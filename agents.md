@@ -138,3 +138,14 @@ Después del plan, recién ahí generar el código.
 - Si hay varias formas de hacer algo, favorece:
   - La solución más **simple, legible y robusta**.
   - Evitar sobre-ingeniería.
+
+---
+
+## Guía UI/Frontend (vistas /ui)
+
+- **Stack**: FastAPI sirve plantillas Jinja2 para rutas /ui; JavaScript vanilla usa `fetch` contra endpoints JSON en /api; no hay frameworks JS.
+- **Estilos base**: Usa las clases globales de `app/static/css/estilos.css`: header azul (#0b5cab), paneles `.panel`/`.panel-alta`/`.panel-listado`, tablas con `.tabla-scroll` y `.productos-table` (cabecera sticky, celdas centradas), botones `.btn-accion` (azul) y `.btn-guardar` (naranja), grillas `.grid` y barra de controles `.tabla-controles`.
+- **Patrón de formularios**: Alta inline en panel superior; captura de datos con `FormData`, conversión a JSON y envío a /api mediante `fetch` con `Content-Type: application/json`. Tras éxito, refrescar o actualizar DOM. Validar unicidad/errores mostrando `alert` o mensajes claros.
+- **Tablas editables**: Filas con atributos `data-*` para mantener estado; botones Editar/Eliminar; modo edición inline cambia celdas a inputs/selects y guarda con `PUT` a /api; eliminación pide confirmación antes de `DELETE`.
+- **Flujo de datos**: Vistas /ui cargan catálogos (rubros, unidades, tipos) desde servicios y los pasan al template; JS usa esos datos para renders locales (ej. selects) y para enviar IDs a la API. Paginación/filtros: usar parámetros query en /api (`limit`, `offset`, filtros por nombre/tipo/activo) y actualizar la tabla vía DOM.
+- **Referencias prácticas**: Para pantallas completas con filtro + paginado revisar [app/templates/productos/index.html](app/templates/productos/index.html); para CRUD simple centrado revisar [app/templates/rubros/list.html](app/templates/rubros/list.html). Se recomienda reutilizar clases y estructura de esos ejemplos para mantener consistencia visual.

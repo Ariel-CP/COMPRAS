@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Roles{% endblock %}
+
+{% block content %}
+<section class="productos-wrapper">
+  <h2>Gestión de Roles</h2>
+
+  <div class="panel panel-alta">
+    <h3>Crear rol</h3>
+    <form id="form-rol" class="form-alta" onsubmit="return crearRol(event)">
+      <input required name="nombre" placeholder="Nombre de rol" maxlength="64" />
+      <input name="descripcion" placeholder="Descripción" maxlength="255" />
+      <button type="submit" class="btn-accion">Crear rol</button>
+      <span id="rol-status" class="hint"></span>
+    </form>
+  </div>
+
+  <div class="panel panel-listado">
+    <div class="tabla-controles">
+      <button class="btn-accion" type="button" onclick="refrescar()">Refrescar</button>
+    </div>
+    <div class="tabla-scroll">
+      <table class="productos-table table-center" id="tablaRoles">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Descripción</th>
+            <th>Usuarios</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let roles = {{ roles|tojson }} || [];
+
+function renderRoles(){
+  const tbody = document.querySelector('#tablaRoles tbody');
+  tbody.innerHTML = '';
+  roles.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.innerHTML = `
+      <td>${escapeHtml(r.nombre)}</td>
+      <td>${escapeHtml(r.descripcion||'')}</td>
+      <td>${r.user_count||0}</td>
+      <td>
+        <button class="btn-accion" onclick="editarRol(this)">Editar</button>
+        <button class="btn-accion" onclick="borrarRol(this)">Borrar</button>
+        <button class="btn-accion" onclick="irPermisos(this)">Permisos</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function escapar(s){ return s ? s : ''; }
+
+function escapeHtml(str){
+  if(!str) return '';
+  return String(str).replace(/[&<>\"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\' : '&#39;'}[s]));
+}
+
+function refrescar(){
+  fetch('/api/roles').then(r => r.ok ? r.json() : Promise.reject()).then(data => { roles = data; renderRoles(); }).catch(()=>alert('Error al cargar roles'));
+}
+
+async function crearRol(ev){
+  ev.preventDefault();
+  const statusEl = document.getElementById('rol-status');
+  statusEl.textContent = 'Creando...';
+  const fd = new FormData(ev.target);
+  const payload = { nombre: fd.get('nombre'), descripcion: fd.get('descripcion') || null };
+  const res = await fetch('/api/roles/', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  if(!res.ok){ const err = await res.json().catch(()=>({})); statusEl.textContent = err.detail || 'Error'; statusEl.className='err'; return false; }
+  const rol = await res.json();
+  roles.push(rol);
+  renderRoles();
+  ev.target.reset();
+  statusEl.textContent = 'Rol creado'; statusEl.className='ok';
+  return false;
+}
+
+function editarRol(btn){
+  const tr = btn.closest('tr');
+  const id = tr.dataset.id;
+  const rol = roles.find(r => String(r.id) === String(id));
+  if(!rol) return;
+  const nuevo = prompt('Nuevo nombre', rol.nombre);
+  if(!nuevo) return;
+  const desc = prompt('Descripción', rol.descripcion||'');
+  fetch(`/api/roles/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nombre: nuevo, descripcion: desc }) })
+    .then(r => r.ok ? r.json() : r.json().then(x=>Promise.reject(x))).then(updated => {
+      const idx = roles.findIndex(x=>x.id===updated.id); if(idx>=0) roles[idx]=updated; else roles.push(updated); renderRoles();
+    }).catch(e=>alert(e.detail || 'Error'));
+}
+
+function borrarRol(btn){
+  const tr = btn.closest('tr');
+  const id = tr.dataset.id;
+  if(!confirm('Borrar rol? (solo si no tiene usuarios)')) return;
+  fetch(`/api/roles/${id}`, { method: 'DELETE' }).then(r => {
+    if(!r.ok) return r.json().then(x=>Promise.reject(x));
+    roles = roles.filter(r=>String(r.id)!==String(id)); renderRoles();
+  }).catch(e=>alert(e.detail || 'No se pudo borrar'));
+}
+
+function irPermisos(btn){
+  const tr = btn.closest('tr');
+  const id = tr.dataset.id;
+  window.location.href = `/ui/admin/permisos?role_id=${id}`;
+}
+
+renderRoles();
+</script>
+{% endblock %}
