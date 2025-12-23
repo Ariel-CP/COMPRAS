@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from typing import Optional
 
 class PlanProduccionBase(BaseModel):
@@ -30,5 +30,4 @@ class PlanProduccionOut(PlanProduccionBase):
     producto_codigo: str
     producto_nombre: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

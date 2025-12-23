@@ -53,6 +53,9 @@ def create_app() -> FastAPI:
     application.include_router(ui_informes.router, prefix="/ui")
     application.include_router(ui_precios.router, prefix="/ui")
     application.include_router(ui_tipo_cambio.router, prefix="/ui")
+    # Nuevo router para rubros UI
+    from app.api import ui_rubros
+    application.include_router(ui_rubros.router, prefix="/ui")
 
     # Static files
     application.mount(

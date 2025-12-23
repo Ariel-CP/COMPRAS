@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Requerimientos valorizados{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Requerimientos valorizados por mes</h2>
+  <div class="form-grid">
+    <label for="mes">Mes</label>
+    <input id="mes" name="mes" type="number" min="1" max="12" />
+
+    <label for="anio">Año</label>
+    <input id="anio" name="anio" type="number" min="2000" max="2100" />
+
+    <label for="persistir" style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+      <input id="persistir" type="checkbox" />
+      Guardar histórico
+    </label>
+
+    <button id="btnCargar" type="button" class="btn-accion">Calcular</button>
+    <button id="btnExportar" type="button" class="btn-accion">Exportar Excel</button>
+    <span id="feedback" class="nota"></span>
+  </div>
+  <p class="hint">Usa el último precio de compra o costo vigente. Si falta precio se muestra 0. Se devuelven montos en USD (base) y ARS al tipo de cambio vigente.</p>
+</section>
+
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <h3 style="margin:0;">Resultado</h3>
+    <div id="alertaFx" class="error" style="display:none;">Algunas líneas usan tipo de cambio estimativo o faltante.</div>
+  </div>
+  <div class="tabla-scroll" style="margin-top:10px;">
+    <table class="striped" id="tablaReq">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Detalle</th>
+          <th>UM</th>
+          <th>Cantidad</th>
+          <th>Precio USD</th>
+          <th>Precio ARS</th>
+          <th>Total USD</th>
+          <th>Total ARS</th>
+          <th>Fuente / FX</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr>
+          <th colspan="3">Totales</th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th id="totalUsd">0</th>
+          <th id="totalArs">0</th>
+          <th></th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function() {
+    const API_REQ = "/api/plan-produccion-mensual/requerimientos-valuados";
+    const inputMes = document.getElementById("mes");
+    const inputAnio = document.getElementById("anio");
+    const chkPersistir = document.getElementById("persistir");
+    const btnCargar = document.getElementById("btnCargar");
+    const btnExportar = document.getElementById("btnExportar");
+    const feedback = document.getElementById("feedback");
+    const tablaBody = document.querySelector("#tablaReq tbody");
+    const totalUsdEl = document.getElementById("totalUsd");
+    const totalArsEl = document.getElementById("totalArs");
+    const alertaFxEl = document.getElementById("alertaFx");
+
+    function fmt(n, max = 2) {
+      if (n === null || n === undefined || Number.isNaN(Number(n))) return "-";
+      return Number(n).toLocaleString("es-AR", { maximumFractionDigits: max });
+    }
+
+    async function cargar() {
+      feedback.textContent = "";
+      alertaFxEl.style.display = "none";
+      const mes = Number(inputMes.value);
+      const anio = Number(inputAnio.value);
+      if (!mes || !anio) {
+        feedback.textContent = "Indica mes y año";
+        return;
+      }
+      tablaBody.innerHTML = '<tr><td colspan="9">Calculando...</td></tr>';
+      const qs = new URLSearchParams({ mes, anio, persistir: chkPersistir.checked });
+      const resp = await fetch(`${API_REQ}?${qs.toString()}`);
+      if (!resp.ok) {
+        tablaBody.innerHTML = '<tr><td colspan="9"><em>Error consultando datos</em></td></tr>';
+        feedback.textContent = "Error";
+        return;
+      }
+      const data = await resp.json();
+      render(data.items || []);
+      totalUsdEl.textContent = fmt(data.total_usd || 0);
+      totalArsEl.textContent = fmt(data.total_ars || 0);
+      if (data.alerta_fx) alertaFxEl.style.display = "block";
+      if (chkPersistir.checked) {
+        feedback.textContent = `Persistidos ${data.persistidos || 0} registros.`;
+      }
+    }
+
+    function render(items) {
+      tablaBody.innerHTML = "";
+      if (!items.length) {
+        tablaBody.innerHTML = '<tr><td colspan="9"><em>Sin requerimientos</em></td></tr>';
+        return;
+      }
+      items.forEach(it => {
+        const badgeFuente = `<span style="padding:2px 6px;border-radius:10px;font-size:12px;background:#eef2ff;color:#223;">${it.fuente || '-'}${it.fx_es_estimativa ? ' • FX estim.' : ''}${it.precio_unit_ars === 0 ? ' • sin precio' : ''}</span>`;
+        const fila = document.createElement("tr");
+        fila.innerHTML = `
+          <td>${it.codigo}</td>
+          <td>${it.nombre}</td>
+          <td>${it.um_codigo}</td>
+          <td class="num">${fmt(it.cantidad, 4)}</td>
+          <td class="num">${fmt(it.precio_unit_usd)}</td>
+          <td class="num">${fmt(it.precio_unit_ars)}</td>
+          <td class="num">${fmt(it.total_usd)}</td>
+          <td class="num">${fmt(it.total_ars)}</td>
+          <td>${badgeFuente}</td>
+        `;
+        tablaBody.appendChild(fila);
+      });
+    }
+
+    btnCargar.addEventListener("click", cargar);
+    btnExportar.addEventListener("click", () => {
+      const mes = Number(inputMes.value);
+      const anio = Number(inputAnio.value);
+      if (!mes || !anio) {
+        feedback.textContent = "Indica mes y año";
+        return;
+      }
+      const qs = new URLSearchParams({ mes, anio, persistir: chkPersistir.checked });
+      const link = document.createElement("a");
+      const fname = `requerimientos_${anio}_${String(mes).padStart(2, '0')}.xlsx`;
+      link.href = `/api/plan-produccion-mensual/requerimientos-valuados.xlsx?${qs.toString()}`;
+      link.download = fname;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    // Prefill mes/año desde query o fecha actual
+    const params = new URLSearchParams(window.location.search);
+    const hoy = new Date();
+    inputMes.value = params.get("mes") || (hoy.getMonth() + 1);
+    inputAnio.value = params.get("anio") || hoy.getFullYear();
+    cargar();
+  })();
+</script>
+{% endblock %}

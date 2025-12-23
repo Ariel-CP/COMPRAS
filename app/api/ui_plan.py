@@ -27,3 +27,19 @@ async def ui_plan_mensual(request: Request):
         "plan/plan_mensual.html",
         {"request": request},
     )
+
+
+@router.get("/plan-variaciones", response_class=HTMLResponse)
+async def ui_plan_variaciones(request: Request):
+    return templates.TemplateResponse(
+        "plan/plan_variaciones.html",
+        {"request": request},
+    )
+
+
+@router.get("/plan-requerimientos", response_class=HTMLResponse)
+async def ui_plan_requerimientos(request: Request):
+    return templates.TemplateResponse(
+        "plan/plan_requerimientos.html",
+        {"request": request},
+    )

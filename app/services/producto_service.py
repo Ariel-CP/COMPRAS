@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ def _row_to_producto(row: Any) -> Dict[str, Any]:
         "codigo": row.codigo,
         "nombre": row.nombre,
         "tipo_producto": row.tipo_producto,
+        "rubro": getattr(row, "rubro", None),
         "unidad_medida_id": row.unidad_medida_id,
         "activo": bool(row.activo),
     }
@@ -49,8 +51,8 @@ def listar_productos(
         params["activo"] = 1 if activo else 0
 
     sql = text(
-        "SELECT id, codigo, nombre, tipo_producto, unidad_medida_id, activo "
-        "FROM producto WHERE "
+        "SELECT id, codigo, nombre, tipo_producto, rubro, "
+        "unidad_medida_id, activo FROM producto WHERE "
         + " AND ".join(where)
         + " ORDER BY codigo LIMIT :limit OFFSET :offset"
     )
@@ -61,7 +63,7 @@ def listar_productos(
 def get_producto(db: Session, prod_id: int) -> Optional[Dict[str, Any]]:
     row = db.execute(
         text(
-            "SELECT id, codigo, nombre, tipo_producto, "
+            "SELECT id, codigo, nombre, tipo_producto, rubro, "
             "unidad_medida_id, activo FROM producto WHERE id=:id"
         ),
         {"id": prod_id},
@@ -74,6 +76,7 @@ def crear_producto(
     codigo: str,
     nombre: str,
     tipo_producto: str,
+    rubro: Optional[str],
     unidad_medida_id: int,
     activo: bool = True,
 ) -> Dict[str, Any]:
@@ -91,14 +94,15 @@ def crear_producto(
 
     res = db.execute(
         text(
-            "INSERT INTO producto (codigo, nombre, tipo_producto, "
-            "unidad_medida_id, activo) VALUES (:codigo, :nombre, :tipo, :um, "
-            ":activo)"
+            "INSERT INTO producto (codigo, nombre, tipo_producto, rubro, "
+            "unidad_medida_id, activo) VALUES (:codigo, :nombre, :tipo, "
+            ":rubro, :um, :activo)"
         ),
         {
             "codigo": codigo,
             "nombre": nombre,
             "tipo": tipo_producto,
+            "rubro": rubro,
             "um": unidad_medida_id,
             "activo": 1 if activo else 0,
         },
@@ -118,6 +122,7 @@ def actualizar_producto(
     codigo: str,
     nombre: str,
     tipo_producto: str,
+    rubro: Optional[str],
     unidad_medida_id: int,
     activo: bool,
 ) -> Dict[str, Any]:
@@ -141,13 +146,14 @@ def actualizar_producto(
     db.execute(
         text(
             "UPDATE producto SET codigo=:codigo, nombre=:nombre, "
-            "tipo_producto=:tipo, unidad_medida_id=:um, activo=:activo "
-            "WHERE id=:id"
+            "tipo_producto=:tipo, rubro=:rubro, unidad_medida_id=:um, "
+            "activo=:activo WHERE id=:id"
         ),
         {
             "codigo": codigo,
             "nombre": nombre,
             "tipo": tipo_producto,
+            "rubro": rubro,
             "um": unidad_medida_id,
             "activo": 1 if activo else 0,
             "id": prod_id,

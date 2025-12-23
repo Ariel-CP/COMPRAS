@@ -92,7 +92,9 @@ def get_settings() -> Settings:
         or cfg.get("bcra_api_base_url")
         or "https://api.estadisticasbcra.com"
     )
-    bcra_api_token = os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
+    bcra_api_token = (
+        os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
+    )
     bcra_sync_days = int(
         os.environ.get("BCRA_SYNC_DAYS", cfg.get("bcra_sync_days", 5))
     )

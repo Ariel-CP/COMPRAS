@@ -12,6 +12,7 @@ from . import (
         precios,
         tipo_cambio,
         plan_produccion,
+        rubros,
 )
 
 api_router = APIRouter()
@@ -43,3 +44,5 @@ api_router.include_router(
 api_router.include_router(
         tipo_cambio.router, prefix="/tipo-cambio", tags=["tipo-cambio"]
 )
+
+api_router.include_router(rubros.router, prefix="/rubros", tags=["rubros"])

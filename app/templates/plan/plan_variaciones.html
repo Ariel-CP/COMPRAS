@@ -1,0 +1,248 @@
+{% extends "base.html" %} {% block title %}Gráficos Plan de Producción{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>Gráficos de Plan de Producción Mensual</h2>
+  <div class="form-grid">
+    <label for="desdeMes">Desde mes</label>
+    <input id="desdeMes" name="desdeMes" type="number" min="1" max="12" />
+    <label for="desdeAnio">Desde año</label>
+    <input id="desdeAnio" name="desdeAnio" type="number" min="2000" max="2100" />
+    <label for="hastaMes">Hasta mes</label>
+    <input id="hastaMes" name="hastaMes" type="number" min="1" max="12" />
+    <label for="hastaAnio">Hasta año</label>
+    <input id="hastaAnio" name="hastaAnio" type="number" min="2000" max="2100" />
+    <button id="btnCargar" type="button" class="btn-accion">Cargar gráficos</button>
+    <span id="feedback" class="nota"></span>
+  </div>
+  <p class="hint">Rango máximo: 12 meses. El gráfico de líneas muestra hasta 10 productos con mayor variación absoluta (positiva o negativa). Los rankings separan top suben y top bajan.</p>
+</section>
+
+<section class="panel">
+  <h3>Variación por producto (línea)</h3>
+  <canvas id="chartLinea" height="160"></canvas>
+</section>
+
+<section class="panel">
+  <h3>Ranking Top 10 que suben</h3>
+  <canvas id="chartTopUp" height="140"></canvas>
+</section>
+
+<section class="panel">
+  <h3>Ranking Top 10 que bajan</h3>
+  <canvas id="chartTopDown" height="140"></canvas>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  (function() {
+    const API_RANGO = "/api/plan-produccion-mensual/resumen-rango";
+    const inputDesdeMes = document.getElementById("desdeMes");
+    const inputDesdeAnio = document.getElementById("desdeAnio");
+    const inputHastaMes = document.getElementById("hastaMes");
+    const inputHastaAnio = document.getElementById("hastaAnio");
+    const btnCargar = document.getElementById("btnCargar");
+    const feedback = document.getElementById("feedback");
+    const ctxLinea = document.getElementById("chartLinea");
+    const ctxTopUp = document.getElementById("chartTopUp");
+    const ctxTopDown = document.getElementById("chartTopDown");
+
+    let chartLinea = null;
+    let chartTopUp = null;
+    let chartTopDown = null;
+
+    function colorFromString(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const r = (hash >> 16) & 0xff;
+      const g = (hash >> 8) & 0xff;
+      const b = hash & 0xff;
+      return `rgb(${(r % 128) + 80}, ${(g % 128) + 80}, ${(b % 128) + 80})`;
+    }
+
+    function safeFmt(n, suf = "") {
+      if (n === null || n === undefined || Number.isNaN(n)) return "-";
+      const v = Number(n);
+      return `${v.toLocaleString("es-AR", { maximumFractionDigits: 2 })}${suf}`;
+    }
+
+    function buildLookup(puntos) {
+      const map = {};
+      puntos.forEach(p => { map[`${p.anio}-${p.mes}`] = p; });
+      return map;
+    }
+
+    function renderCharts(data) {
+      const periodos = data.periodos || [];
+      const series = data.series || [];
+
+      // Ordenar por magnitud de variación neta y tomar top 10 para la línea
+      const topSeries = [...series]
+        .sort((a, b) => Math.abs(b.neto_abs || 0) - Math.abs(a.neto_abs || 0))
+        .slice(0, 10);
+
+      const datasets = topSeries.map(s => {
+        const lookup = buildLookup(s.puntos || []);
+        const color = colorFromString(s.codigo || s.nombre || "prod");
+        const dataPoints = periodos.map(per => {
+          const key = `${per.anio}-${per.mes}`;
+          const punto = lookup[key];
+          return punto ? punto.variacion_abs || 0 : 0;
+        });
+        return {
+          label: `${s.codigo} - ${s.nombre}`,
+          data: dataPoints,
+          borderColor: color,
+          backgroundColor: color,
+          tension: 0.2,
+          spanGaps: true,
+        };
+      });
+
+      if (chartLinea) chartLinea.destroy();
+      chartLinea = new Chart(ctxLinea, {
+        type: "line",
+        data: {
+          labels: periodos.map(p => p.label),
+          datasets,
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const serie = topSeries[ctx.datasetIndex];
+                  const per = periodos[ctx.dataIndex];
+                  const punto = (serie?.puntos || []).find(p => p.anio === per.anio && p.mes === per.mes);
+                  const varAbs = punto ? safeFmt(punto.variacion_abs) : "-";
+                  const varPct = punto ? safeFmt(punto.variacion_pct, " %") : "-";
+                  const cant = punto ? safeFmt(punto.cantidad) : "-";
+                  return `${serie.codigo || ""} ${serie.nombre || ""}: ${per.label} → Var: ${varAbs} (${varPct}) | Cant: ${cant}`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: { title: { display: true, text: "Variación absoluta vs mes previo" } }
+          }
+        }
+      });
+
+      const topUp = (data.top_suben || []).slice(0, 10);
+      const topDown = (data.top_bajan || []).slice(0, 10);
+
+      if (chartTopUp) chartTopUp.destroy();
+      chartTopUp = new Chart(ctxTopUp, {
+        type: "bar",
+        data: {
+          labels: topUp.map(t => `${t.codigo}`),
+          datasets: [{
+            label: "Variación neta",
+            data: topUp.map(t => t.neto_abs || 0),
+            backgroundColor: topUp.map(t => "#1f9c4d"),
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const item = topUp[ctx.dataIndex];
+                  return `${item.nombre} (${item.codigo}) → ${safeFmt(item.neto_abs)} (${safeFmt(item.neto_pct, " %")})`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { beginAtZero: true }
+          }
+        }
+      });
+
+      if (chartTopDown) chartTopDown.destroy();
+      chartTopDown = new Chart(ctxTopDown, {
+        type: "bar",
+        data: {
+          labels: topDown.map(t => `${t.codigo}`),
+          datasets: [{
+            label: "Variación neta",
+            data: topDown.map(t => t.neto_abs || 0),
+            backgroundColor: topDown.map(t => "#d63626"),
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const item = topDown[ctx.dataIndex];
+                  return `${item.nombre} (${item.codigo}) → ${safeFmt(item.neto_abs)} (${safeFmt(item.neto_pct, " %")})`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    async function cargarDatos() {
+      feedback.textContent = "";
+      const dMes = Number(inputDesdeMes.value);
+      const dAnio = Number(inputDesdeAnio.value);
+      const hMes = Number(inputHastaMes.value);
+      const hAnio = Number(inputHastaAnio.value);
+      if (!dMes || !dAnio || !hMes || !hAnio) {
+        feedback.textContent = "Completa el rango desde/hasta";
+        return;
+      }
+      feedback.textContent = "Cargando...";
+      const qs = new URLSearchParams({
+        desde_mes: dMes,
+        desde_anio: dAnio,
+        hasta_mes: hMes,
+        hasta_anio: hAnio,
+      }).toString();
+      const resp = await fetch(`${API_RANGO}?${qs}`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        feedback.textContent = err.detail || "Error consultando datos";
+        return;
+      }
+      const data = await resp.json();
+      feedback.textContent = "";
+      renderCharts(data);
+    }
+
+    btnCargar.addEventListener("click", cargarDatos);
+
+    // Prefill rango: últimos 6 meses por defecto
+    const hoy = new Date();
+    const defaultHastaMes = hoy.getMonth() + 1;
+    const defaultHastaAnio = hoy.getFullYear();
+    let defaultDesdeMes = defaultHastaMes - 5;
+    let defaultDesdeAnio = defaultHastaAnio;
+    if (defaultDesdeMes <= 0) {
+      defaultDesdeMes += 12;
+      defaultDesdeAnio -= 1;
+    }
+    const params = new URLSearchParams(window.location.search);
+    inputDesdeMes.value = params.get('desde_mes') || defaultDesdeMes;
+    inputDesdeAnio.value = params.get('desde_anio') || defaultDesdeAnio;
+    inputHastaMes.value = params.get('hasta_mes') || defaultHastaMes;
+    inputHastaAnio.value = params.get('hasta_anio') || defaultHastaAnio;
+    cargarDatos();
+  })();
+</script>
+{% endblock %}

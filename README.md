@@ -253,7 +253,6 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Mensajes persistentes y seleccionables para operaciones y costos
 - Resaltado automático en amarillo de materiales sin costo cargado
 
-
 ## Avances recientes
 
 ### Diciembre 2025
@@ -272,6 +271,7 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - **Documentación**: actualización de este README y plantillas de importación.
 
 ### Anteriores
+
 - Integración de IA (OpenAI) para generación de reportes y análisis automáticos.
 - Importación de stock y precios desde ERP Flexxus (CSV/Excel).
 - Limpieza de archivos y refactorización de servicios no utilizados.

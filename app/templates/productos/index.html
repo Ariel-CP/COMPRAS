@@ -4,10 +4,39 @@
 {% block content %}
 <section class="productos-wrapper">
   <h2>Artículos</h2>
+  <div class="tabla-controles" style="margin-bottom: 10px;">
+    <a class="btn-accion" href="/ui/rubros">Ir a rubros</a>
+  </div>
 
   {% if error %}
   <div class="error-banner">{{ error }}</div>
   {% endif %}
+
+  <div class="panel panel-alta">
+    <h3>Nuevo artículo</h3>
+    <form id="form-nuevo" onsubmit="return crearProducto(event)" class="form-alta">
+      <input required maxlength="64" name="codigo" placeholder="Código" />
+      <input required maxlength="128" name="nombre" placeholder="Nombre" />
+      <select name="rubro">
+        <option value="">(sin rubro)</option>
+        {% for r in rubros %}
+        <option value="{{ r.nombre }}">{{ r.nombre }}</option>
+        {% endfor %}
+      </select>
+      <select name="tipo_producto">
+        {% for t in ['PT','WIP','MP','EMB','SERV','HERR'] %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+      <select name="unidad_medida_id" required>
+        {% for um in unidades %}
+        <option value="{{ um.id }}">{{ um.codigo }} - {{ um.nombre }}</option>
+        {% endfor %}
+      </select>
+      <label><input type="checkbox" name="activo" checked /> Activo</label>
+      <button type="submit">Crear</button>
+    </form>
+  </div>
 
   <form method="get" class="panel panel-filtros">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar código o nombre" />
@@ -24,26 +53,6 @@
     </select>
     <button type="submit">Filtrar</button>
   </form>
-
-  <div class="panel panel-alta">
-    <h3>Nuevo artículo</h3>
-    <form id="form-nuevo" onsubmit="return crearProducto(event)" class="form-alta">
-      <input required maxlength="64" name="codigo" placeholder="Código" />
-      <input required maxlength="128" name="nombre" placeholder="Nombre" />
-      <select name="tipo_producto">
-        {% for t in ['PT','WIP','MP','EMB','SERV','HERR'] %}
-        <option value="{{ t }}">{{ t }}</option>
-        {% endfor %}
-      </select>
-      <select name="unidad_medida_id" required>
-        {% for um in unidades %}
-        <option value="{{ um.id }}">{{ um.codigo }} - {{ um.nombre }}</option>
-        {% endfor %}
-      </select>
-      <label><input type="checkbox" name="activo" checked /> Activo</label>
-      <button type="submit">Crear</button>
-    </form>
-  </div>
 
   <div class="panel panel-listado">
   <div class="tabla-controles">
@@ -63,6 +72,7 @@
         <th>Código</th>
         <th>Nombre</th>
         <th>Tipo</th>
+        <th>Rubro</th>
         <th>UM</th>
         <th>Activo</th>
         <th>Acciones</th>
@@ -74,11 +84,13 @@
           data-codigo="{{ p.codigo }}"
           data-nombre="{{ p.nombre }}"
           data-tipo="{{ p.tipo_producto }}"
+          data-rubro="{{ p.rubro or '' }}"
           data-um-id="{{ p.unidad_medida_id }}"
           data-activo="{{ 'true' if p.activo else 'false' }}">
         <td>{{ p.codigo }}</td>
         <td>{{ p.nombre }}</td>
         <td>{{ p.tipo_producto }}</td>
+        <td>{{ p.rubro or '—' }}</td>
         <td title="{{ p.um_nombre }}">{{ p.um_codigo }}</td>
         <td>{{ 'Sí' if p.activo else 'No' }}</td>
         <td>
@@ -103,6 +115,10 @@ const unidadesMap = {
   {% endfor %}
 };
 const tiposProd = ['PT','WIP','MP','EMB','SERV','HERR'];
+const rubrosList = [
+  "",
+  {% for r in rubros %}"{{ r.nombre|e }}"{% if not loop.last %},{% endif %}{% endfor %}
+];
 
 async function crearProducto(ev) {
   ev.preventDefault();
@@ -110,6 +126,7 @@ async function crearProducto(ev) {
   const payload = {
     codigo: fd.get('codigo'),
     nombre: fd.get('nombre'),
+    rubro: fd.get('rubro') || null,
     tipo_producto: fd.get('tipo_producto'),
     unidad_medida_id: parseInt(fd.get('unidad_medida_id')),
     activo: fd.get('activo') === 'on'
@@ -138,6 +155,7 @@ function editarFila(btn){
   const codigo = tr.dataset.codigo || tr.children[0].textContent.trim();
   const nombre = tr.dataset.nombre || tr.children[1].textContent.trim();
   const tipo = tr.dataset.tipo || tr.children[2].textContent.trim();
+  const rubro = tr.dataset.rubro || tr.children[3].textContent.trim();
   const umId = parseInt(tr.dataset.umId || '0') || 0;
   const activo = (tr.dataset.activo || '').toLowerCase() === 'true';
 
@@ -145,11 +163,12 @@ function editarFila(btn){
   tr.children[0].innerHTML = `<input name="codigo" value="${escapeHtml(codigo)}" maxlength="64" />`;
   tr.children[1].innerHTML = `<input name="nombre" value="${escapeHtml(nombre)}" maxlength="128" />`;
   tr.children[2].innerHTML = renderSelectTipos(tipo);
-  tr.children[3].innerHTML = renderSelectUnidades(umId);
-  tr.children[4].innerHTML = `<label><input type="checkbox" name="activo" ${activo ? 'checked':''}/> Activo</label>`;
+  tr.children[3].innerHTML = renderSelectRubros(rubro);
+  tr.children[4].innerHTML = renderSelectUnidades(umId);
+  tr.children[5].innerHTML = `<label><input type="checkbox" name="activo" ${activo ? 'checked':''}/> Activo</label>`;
 
   // Acciones Guardar/Cancelar
-  tr.children[5].innerHTML = `
+  tr.children[6].innerHTML = `
     <button type="button" class="btn-accion" onclick="guardarFila(this)">Guardar</button>
     <button type="button" class="btn-secundario" onclick="cancelarFila(this)">Cancelar</button>
   `;
@@ -166,16 +185,27 @@ function renderSelectUnidades(actualId){
   return `<select name="unidad_medida_id">${opts}</select>`;
 }
 
+function renderSelectRubros(actual){
+  const opts = rubrosList.map((r)=>{
+    const sel = (r === (actual || '')) ? 'selected' : '';
+    const label = r === '' ? '(sin rubro)' : r;
+    const val = r.replace(/"/g,'&quot;');
+    return `<option value="${val}" ${sel}>${label}</option>`;
+  }).join('');
+  return `<select name="rubro">${opts}</select>`;
+}
+
 async function guardarFila(btn){
   const tr = btn.closest('tr');
   const id = tr.dataset.id;
   const codigo = tr.querySelector('input[name="codigo"]').value.trim();
   const nombre = tr.querySelector('input[name="nombre"]').value.trim();
+  const rubro = tr.querySelector('select[name="rubro"]').value.trim();
   const tipo = tr.querySelector('select[name="tipo_producto"]').value;
   const umId = parseInt(tr.querySelector('select[name="unidad_medida_id"]').value);
   const activo = tr.querySelector('input[name="activo"]').checked;
 
-  const payload = { codigo, nombre, tipo_producto: tipo, unidad_medida_id: umId, activo };
+  const payload = { codigo, nombre, rubro: rubro || null, tipo_producto: tipo, unidad_medida_id: umId, activo };
   try{
     const res = await fetch(`/api/productos/${id}`, {
       method: 'PUT',
@@ -191,6 +221,7 @@ async function guardarFila(btn){
     tr.dataset.codigo = p.codigo;
     tr.dataset.nombre = p.nombre;
     tr.dataset.tipo = p.tipo_producto;
+    tr.dataset.rubro = p.rubro || '';
     tr.dataset.umId = p.unidad_medida_id;
     tr.dataset.activo = p.activo ? 'true' : 'false';
 
@@ -198,9 +229,10 @@ async function guardarFila(btn){
     tr.children[0].textContent = p.codigo;
     tr.children[1].textContent = p.nombre;
     tr.children[2].textContent = p.tipo_producto;
-    tr.children[3].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
-    tr.children[4].textContent = p.activo ? 'Sí' : 'No';
-    tr.children[5].innerHTML = `<button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>`;
+    tr.children[3].textContent = p.rubro || '—';
+    tr.children[4].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
+    tr.children[5].textContent = p.activo ? 'Sí' : 'No';
+    tr.children[6].innerHTML = `<button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>`;
     tr.classList.remove('edit-mode');
   }catch(err){
     alert('No se pudo guardar: ' + err.message);
@@ -212,6 +244,7 @@ function cancelarFila(btn){
   const codigo = tr.dataset.codigo || '';
   const nombre = tr.dataset.nombre || '';
   const tipo = tr.dataset.tipo || '';
+  const rubro = tr.dataset.rubro || '';
   const umId = parseInt(tr.dataset.umId || '0') || 0;
   const activo = (tr.dataset.activo || '').toLowerCase() === 'true';
   const um = unidadesMap[umId] || {codigo:'?', nombre:''};
@@ -219,9 +252,10 @@ function cancelarFila(btn){
   tr.children[0].textContent = codigo;
   tr.children[1].textContent = nombre;
   tr.children[2].textContent = tipo;
-  tr.children[3].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
-  tr.children[4].textContent = activo ? 'Sí' : 'No';
-  tr.children[5].innerHTML = `<button type=\"button\" class=\"btn-accion\" onclick=\"editarFila(this)\">Editar</button>`;
+  tr.children[3].textContent = rubro || '—';
+  tr.children[4].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
+  tr.children[5].textContent = activo ? 'Sí' : 'No';
+  tr.children[6].innerHTML = `<button type=\"button\" class=\"btn-accion\" onclick=\"editarFila(this)\">Editar</button>`;
   tr.classList.remove('edit-mode');
 }
 
@@ -259,12 +293,14 @@ async function loadMore(){
       tr.setAttribute('data-codigo', p.codigo);
       tr.setAttribute('data-nombre', p.nombre);
       tr.setAttribute('data-tipo', p.tipo_producto);
+      tr.setAttribute('data-rubro', p.rubro || '');
       tr.setAttribute('data-um-id', p.unidad_medida_id);
       tr.setAttribute('data-activo', p.activo ? 'true':'false');
       tr.innerHTML = `
         <td>${p.codigo}</td>
         <td>${p.nombre}</td>
         <td>${p.tipo_producto}</td>
+        <td>${p.rubro || '—'}</td>
         <td title="${um.nombre}">${um.codigo}</td>
         <td>${p.activo ? 'Sí':'No'}</td>
         <td><button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button></td>

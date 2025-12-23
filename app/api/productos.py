@@ -1,5 +1,7 @@
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -86,6 +88,7 @@ def api_crear_producto(payload: ProductoIn, db: Session = Depends(get_db)):
             codigo=payload.codigo,
             nombre=payload.nombre,
             tipo_producto=payload.tipo_producto,
+            rubro=payload.rubro,
             unidad_medida_id=payload.unidad_medida_id,
             activo=payload.activo,
         )
@@ -112,6 +115,7 @@ def api_actualizar_producto(
             codigo=payload.codigo,
             nombre=payload.nombre,
             tipo_producto=payload.tipo_producto,
+            rubro=payload.rubro,
             unidad_medida_id=payload.unidad_medida_id,
             activo=payload.activo,
         )
@@ -126,7 +130,9 @@ def api_actualizar_producto(
 
 
 @router.get("/pt-activos", response_model=list)
-def listar_pt_activos(q: Optional[str] = Query(None), db: Session = Depends(get_db)):
+def listar_pt_activos(
+    q: Optional[str] = Query(None), db: Session = Depends(get_db)
+):
     sql = """
         SELECT id, codigo, nombre FROM producto
         WHERE tipo_producto = 'PT' AND activo = 1
@@ -134,10 +140,10 @@ def listar_pt_activos(q: Optional[str] = Query(None), db: Session = Depends(get_
         ORDER BY nombre ASC
     """
     params = {}
-    filtro = ''
+    filtro = ""
     if q:
         filtro = "AND (codigo LIKE :q OR nombre LIKE :q)"
-        params['q'] = f"%{q}%"
+        params["q"] = f"%{q}%"
     sql = sql.format(filtro=filtro)
-    rows = db.execute(sql, params).fetchall()
+    rows = db.execute(text(sql), params).fetchall()
     return [dict(row) for row in rows]

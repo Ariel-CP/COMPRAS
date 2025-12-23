@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..services.producto_service import listar_productos
+from ..services.rubro_service import listar_rubros
 from ..services.unidad_service import listar_unidades
 from ..utils.health import db_status
 
@@ -39,11 +40,14 @@ async def ui_productos(
     error = None
     productos = []
     unidades = []
+    rubros = []
     try:
         productos = listar_productos(
             db, q=q, tipo=tipo, activo=activo_val, limit=limit, offset=0
         )
         unidades = listar_unidades(db)
+        rubros = listar_rubros(db, only_active=True)
+
         um_map = {u["id"]: (u["codigo"], u["nombre"]) for u in unidades}
         for p in productos:
             codigo_um, nombre_um = um_map.get(p["unidad_medida_id"], ("?", ""))
@@ -64,6 +68,7 @@ async def ui_productos(
             "limit": limit,
             "productos": productos,
             "unidades": unidades,
+            "rubros": rubros,
             "error": error,
             "db_status": status,
         },

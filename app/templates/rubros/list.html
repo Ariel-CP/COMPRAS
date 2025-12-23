@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% block title %}Rubros{% endblock %}
+
+{% block content %}
+<style>
+  .rubros-wrapper {
+    text-align: center;
+  }
+  .rubros-wrapper .panel {
+    margin: 0 auto;
+  }
+  .rubros-wrapper .form-alta {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .rubros-wrapper .form-alta input {
+    min-width: 240px;
+    text-align: center;
+  }
+  .rubros-wrapper table thead th,
+  .rubros-wrapper table tbody td {
+    text-align: center;
+    vertical-align: middle;
+  }
+  .rubros-wrapper table tbody td button {
+    margin: 0 4px;
+  }
+</style>
+<section class="rubros-wrapper">
+  <h2>Rubros</h2>
+  <div class="tabla-controles" style="margin-bottom: 10px; justify-content: center;">
+    <a class="btn-accion" href="/ui/productos">Volver</a>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <div class="panel panel-alta">
+    <h3>Nuevo rubro</h3>
+    <form id="form-nuevo-rubro" onsubmit="return crearRubro(event)" class="form-alta">
+      <input required maxlength="64" name="nombre" placeholder="Nombre" value="{{ nombre_inicial or '' }}" />
+      <button type="submit">Crear</button>
+    </form>
+  </div>
+
+  <div class="panel panel-listado mt-3">
+    <table id="tablaRubros" class="table mt-0">
+      <thead>
+          <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Acciones</th>
+          </tr>
+      </thead>
+      <tbody>
+          {% for rubro in rubros %}
+          <tr data-id="{{ rubro.id }}" data-nombre="{{ rubro.nombre }}">
+              <td>{{ rubro.id }}</td>
+              <td>{{ rubro.nombre }}</td>
+              <td>
+                  <button type="button" class="btn btn-sm btn-warning" onclick="editarFila(this)">Editar</button>
+                  <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)">Eliminar</button>
+              </td>
+          </tr>
+          {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function crearRubro(ev) {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  const payload = { nombre: (fd.get('nombre') || '').trim() };
+  if (!payload.nombre) { alert('El nombre es requerido'); return false; }
+  const res = await fetch('/api/rubros/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert('Error: ' + (data.detail || res.statusText));
+    return false;
+  }
+  location.reload();
+  return false;
+}
+
+function editarFila(btn){
+  const tr = btn.closest('tr');
+  if(tr.classList.contains('edit-mode')) return;
+  tr.classList.add('edit-mode');
+  const nombre = tr.dataset.nombre || tr.children[1].textContent.trim();
+  tr.children[1].innerHTML = `<input name="nombre" value="${escapeHtml(nombre)}" maxlength="64" />`;
+  tr.children[2].innerHTML = `
+    <button type="button" class="btn btn-sm btn-success" onclick="guardarFila(this)">Guardar</button>
+    <button type="button" class="btn btn-sm btn-secondary" onclick="cancelarFila(this)">Cancelar</button>
+  `;
+}
+
+function cancelarFila(btn){
+  const tr = btn.closest('tr');
+  const nombre = tr.dataset.nombre;
+  tr.children[1].textContent = nombre;
+  tr.children[2].innerHTML = `
+    <button type="button" class="btn btn-sm btn-warning" onclick="editarFila(this)">Editar</button>
+    <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)">Eliminar</button>
+  `;
+  tr.classList.remove('edit-mode');
+}
+
+async function guardarFila(btn){
+  const tr = btn.closest('tr');
+  const id = tr.dataset.id;
+  const nombre = tr.querySelector('input[name="nombre"]').value.trim();
+  if (!nombre) { alert('El nombre es requerido'); return; }
+  const res = await fetch(`/api/rubros/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    alert('Error: ' + (data.detail || res.statusText));
+    return;
+  }
+  tr.dataset.nombre = nombre;
+  tr.children[1].textContent = nombre;
+  tr.children[2].innerHTML = `
+    <button type="button" class="btn btn-sm btn-warning" onclick="editarFila(this)">Editar</button>
+    <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)">Eliminar</button>
+  `;
+  tr.classList.remove('edit-mode');
+}
+
+async function eliminarFila(btn){
+  const tr = btn.closest('tr');
+  const id = tr.dataset.id;
+  const nombre = tr.dataset.nombre;
+  if (!confirm(`¿Eliminar el rubro "${nombre}"?`)) return;
+  const res = await fetch(`/api/rubros/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}));
+    alert('Error: ' + (data.detail || res.statusText));
+    return;
+  }
+  tr.remove();
+}
+
+function escapeHtml(str){
+  return str.replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] || c;
+  });
+}
+</script>
+{% endblock %}

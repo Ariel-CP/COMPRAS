@@ -24,20 +24,48 @@
     />
 
     <button id="btnCargar" type="button">Cargar período</button>
-    <button id="btnGuardar" type="button">Guardar cambios</button>
+    <button id="btnGuardar" type="button" class="btn-guardar">
+      Guardar cambios
+    </button>
     <span id="planFeedback" class="nota"></span>
   </div>
-  <div class="acciones-tabla" style="gap: 0.5rem; flex-wrap: wrap">
-    <button id="btnDescargarXlsx" type="button">
-      Descargar plantilla Excel
-    </button>
-    <button id="btnDescargarCsv" type="button">Descargar plantilla CSV</button>
-    <label class="upload-btn">
-      Importar Excel/CSV
-      <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden />
-    </label>
-    <button id="btnImportar" type="button">Subir e importar</button>
-    <span id="importFeedback" class="nota"></span>
+  <div class="acciones-tabla">
+    <div class="import-dropdown">
+      <button id="btnImportToggle" type="button" class="btn-accion">
+        Importación ▼
+      </button>
+      <div id="importMenu" class="dropdown-menu hidden">
+        <button id="btnDescargarXlsx" type="button" class="dropdown-item">
+          <span class="item-icon">DL</span
+          ><span>Descargar plantilla Excel</span>
+        </button>
+        <button id="btnDescargarCsv" type="button" class="dropdown-item">
+          <span class="item-icon">DL</span><span>Descargar plantilla CSV</span>
+        </button>
+        <label class="upload-btn dropdown-item">
+          <span class="item-icon">UP</span><span>Seleccionar Excel/CSV</span>
+          <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden />
+        </label>
+        <button id="btnImportar" type="button" class="dropdown-item">
+          <span class="item-icon">⇪</span><span>Subir e importar</span>
+        </button>
+        <span
+          id="importFeedback"
+          class="nota"
+          style="display: block; margin-top: 6px"
+        ></span>
+      </div>
+    </div>
+    <div>
+      <button id="btnVerGraficos" type="button" class="btn-link-graficos">
+        Ver gráficos
+      </button>
+    </div>
+    <div>
+      <button id="btnVerRequerimientos" type="button" class="btn-accion">
+        Requerimientos valorizados
+      </button>
+    </div>
   </div>
 </section>
 
@@ -51,6 +79,7 @@
           <th>Detalle</th>
           <th>Mes actual</th>
           <th>Mes anterior</th>
+          <th>Tendencia</th>
           <th>Variación</th>
           <th>% Variación</th>
         </tr>
@@ -61,6 +90,7 @@
           <th colspan="2">Total general</th>
           <th id="totalActual">0</th>
           <th id="totalPrevio">0</th>
+          <th></th>
           <th colspan="2"></th>
         </tr>
       </tfoot>
@@ -89,6 +119,11 @@
     const importFeedback = document.getElementById("importFeedback");
     const btnDescargarXlsx = document.getElementById("btnDescargarXlsx");
     const btnDescargarCsv = document.getElementById("btnDescargarCsv");
+    const btnImportToggle = document.getElementById("btnImportToggle");
+    const importMenu = document.getElementById("importMenu");
+    const btnVerRequerimientos = document.getElementById(
+      "btnVerRequerimientos"
+    );
 
     function fmt(n) {
       const num = Number(n || 0);
@@ -103,12 +138,12 @@
         feedback.textContent = "Indica mes y año.";
         return;
       }
-      tablaBody.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
+      tablaBody.innerHTML = '<tr><td colspan="7">Cargando...</td></tr>';
       const url = `${API_RESUMEN}?mes=${mes}&anio=${anio}`;
       const resp = await fetch(url);
       if (!resp.ok) {
         tablaBody.innerHTML =
-          '<tr><td colspan="6"><em>Error consultando datos</em></td></tr>';
+          '<tr><td colspan="7"><em>Error consultando datos</em></td></tr>';
         return;
       }
       const data = await resp.json();
@@ -125,34 +160,75 @@
       tablaBody.innerHTML = "";
       if (!items.length) {
         tablaBody.innerHTML =
-          '<tr><td colspan="6"><em>No hay productos</em></td></tr>';
+          '<tr><td colspan="7"><em>No hay productos</em></td></tr>';
         return;
+      }
+
+      function iconoVariacion(valor) {
+        if (valor === null || valor === undefined) {
+          // SVG guion neutro
+          return `<span class="var-icon var-neutral" title="Sin variación">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle"><rect x="4" y="8.25" width="10" height="1.5" rx="0.75" fill="currentColor"/></svg>
+          </span>`;
+        }
+        if (valor > 0) {
+          // SVG flecha arriba
+          return `<span class="var-icon var-up" title="Aumenta">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle"><path d="M9 14V4M9 4L5 8M9 4l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>`;
+        }
+        if (valor < 0) {
+          // SVG flecha abajo
+          return `<span class="var-icon var-down" title="Disminuye">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle"><path d="M9 4v10M9 14l4-4M9 14l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>`;
+        }
+        // SVG igual
+        return `<span class="var-icon var-equal" title="Sin cambio">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle"><rect x="4" y="7" width="10" height="1.5" rx="0.75" fill="currentColor"/><rect x="4" y="10" width="10" height="1.5" rx="0.75" fill="currentColor"/></svg>
+        </span>`;
+      }
+
+      function valorVariacion(valor) {
+        if (valor === null || valor === undefined) return "";
+        return `<span class="var-num">${fmt(valor)}</span>`;
       }
       items.forEach((it) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
         <td>${it.codigo}</td>
         <td>${it.nombre}</td>
-        <td><input type="number" step="0.01" min="0" value="${it.cantidad}" data-producto-id="${it.producto_id}" class="input-cantidad" /></td>
+        <td><input type="number" step="0.01" min="0" value="${
+          it.cantidad
+        }" data-producto-id="${
+          it.producto_id
+        }" class="input-cantidad" style="text-align: center;" /></td>
         <td>${fmt(it.cantidad_prev)}</td>
-        <td>${fmt(it.variacion_abs)}</td>
-        <td>${it.variacion_pct === null ? "-" : fmt(it.variacion_pct) + " %"}</td>
+        <td class="var-icon-cell">${iconoVariacion(it.variacion_abs)}</td>
+        <td>${valorVariacion(it.variacion_abs)}</td>
+        <td>${
+          it.variacion_pct === null ? "-" : fmt(it.variacion_pct) + " %"
+        }</td>
       `;
         tablaBody.appendChild(tr);
       });
       // Permitir avanzar con Enter y limpiar 0 al enfocar
-      const inputs = tablaBody.querySelectorAll('.input-cantidad');
+      const inputs = tablaBody.querySelectorAll(".input-cantidad");
       inputs.forEach((inp, idx) => {
-        inp.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter') {
+        inp.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
             e.preventDefault();
             const next = inputs[idx + 1];
             if (next) next.focus();
           }
         });
-        inp.addEventListener('focus', function(e) {
-          if (inp.value === '0' || inp.value === '0.0' || inp.value === '0.00') {
-            inp.value = '';
+        inp.addEventListener("focus", function (e) {
+          if (
+            inp.value === "0" ||
+            inp.value === "0.0" ||
+            inp.value === "0.00"
+          ) {
+            inp.value = "";
           }
         });
       });
@@ -215,7 +291,27 @@
     }
 
     btnCargar.addEventListener("click", cargarTabla);
-    btnGuardar.addEventListener("click", guardarCambios);
+    btnGuardar.addEventListener("click", function () {
+      if (
+        confirm(
+          "¿Está seguro que desea guardar los cambios del plan de producción?"
+        )
+      ) {
+        guardarCambios();
+      }
+    });
+    btnVerGraficos.addEventListener("click", () => {
+      const mes = inputMes.value || "";
+      const anio = inputAnio.value || "";
+      const qs = mes && anio ? `?mes=${mes}&anio=${anio}` : "";
+      window.location.href = `/ui/plan-variaciones${qs}`;
+    });
+    btnVerRequerimientos.addEventListener("click", () => {
+      const mes = inputMes.value || "";
+      const anio = inputAnio.value || "";
+      const qs = mes && anio ? `?mes=${mes}&anio=${anio}` : "";
+      window.location.href = `/ui/plan-requerimientos${qs}`;
+    });
     btnImportar.addEventListener("click", importarArchivo);
     btnDescargarXlsx.addEventListener("click", () =>
       descargar(API_PLANTILLA_XLSX)
@@ -223,6 +319,19 @@
     btnDescargarCsv.addEventListener("click", () =>
       descargar(API_PLANTILLA_CSV)
     );
+
+    // Toggle menú de importación
+    btnImportToggle.addEventListener("click", () => {
+      importMenu.classList.toggle("hidden");
+    });
+    document.addEventListener("click", (e) => {
+      if (
+        !importMenu.contains(e.target) &&
+        !btnImportToggle.contains(e.target)
+      ) {
+        importMenu.classList.add("hidden");
+      }
+    });
 
     // Carga inicial con mes/año actuales si están vacíos
     const hoy = new Date();

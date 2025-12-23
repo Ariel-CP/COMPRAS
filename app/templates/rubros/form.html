@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>{% if rubro and rubro.id %}Editar Rubro{% else %}Nuevo Rubro{% endif %}</h2>
+<form method="post">
+    {% if rubro and rubro.id %}
+    <input type="hidden" name="id" value="{{ rubro.id }}">
+    {% endif %}
+    <div class="form-group">
+        <label for="nombre">Nombre</label>
+        <input type="text" class="form-control" id="nombre" name="nombre" value="{{ rubro.nombre if rubro else '' }}" required autofocus>
+    </div>
+    {% if error %}
+    <div class="alert alert-danger mt-2">{{ error }}</div>
+    {% endif %}
+    <button type="submit" class="btn btn-success mt-3">Guardar</button>
+    <a href="/ui/rubros" class="btn btn-secondary mt-3">Cancelar</a>
+</form>
+{% endblock %}
