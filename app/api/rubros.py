@@ -5,7 +5,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+<<<<<<< HEAD
 from app.api.deps_auth import require_permission
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 from app.schemas.rubro import RubroCreate, RubroOut, RubroUpdate
 from app.services.rubro_service import listar_rubros, crear_rubro, actualizar_rubro, eliminar_rubro, existe_rubro_unico
 
@@ -17,18 +20,25 @@ router = APIRouter(prefix="/rubros", tags=["rubros"])
 def list_rubros(
     only_active: bool = Query(default=False),
     db: Session = Depends(get_db),
+<<<<<<< HEAD
     current_user=Depends(require_permission("rubros", False)),
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 ):
     """Lista todos los rubros (opcionalmente solo activos)."""
     return [RubroOut(**r) for r in listar_rubros(db, only_active=only_active)]
 
 
 @router.post("/", response_model=RubroOut, status_code=status.HTTP_201_CREATED)
+<<<<<<< HEAD
 def create_rubro(
     rubro_in: RubroCreate,
     db: Session = Depends(get_db),
     current_user=Depends(require_permission("rubros", True)),
 ):
+=======
+def create_rubro(rubro_in: RubroCreate, db: Session = Depends(get_db)):
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     """Crea un nuevo rubro."""
     if existe_rubro_unico(db, rubro_in.nombre):
         raise HTTPException(status_code=409, detail="El nombre de rubro ya existe")
@@ -49,10 +59,14 @@ def create_rubro(
 
 @router.put("/{rubro_id}", response_model=RubroOut)
 def update_rubro(
+<<<<<<< HEAD
     rubro_id: int,
     rubro_in: RubroUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(require_permission("rubros", True)),
+=======
+    rubro_id: int, rubro_in: RubroUpdate, db: Session = Depends(get_db)
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 ):
     """Actualiza un rubro existente."""
     if rubro_in.nombre is None:
@@ -77,11 +91,15 @@ def update_rubro(
 
 
 @router.delete("/{rubro_id}", status_code=status.HTTP_204_NO_CONTENT)
+<<<<<<< HEAD
 def delete_rubro(
     rubro_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(require_permission("rubros", True)),
 ):
+=======
+def delete_rubro(rubro_id: int, db: Session = Depends(get_db)):
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     """Elimina un rubro."""
     ok = eliminar_rubro(db, rubro_id)
     if not ok:

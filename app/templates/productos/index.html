@@ -40,12 +40,15 @@
 
   <form method="get" class="panel panel-filtros">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar código o nombre" />
+<<<<<<< HEAD
     <select name="rubro">
       <option value="">Todos los rubros</option>
       {% for r in rubros %}
       <option value="{{ r.nombre }}" {% if rubro == r.nombre %}selected{% endif %}>{{ r.nombre }}</option>
       {% endfor %}
     </select>
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     <select name="tipo">
       <option value="">Todos los tipos</option>
       {% for t in ['PT','WIP','MP','EMB','SERV','HERR'] %}

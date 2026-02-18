@@ -121,6 +121,7 @@ async function guardarFila(btn){
   const tr = btn.closest('tr');
   const id = tr.dataset.id;
   const nombre = tr.querySelector('input[name="nombre"]').value.trim();
+<<<<<<< HEAD
   // Si hay columna de activo editable, tomar el valor, si no, usar el dataset
   let activo = true;
   const activoInput = tr.querySelector('input[name="activo"]');
@@ -129,22 +130,33 @@ async function guardarFila(btn){
   } else if (tr.dataset.activo) {
     activo = tr.dataset.activo === 'true';
   }
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
   if (!nombre) { alert('El nombre es requerido'); return; }
   const res = await fetch(`/api/rubros/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
+<<<<<<< HEAD
     body: JSON.stringify({ nombre, activo })
+=======
+    body: JSON.stringify({ nombre })
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     alert('Error: ' + (data.detail || res.statusText));
     return;
   }
+<<<<<<< HEAD
   // Usar siempre el objeto retornado por el backend
   const data = await res.json();
   tr.dataset.nombre = data.nombre;
   tr.dataset.activo = data.activo ? 'true' : 'false';
   tr.children[1].textContent = data.nombre;
+=======
+  tr.dataset.nombre = nombre;
+  tr.children[1].textContent = nombre;
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
   tr.children[2].innerHTML = `
     <button type="button" class="btn btn-sm btn-warning" onclick="editarFila(this)">Editar</button>
     <button type="button" class="btn btn-sm btn-danger" onclick="eliminarFila(this)">Eliminar</button>

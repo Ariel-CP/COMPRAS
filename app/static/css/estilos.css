@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /* Color verde para la palabra Inicio con mayor especificidad */
 header nav a.inicio-verde,
 header a.inicio-verde,
@@ -5,6 +6,8 @@ header a.inicio-verde,
 	color: #28a745 !important;
 	font-weight: bold;
 }
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 .btn-guardar {
 	background: #e67e22;
 	color: #fff;
@@ -48,6 +51,7 @@ button{margin-right:8px}
 .panel-listado table.productos tbody tr.edit-mode{outline:2px solid #0b5cab;background:#eef6ff}
 .btn-accion{background:#0b5cab;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px}
 .btn-accion:hover{background:#094c90}
+<<<<<<< HEAD
 /* Login modern */
 .login-wrapper{display:flex;align-items:center;justify-content:center;min-height:68vh;padding:24px}
 .login-card{width:100%;max-width:420px;background:linear-gradient(180deg,#ffffff 0%, #f7fbff 100%);border-radius:12px;padding:28px;border:1px solid #e6eefb;box-shadow:0 6px 20px rgba(11,92,171,0.12)}
@@ -64,10 +68,13 @@ button{margin-right:8px}
 /* status styles */
 .ok{color:#0b5cab;font-weight:600}
 .err{color:#b10000;font-weight:600}
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 .btn-link-graficos{background:#6f42c1;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600}
 .btn-link-graficos:hover{background:#5a35a0}
 .error-banner{background:#ffecec;color:#b10000;border:1px solid #ffb3b3;padding:6px;margin:8px 0;border-radius:4px}
 .import-dropdown{position:relative;display:inline-block}
+<<<<<<< HEAD
 .dropdown-menu{position:absolute;top:100%;left:0;background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:6px 8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:9999;min-width:auto;white-space:nowrap}
 .dropdown-item{display:flex;align-items:center;gap:8px;text-align:left;border:none;background:transparent;padding:6px 8px;border-radius:4px;font-size:13px;cursor:pointer}
 .dropdown-item:hover{background:#f4f6f8}
@@ -82,6 +89,11 @@ button{margin-right:8px}
 .dropdown-toggle {
 	z-index: 10000; /* asegurar que el botón quede por encima */
 }
+=======
+.dropdown-menu{position:absolute;top:100%;left:0;background:#fff;border:1px solid #d0d7de;border-radius:6px;padding:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:10;min-width:220px}
+.dropdown-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:none;background:transparent;padding:6px 8px;border-radius:4px;font-size:13px;cursor:pointer}
+.dropdown-item:hover{background:#f4f6f8}
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 .hidden{display:none}
 .item-icon{width:16px;flex:0 0 16px;text-align:center;color:#6f42c1;font-weight:700}
 /* Centrado de la tabla productos */
@@ -115,6 +127,7 @@ table.productos-table { width:100%; }
 .var-down{color:#d63626}
 .var-equal{color:#b8860b}
 .var-neutral{color:#6c757d}
+<<<<<<< HEAD
 
 /* Sesiones UI */
 .sessions-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
@@ -144,3 +157,5 @@ table.productos-table { width:100%; }
 .modal-card{box-shadow:0 6px 30px rgba(11,92,171,0.18);background:linear-gradient(180deg,#fff 0%, #f7fbff 100%);border-radius:12px;padding:20px;border:1px solid #e6eefb}
 .modal-card .login-brand{margin-bottom:6px}
 #login-modal-close{position:absolute;right:6px;top:6px}
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54

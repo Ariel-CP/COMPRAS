@@ -3,7 +3,11 @@ from typing import List, Optional
 import csv
 import io
 
+<<<<<<< HEAD
 import openpyxl  # type: ignore[import-not-found]
+=======
+import openpyxl
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 from fastapi import (
     APIRouter,
     Body,
@@ -25,7 +29,10 @@ from app.services.plan_produccion_service import (
     resumen_planes,
     resumen_rango_planes,
 )
+<<<<<<< HEAD
 from app.api.deps_auth import require_permission
+=======
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 
 router = APIRouter(prefix="/plan-produccion-mensual", tags=["plan-produccion-mensual"])
 
@@ -189,8 +196,12 @@ def guardar_en_lote(
 
 @router.post("/import", response_model=dict)
 async def importar_archivo(
+<<<<<<< HEAD
     file: UploadFile = File(...), db: Session = Depends(get_db),
     current_user: dict = Depends(require_permission("plan_produccion", True)),
+=======
+    file: UploadFile = File(...), db: Session = Depends(get_db)
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 ):
     contenido = await file.read()
     nombre = (file.filename or "").lower()
@@ -213,6 +224,16 @@ async def importar_archivo(
         sheet = wb.active
         headers = [str(c.value).strip() if c.value else "" for c in next(sheet.rows)]
         idx = {h.lower(): i for i, h in enumerate(headers)}
+<<<<<<< HEAD
+=======
+
+        for fila in sheet.iter_rows(min_row=2):
+            def tomar(key: str):
+                pos = idx.get(key)
+                if pos is None:
+                    return None
+                return fila[pos].value
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 
         def tomar(row, key: str):
             pos = idx.get(key)
@@ -223,10 +244,17 @@ async def importar_archivo(
         for fila in sheet.iter_rows(min_row=2):
             rows.append(
                 {
+<<<<<<< HEAD
                     "codigo": tomar(fila, "codigo"),
                     "mes": tomar(fila, "mes"),
                     "anio": tomar(fila, "año") or tomar(fila, "anio"),
                     "cantidad": tomar(fila, "cantidad"),
+=======
+                    "codigo": tomar("codigo"),
+                    "mes": tomar("mes"),
+                    "anio": tomar("año") or tomar("anio"),
+                    "cantidad": tomar("cantidad"),
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
                 }
             )
 

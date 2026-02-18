@@ -138,9 +138,13 @@ def api_actualizar_producto(
 
 @router.get("/pt-activos", response_model=list)
 def listar_pt_activos(
+<<<<<<< HEAD
     q: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_permission("productos", False)),
+=======
+    q: Optional[str] = Query(None), db: Session = Depends(get_db)
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 ):
     sql = """
         SELECT id, codigo, nombre FROM producto

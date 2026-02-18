@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     application.include_router(api_router, prefix="/api")
     # UI routers directamente en /ui
     application.include_router(ui_home.router, prefix="/ui")
+<<<<<<< HEAD
     application.include_router(ui_auth.router, prefix="/ui")
     from app.api import ui_sessions
     # Proteger routers UI (exigir login). ui_auth (login) y ui_home quedan públicas.
@@ -61,6 +62,15 @@ def create_app() -> FastAPI:
     application.include_router(ui_informes.router, prefix="/ui", dependencies=[Depends(get_current_user)])
     application.include_router(ui_precios.router, prefix="/ui", dependencies=[Depends(get_current_user)])
     application.include_router(ui_tipo_cambio.router, prefix="/ui", dependencies=[Depends(get_current_user)])
+=======
+    application.include_router(ui_plan.router, prefix="/ui")
+    application.include_router(ui_stock.router, prefix="/ui")
+    application.include_router(ui_productos.router, prefix="/ui")
+    application.include_router(ui_mbom.router, prefix="/ui")
+    application.include_router(ui_informes.router, prefix="/ui")
+    application.include_router(ui_precios.router, prefix="/ui")
+    application.include_router(ui_tipo_cambio.router, prefix="/ui")
+>>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     # Nuevo router para rubros UI
     from app.api import ui_rubros
     application.include_router(ui_rubros.router, prefix="/ui")
