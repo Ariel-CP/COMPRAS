@@ -2,6 +2,7 @@
 {% block title %}Historial de Precios{% endblock %}
 {% block content %}
 <h2>Historial de Precios de Artículos</h2>
+{% set can_write = current_user and current_user.permissions.get('precios', (False, False))[1] %}
 <section class="panel">
   <form id="filtros" onsubmit="return false" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
     <div class="producto-picker">
@@ -41,9 +42,9 @@
   <h3>Importar historial</h3>
   <form id="importForm" enctype="multipart/form-data" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
     <label>Archivo CSV/XLSX
-      <input type="file" id="importFile" name="archivo" accept=".csv,.xlsx" required>
+      <input type="file" id="importFile" name="archivo" accept=".csv,.xlsx" required {% if not can_write %}disabled{% endif %}>
     </label>
-    <button type="submit">Importar</button>
+    <button type="submit" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>Importar</button>
     <a class="btn-link" href="/api/precios/template-xlsx">&#128190; Descargar plantilla XLSX</a>
   </form>
   <div id="importResult"></div>

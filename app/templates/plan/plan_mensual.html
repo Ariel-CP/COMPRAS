@@ -2,6 +2,7 @@
 %} {% block content %}
 <section class="panel">
   <h2>Plan de Producción Mensual</h2>
+  {% set can_write = current_user and current_user.permissions.get('plan', (False, False))[1] %}
   <div class="form-grid">
     <label for="mes">Mes</label>
     <input
@@ -24,7 +25,7 @@
     />
 
     <button id="btnCargar" type="button">Cargar período</button>
-    <button id="btnGuardar" type="button" class="btn-guardar">
+    <button id="btnGuardar" type="button" class="btn-guardar" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>
       Guardar cambios
     </button>
     <span id="planFeedback" class="nota"></span>
@@ -44,9 +45,9 @@
         </button>
         <label class="upload-btn dropdown-item">
           <span class="item-icon">UP</span><span>Seleccionar Excel/CSV</span>
-          <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden />
+          <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden {% if not can_write %}disabled{% endif %} />
         </label>
-        <button id="btnImportar" type="button" class="dropdown-item">
+        <button id="btnImportar" type="button" class="dropdown-item" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>
           <span class="item-icon">⇪</span><span>Subir e importar</span>
         </button>
         <span
@@ -99,6 +100,7 @@
 </section>
 {% endblock %} {% block scripts %}
 <script>
+const CAN_WRITE = {{ 'true' if can_write else 'false' }};
   (function () {
     const API_RESUMEN = "/api/plan-produccion-mensual/resumen";
     const API_BULK = "/api/plan-produccion-mensual/bulk";
@@ -202,7 +204,7 @@
           it.cantidad
         }" data-producto-id="${
           it.producto_id
-        }" class="input-cantidad" style="text-align: center;" /></td>
+        }" class="input-cantidad" style="text-align: center;" ${CAN_WRITE ? '' : 'disabled'} /></td>
         <td>${fmt(it.cantidad_prev)}</td>
         <td class="var-icon-cell">${iconoVariacion(it.variacion_abs)}</td>
         <td>${valorVariacion(it.variacion_abs)}</td>

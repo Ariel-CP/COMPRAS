@@ -4,6 +4,7 @@
 {% block content %}
 <section class="productos-wrapper">
   <h2>Artículos</h2>
+  {% set can_write = current_user and current_user.permissions.get('productos', (False, False))[1] %}
   <div class="tabla-controles" style="margin-bottom: 10px;">
     <a class="btn-accion" href="/ui/rubros">Ir a rubros</a>
   </div>
@@ -15,26 +16,26 @@
   <div class="panel panel-alta">
     <h3>Nuevo artículo</h3>
     <form id="form-nuevo" onsubmit="return crearProducto(event)" class="form-alta">
-      <input required maxlength="64" name="codigo" placeholder="Código" />
-      <input required maxlength="128" name="nombre" placeholder="Nombre" />
-      <select name="rubro">
+      <input required maxlength="64" name="codigo" placeholder="Código" {% if not can_write %}disabled{% endif %} />
+      <input required maxlength="128" name="nombre" placeholder="Nombre" {% if not can_write %}disabled{% endif %} />
+      <select name="rubro" {% if not can_write %}disabled{% endif %}>
         <option value="">(sin rubro)</option>
         {% for r in rubros %}
         <option value="{{ r.nombre }}">{{ r.nombre }}</option>
         {% endfor %}
       </select>
-      <select name="tipo_producto">
+      <select name="tipo_producto" {% if not can_write %}disabled{% endif %}>
         {% for t in ['PT','WIP','MP','EMB','SERV','HERR'] %}
         <option value="{{ t }}">{{ t }}</option>
         {% endfor %}
       </select>
-      <select name="unidad_medida_id" required>
+      <select name="unidad_medida_id" required {% if not can_write %}disabled{% endif %}>
         {% for um in unidades %}
         <option value="{{ um.id }}">{{ um.codigo }} - {{ um.nombre }}</option>
         {% endfor %}
       </select>
-      <label><input type="checkbox" name="activo" checked /> Activo</label>
-      <button type="submit">Crear</button>
+      <label><input type="checkbox" name="activo" checked {% if not can_write %}disabled{% endif %}/> Activo</label>
+      <button type="submit" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>Crear</button>
     </form>
   </div>
 
@@ -102,9 +103,15 @@
         <td>{{ p.rubro or '—' }}</td>
         <td title="{{ p.um_nombre }}">{{ p.um_codigo }}</td>
         <td>{{ 'Sí' if p.activo else 'No' }}</td>
+        {% if can_write %}
         <td>
           <button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>
         </td>
+        {% else %}
+        <td>
+          <button type="button" class="btn-accion" disabled title="No tiene permisos de escritura">Editar</button>
+        </td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
@@ -116,6 +123,7 @@
 
 {% block scripts %}
 <script>
+const CAN_WRITE = {{ 'true' if can_write else 'false' }};
 let currentOffset = {{ productos|length }};
 const pageSize = 100; // tamaño adicional por carga
 const unidadesMap = {
@@ -312,7 +320,7 @@ async function loadMore(){
         <td>${p.rubro || '—'}</td>
         <td title="${um.nombre}">${um.codigo}</td>
         <td>${p.activo ? 'Sí':'No'}</td>
-        <td><button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button></td>
+        <td>${CAN_WRITE ? `<button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>` : `<button type="button" class="btn-accion" disabled title="No tiene permisos de escritura">Editar</button>`}</td>
       `;
       tbody.appendChild(tr);
     });

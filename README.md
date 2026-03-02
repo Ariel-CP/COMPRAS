@@ -346,6 +346,31 @@ Resumen de cambios aplicados en esta sesión de desarrollo:
 - Dependencias:
   - Actualizado `requirements.txt` para incluir `passlib[bcrypt]`, `PyJWT`, `email-validator` y mantener compatibilidad con `bcrypt`.
 
+## Cambios recientes (02 de marzo de 2026)
+
+En esta sesión se completaron ajustes de permisos y la interfaz para respetar roles y privilegios de escritura/lectura.
+
+- Frontend: controles y botones de acción deshabilitados cuando el usuario no tiene permiso de escritura. Plantillas actualizadas:
+  - `app/templates/productos/index.html`
+  - `app/templates/rubros/list.html`
+  - `app/templates/mbom/estructura.html`
+  - `app/templates/precios/historial.html`
+  - `app/templates/stock/index.html`
+  - `app/templates/plan/plan_mensual.html`
+
+- UI: se añadió verificación en plantillas para evitar que usuarios con solo permiso de lectura vean o usen botones Crear/Editar/Importar/Guardar.
+
+- Nota técnica: la verificación se realiza leyendo `current_user.permissions["<form_key>"]` (tupla `[leer, escribir]`) expuesta por la dependencia de autenticación en la capa de renderizado de plantillas.
+
+- Mantenimiento: se dejó preparado un macro Jinja2 (por implementar) para centralizar esta lógica si se desea limpiar duplicación en múltiples plantillas.
+
+Pruebas sugeridas:
+
+1. Iniciar servidor y loguear como `admin@example.com` (o el admin creado con `scripts/seed_admin.py`). Verificar que los botones de creación/edición/importación estén habilitados.
+2. Crear un usuario con permisos solo de lectura sobre `productos` y loguear: verificar que el formulario de alta y botones de edición estén deshabilitados.
+3. Revisar la consola del navegador para asegurarse de que no se envían peticiones mutantes desde botones deshabilitados.
+
+Si quieres, puedo (1) convertir la verificación en un macro Jinja2 reutilizable y aplicarlo automáticamente a las plantillas restantes, y (2) crear pruebas automáticas básicas para la autorización.
 Archivos modificados (ejemplos):
 
 - `app/templates/auth/login.html`
