@@ -1,12 +1,27 @@
 {% macro can_write_attr(form_key) -%}
-{%- if current_user and current_user.permissions.get(form_key, (False, False))[1] -%}
+{%- set _user = (current_user if current_user is defined else none) -%}
+{%- if not _user and request is defined and request.state is defined and request.state.current_user is defined -%}
+{%- set _user = request.state.current_user -%}
+{%- endif -%}
+{%- set _perms = (_user.permissions if _user and _user.permissions is defined else {}) -%}
+{%- if _user and _perms.get(form_key, (False, False))[1] -%}
 {%- else -%}disabled title="No tiene permisos de escritura"{%- endif -%}
 {%- endmacro %}
 
 {% macro can_write_js(form_key) -%}
-{{ 'true' if (current_user and current_user.permissions.get(form_key, (False, False))[1]) else 'false' }}
+{%- set _user = (current_user if current_user is defined else none) -%}
+{%- if not _user and request is defined and request.state is defined and request.state.current_user is defined -%}
+{%- set _user = request.state.current_user -%}
+{%- endif -%}
+{%- set _perms = (_user.permissions if _user and _user.permissions is defined else {}) -%}
+{{ 'true' if (_user and _perms.get(form_key, (False, False))[1]) else 'false' }}
 {%- endmacro %}
 
 {% macro can_write_bool(form_key) -%}
-{{ True if (current_user and current_user.permissions.get(form_key, (False, False))[1]) else False }}
+{%- set _user = (current_user if current_user is defined else none) -%}
+{%- if not _user and request is defined and request.state is defined and request.state.current_user is defined -%}
+{%- set _user = request.state.current_user -%}
+{%- endif -%}
+{%- set _perms = (_user.permissions if _user and _user.permissions is defined else {}) -%}
+{{ True if (_user and _perms.get(form_key, (False, False))[1]) else False }}
 {%- endmacro %}

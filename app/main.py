@@ -1,25 +1,26 @@
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import (
     get_swagger_ui_html,
     get_swagger_ui_oauth2_redirect_html,
 )
+from fastapi.staticfiles import StaticFiles
 
-from .api.router import api_router
-from .api import (
-    ui_plan,
-    ui_stock,
-    ui_home,
-    ui_productos,
-    ui_mbom,
-    ui_informes,
-    ui_precios,
-    ui_tipo_cambio,
-    ui_auth,
-    ui_admin,
-)
 from app.api.deps_auth import get_current_user
+
+from .api import (
+    ui_admin,
+    ui_auth,
+    ui_home,
+    ui_informes,
+    ui_mbom,
+    ui_plan,
+    ui_precios,
+    ui_productos,
+    ui_stock,
+    ui_tipo_cambio,
+)
+from .api.router import api_router
 
 
 def create_app() -> FastAPI:
@@ -49,31 +50,22 @@ def create_app() -> FastAPI:
     application.include_router(api_router, prefix="/api")
     # UI routers directamente en /ui
     application.include_router(ui_home.router, prefix="/ui")
-<<<<<<< HEAD
     application.include_router(ui_auth.router, prefix="/ui")
-    from app.api import ui_sessions
+
+    from .api import ui_rubros, ui_sessions
+
     # Proteger routers UI (exigir login). ui_auth (login) y ui_home quedan públicas.
-    application.include_router(ui_admin.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_sessions.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_plan.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_stock.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_productos.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_mbom.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_informes.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_precios.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-    application.include_router(ui_tipo_cambio.router, prefix="/ui", dependencies=[Depends(get_current_user)])
-=======
-    application.include_router(ui_plan.router, prefix="/ui")
-    application.include_router(ui_stock.router, prefix="/ui")
-    application.include_router(ui_productos.router, prefix="/ui")
-    application.include_router(ui_mbom.router, prefix="/ui")
-    application.include_router(ui_informes.router, prefix="/ui")
-    application.include_router(ui_precios.router, prefix="/ui")
-    application.include_router(ui_tipo_cambio.router, prefix="/ui")
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
-    # Nuevo router para rubros UI
-    from app.api import ui_rubros
-    application.include_router(ui_rubros.router, prefix="/ui")
+    deps = [Depends(get_current_user)]
+    application.include_router(ui_admin.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_sessions.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_plan.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_stock.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_productos.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_mbom.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_informes.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_precios.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_tipo_cambio.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_rubros.router, prefix="/ui", dependencies=deps)
 
     # Static files
     application.mount(
@@ -102,8 +94,9 @@ def create_app() -> FastAPI:
                 return await call_next(request)
 
             # comprobar token/usuario
+            from fastapi.responses import JSONResponse, RedirectResponse
+
             from app.db import SessionLocal
-            from fastapi.responses import RedirectResponse, JSONResponse
 
             db = SessionLocal()
             try:
@@ -114,10 +107,7 @@ def create_app() -> FastAPI:
                 db.close()
 
             # adjuntar usuario al request para plantillas
-            try:
-                request.state.current_user = user
-            except Exception:
-                pass
+            request.state.current_user = user
 
             if not user:
                 if request.method in ("GET", "HEAD"):

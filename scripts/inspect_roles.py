@@ -5,8 +5,8 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from app.db import SessionLocal
-from sqlalchemy import text
+from app.db import SessionLocal  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 def main():
     db = SessionLocal()

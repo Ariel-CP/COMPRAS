@@ -405,15 +405,8 @@ def obtener_estructura_completa_recursiva(
     if producto_id in visitados:
         return []
     visitados.add(producto_id)
-<<<<<<< HEAD
 
     resultado: List[Dict[str, Any]] = []
-
-=======
-    
-    resultado: List[Dict[str, Any]] = []
-    
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     # Buscar MBOM para este producto
     cab = get_cabecera_preferida(db, producto_id, estado)
     if not cab:

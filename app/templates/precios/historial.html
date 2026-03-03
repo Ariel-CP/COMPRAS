@@ -2,7 +2,8 @@
 {% block title %}Historial de Precios{% endblock %}
 {% block content %}
 <h2>Historial de Precios de Artículos</h2>
-{% set can_write = current_user and current_user.permissions.get('precios', (False, False))[1] %}
+{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
+{% set CAN_WRITE_JS = can_write_js('precios') %}
 <section class="panel">
   <form id="filtros" onsubmit="return false" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
     <div class="producto-picker">
@@ -42,9 +43,9 @@
   <h3>Importar historial</h3>
   <form id="importForm" enctype="multipart/form-data" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
     <label>Archivo CSV/XLSX
-      <input type="file" id="importFile" name="archivo" accept=".csv,.xlsx" required {% if not can_write %}disabled{% endif %}>
+      <input type="file" id="importFile" name="archivo" accept=".csv,.xlsx" required {{ can_write_attr('precios') }}>
     </label>
-    <button type="submit" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>Importar</button>
+    <button type="submit" {{ can_write_attr('precios') }}>Importar</button>
     <a class="btn-link" href="/api/precios/template-xlsx">&#128190; Descargar plantilla XLSX</a>
   </form>
   <div id="importResult"></div>

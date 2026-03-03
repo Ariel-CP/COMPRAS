@@ -1,46 +1,47 @@
 from datetime import date
 from io import BytesIO
+
 from fastapi import (
     APIRouter,
-    Depends,
-    HTTPException,
-    Query,
     Body,
-    UploadFile,
+    Depends,
     File,
     Form,
     Header,
+    HTTPException,
+    Query,
+    UploadFile,
 )
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
 from ..db import get_db
 from ..schemas.tipo_cambio import (
-    TipoCambioCreate,
-    TipoCambioUpdate,
-    TipoCambioOut,
-    TipoCambioFiltro,
     BulkImportResult,
+    TipoCambioCreate,
+    TipoCambioFiltro,
+    TipoCambioOut,
     TipoCambioSyncResponse,
+    TipoCambioUpdate,
 )
 from ..services.tipo_cambio_service import (
-    listar_tipos_cambio,
-    upsert_tipo_cambio,
     actualizar_tipo_cambio,
-    obtener_por_id,
     bulk_import_csv,
     bulk_import_xlsx,
+    listar_tipos_cambio,
+    obtener_por_id,
+    upsert_tipo_cambio,
 )
 from ..services.tipo_cambio_sync_service import (
     TipoCambioSyncError,
     sync_bcra_tipos_cambio,
 )
+from .deps_auth import require_permission
 
 router = APIRouter()
 settings = get_settings()
-from .deps_auth import require_permission
 
 
 @router.get("/", response_model=list[TipoCambioOut])
@@ -89,7 +90,6 @@ def api_upsert_tipo_cambio(
         raise HTTPException(
             status_code=500, detail=str(getattr(ex, "orig", ex))
         ) from ex
-    
 
 
 @router.put("/{tipo_cambio_id}", response_model=TipoCambioOut)

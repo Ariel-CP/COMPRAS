@@ -3,11 +3,12 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+import app.services.mbom_costos as mbom_costos
+import app.services.mbom_service as mbom_service
 from app.models.plan_produccion import (
     PlanProduccionCreate,
     PlanProduccionUpdate,
 )
-from app.services import mbom_costos, mbom_service
 
 
 def listar_planes(
@@ -51,6 +52,38 @@ def listar_planes(
     total_val = db.execute(text(count_sql), params).scalar()
     total = int(total_val or 0)
     return [dict(row) for row in rows], total
+
+
+def listar_periodos_cargados(db: Session) -> List[dict]:
+    """Devuelve los períodos (año/mes) que tienen planes cargados.
+
+    Se agrupa por (anio, mes) sobre `plan_produccion_mensual`.
+    """
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                anio,
+                mes,
+                COUNT(*) AS registros,
+                SUM(COALESCE(cantidad_planificada, 0)) AS total_cantidad
+            FROM plan_produccion_mensual
+            GROUP BY anio, mes
+            ORDER BY anio DESC, mes DESC
+            """
+        )
+    ).fetchall()
+    result: List[dict] = []
+    for r in rows:
+        result.append(
+            {
+                "anio": int(r.anio),
+                "mes": int(r.mes),
+                "registros": int(r.registros or 0),
+                "total_cantidad": float(r.total_cantidad or 0),
+            }
+        )
+    return result
 
 
 def crear_plan(db: Session, plan: PlanProduccionCreate) -> int:

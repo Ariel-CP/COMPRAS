@@ -11,24 +11,37 @@
 <body>
   <header>
     <h1>Compras</h1>
+    {% set _user = current_user or request.state.current_user %}
+    {% if _user %}
+    {% set perms = _user.permissions if _user.permissions is defined else {} %}
     <nav>
       <a href="/ui" class="inicio-verde">Inicio</a>
-      <a href="/ui/plan">Plan</a>
-      <a href="/ui/stock">Stock</a>
-      <a href="/ui/productos">Artículos</a>
-      <a href="/ui/mbom">Estructura</a>
-      <a href="/ui/informes/costos-pt">Costos PT</a>
-      <a href="/ui/precios">Precios</a>
-      <a href="/ui/tipo-cambio">Tipo Cambio</a>
+      {% if perms.get('plan', (False, False))[0] %}<a href="/ui/plan">Plan</a>{% endif %}
+      {% if perms.get('stock', (False, False))[0] %}<a href="/ui/stock">Stock</a>{% endif %}
+      {% if perms.get('productos', (False, False))[0] %}<a href="/ui/productos">Artículos</a>{% endif %}
+      {% if perms.get('mbom', (False, False))[0] %}<a href="/ui/mbom">Estructura</a>{% endif %}
+      {% if perms.get('informes', (False, False))[0] %}
+        <a href="/ui/informes/costos-pt">Costos PT</a>
+      {% endif %}
+      {% if perms.get('precios', (False, False))[0] %}<a href="/ui/precios">Precios</a>{% endif %}
+      {% if perms.get('tipo_cambio', (False, False))[0] %}<a href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
+      {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] %}
+      {% if show_admin %}
       <span class="import-dropdown" style="vertical-align:middle;">
         <button class="btn-accion dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Configuración ▾</button>
         <div class="dropdown-menu hidden" role="menu">
-          <a class="dropdown-item" href="/ui/admin/usuarios">Admin</a>
-          <a class="dropdown-item" href="/ui/admin/permisos">Permisos</a>
-          <a class="dropdown-item" href="/ui/admin/roles">Roles</a>
+          {% if perms.get('admin_usuarios', (False, False))[0] %}
+            <a class="dropdown-item" href="/ui/admin/usuarios">Admin</a>
+          {% endif %}
+          {% if perms.get('admin_roles', (False, False))[0] %}
+            <a class="dropdown-item" href="/ui/admin/permisos">Permisos</a>
+            <a class="dropdown-item" href="/ui/admin/roles">Roles</a>
+          {% endif %}
         </div>
       </span>
+      {% endif %}
     </nav>
+    {% endif %}
     <div class="header-right">
       {% set _user = current_user or request.state.current_user %}
       {% if _user %}

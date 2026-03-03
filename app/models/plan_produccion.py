@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-=======
-from pydantic import BaseModel, Field, validator, ConfigDict
-from typing import Optional
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 
 class PlanProduccionBase(BaseModel):
     producto_id: int

@@ -64,7 +64,7 @@ function escapar(s){ return s ? s : ''; }
 
 function escapeHtml(str){
   if(!str) return '';
-  return String(str).replace(/[&<>\"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\' : '&#39;'}[s]));
+  return String(str).replace(/[&<>\"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 }
 
 function refrescar(){

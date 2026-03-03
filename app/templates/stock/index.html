@@ -5,7 +5,8 @@
 {% if error %}
 <div class="error">Error: {{ error }}</div>
 {% endif %}
-{% set can_write = current_user and current_user.permissions.get('stock', (False, False))[1] %}
+{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
+{% set CAN_WRITE_JS = can_write_js('stock') %}
 <form id="filtros">
   <label>Año <input type="number" id="anio" min="2000" max="2100" value="{{ anio }}" /></label>
   <label>Mes <input type="number" id="mes" min="1" max="12" value="{{ mes }}" /></label>
@@ -15,8 +16,8 @@
 <section>
   <h3>Importar CSV/Excel</h3>
   <form id="formImport" enctype="multipart/form-data">
-    <input type="file" name="archivo" id="archivo" accept=".csv,.xlsx" {% if not can_write %}disabled{% endif %} />
-    <button type="button" id="btnImportar" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>Importar</button>
+    <input type="file" name="archivo" id="archivo" accept=".csv,.xlsx" {{ can_write_attr('stock') }} />
+    <button type="button" id="btnImportar" {{ can_write_attr('stock') }}>Importar</button>
   </form>
 </section>
 

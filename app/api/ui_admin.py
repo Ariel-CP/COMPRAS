@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -11,6 +13,10 @@ from app.utils.health import db_status
 router = APIRouter()
 
 templates = Jinja2Templates(directory="app/templates")
+_env_name = os.environ.get("ENV", os.environ.get("ENVIRONMENT", "")).lower()
+if _env_name != "production":
+    templates.env.auto_reload = True
+    templates.env.cache = {}
 
 
 @router.get("/admin/usuarios", response_class=HTMLResponse)

@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -13,26 +12,12 @@ from app.services.rubro_service import (
     listar_rubros,
     obtener_rubro_por_id,
 )
-=======
-from fastapi import APIRouter, Request, Form, status, Depends
-from fastapi.responses import RedirectResponse, HTMLResponse
-from sqlalchemy.orm import Session
-from app.api.deps import get_db
-from app.services.rubro_service import (
-    listar_rubros, crear_rubro, obtener_rubro_por_id, actualizar_rubro, eliminar_rubro, existe_rubro_unico
-)
-from fastapi.templating import Jinja2Templates
-from fastapi import HTTPException
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 
 router = APIRouter()
 # Las plantillas residen en app/templates
 templates = Jinja2Templates(directory="app/templates")
 
-<<<<<<< HEAD
 
-=======
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 @router.get("/rubros", response_class=HTMLResponse)
 def rubros_list(request: Request, db: Session = Depends(get_db)):
     rubros = listar_rubros(db)
@@ -41,7 +26,6 @@ def rubros_list(request: Request, db: Session = Depends(get_db)):
         {"request": request, "rubros": rubros, "error": None, "nombre_inicial": None},
     )
 
-<<<<<<< HEAD
 
 @router.get("/rubros/nuevo", response_class=HTMLResponse)
 def rubro_nuevo_form():
@@ -49,13 +33,6 @@ def rubro_nuevo_form():
     return RedirectResponse("/ui/rubros", status_code=status.HTTP_303_SEE_OTHER)
 
 
-=======
-@router.get("/rubros/nuevo", response_class=HTMLResponse)
-def rubro_nuevo_form(request: Request):
-    # Redirigimos al listado, donde está el formulario de alta.
-    return RedirectResponse("/ui/rubros", status_code=status.HTTP_303_SEE_OTHER)
-
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 @router.post("/rubros/nuevo", response_class=HTMLResponse)
 def rubro_nuevo(request: Request, nombre: str = Form(...), db: Session = Depends(get_db)):
     if existe_rubro_unico(db, nombre):
@@ -73,52 +50,37 @@ def rubro_nuevo(request: Request, nombre: str = Form(...), db: Session = Depends
     crear_rubro(db, nombre)
     return RedirectResponse("/ui/rubros", status_code=status.HTTP_303_SEE_OTHER)
 
-<<<<<<< HEAD
 
-=======
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 @router.get("/rubros/editar/{rubro_id}", response_class=HTMLResponse)
 def rubro_editar_form(request: Request, rubro_id: int, db: Session = Depends(get_db)):
     rubro = obtener_rubro_por_id(db, rubro_id)
     if not rubro:
         raise HTTPException(status_code=404, detail="Rubro no encontrado")
-<<<<<<< HEAD
     return templates.TemplateResponse(
         "rubros/form.html",
         {"request": request, "rubro": rubro, "error": None},
     )
 
-=======
-    return templates.TemplateResponse("rubros/form.html", {"request": request, "rubro": rubro, "error": None})
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 
 @router.post("/rubros/editar/{rubro_id}", response_class=HTMLResponse)
 def rubro_editar(request: Request, rubro_id: int, nombre: str = Form(...), db: Session = Depends(get_db)):
     if existe_rubro_unico(db, nombre, exclude_id=rubro_id):
         rubro = {"id": rubro_id, "nombre": nombre}
-<<<<<<< HEAD
         return templates.TemplateResponse(
             "rubros/form.html",
             {"request": request, "rubro": rubro, "error": "El nombre ya existe."},
         )
-=======
-        return templates.TemplateResponse("rubros/form.html", {"request": request, "rubro": rubro, "error": "El nombre ya existe."})
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     updated = actualizar_rubro(db, rubro_id, nombre)
     if not updated:
         raise HTTPException(status_code=404, detail="Rubro no encontrado")
     return RedirectResponse("/ui/rubros", status_code=status.HTTP_303_SEE_OTHER)
 
-<<<<<<< HEAD
 
-=======
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
 @router.get("/rubros/eliminar/{rubro_id}", response_class=HTMLResponse)
 def rubro_confirmar_eliminar(request: Request, rubro_id: int, db: Session = Depends(get_db)):
     rubro = obtener_rubro_por_id(db, rubro_id)
     if not rubro:
         raise HTTPException(status_code=404, detail="Rubro no encontrado")
-<<<<<<< HEAD
     return templates.TemplateResponse(
         "rubros/confirm_delete.html",
         {"request": request, "rubro": rubro},
@@ -127,12 +89,6 @@ def rubro_confirmar_eliminar(request: Request, rubro_id: int, db: Session = Depe
 
 @router.post("/rubros/eliminar/{rubro_id}")
 def rubro_eliminar(rubro_id: int, db: Session = Depends(get_db)):
-=======
-    return templates.TemplateResponse("rubros/confirm_delete.html", {"request": request, "rubro": rubro})
-
-@router.post("/rubros/eliminar/{rubro_id}")
-def rubro_eliminar(request: Request, rubro_id: int, db: Session = Depends(get_db)):
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     ok = eliminar_rubro(db, rubro_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Rubro no encontrado")

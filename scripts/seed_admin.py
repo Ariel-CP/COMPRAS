@@ -19,8 +19,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.db import SessionLocal
-from app.services import auth_service
+from app.db import SessionLocal  # noqa: E402
+from app.services import auth_service  # noqa: E402
 
 DEFAULT_FORMS = [
     "productos",

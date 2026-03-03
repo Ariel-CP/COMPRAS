@@ -1,8 +1,12 @@
-{% extends "base.html" %} {% block title %}Plan de Producción Mensual{% endblock
-%} {% block content %}
+{% extends "base.html" %}
+{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
+{% set CAN_WRITE_JS = can_write_js('plan') %}
+
+{% block title %}Plan de Producción Mensual{% endblock %}
+
+{% block content %}
 <section class="panel">
   <h2>Plan de Producción Mensual</h2>
-  {% set can_write = current_user and current_user.permissions.get('plan', (False, False))[1] %}
   <div class="form-grid">
     <label for="mes">Mes</label>
     <input
@@ -25,10 +29,11 @@
     />
 
     <button id="btnCargar" type="button">Cargar período</button>
-    <button id="btnGuardar" type="button" class="btn-guardar" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>
+    <button id="btnGuardar" type="button" class="btn-guardar" {{ can_write_attr('plan') }}>
       Guardar cambios
     </button>
     <span id="planFeedback" class="nota"></span>
+    <span id="permisoModo" class="nota"></span>
   </div>
   <div class="acciones-tabla">
     <div class="import-dropdown">
@@ -45,9 +50,9 @@
         </button>
         <label class="upload-btn dropdown-item">
           <span class="item-icon">UP</span><span>Seleccionar Excel/CSV</span>
-          <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden {% if not can_write %}disabled{% endif %} />
+          <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden {{ can_write_attr('plan') }} />
         </label>
-        <button id="btnImportar" type="button" class="dropdown-item" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>
+        <button id="btnImportar" type="button" class="dropdown-item" {{ can_write_attr('plan') }}>
           <span class="item-icon">⇪</span><span>Subir e importar</span>
         </button>
         <span
@@ -67,6 +72,42 @@
         Requerimientos valorizados
       </button>
     </div>
+  </div>
+</section>
+
+<section class="panel" id="periodos-cargados">
+  <h3>Períodos cargados</h3>
+  <div class="tabla-wrapper">
+    <table id="tablaPeriodos" class="striped">
+      <thead>
+        <tr>
+          <th>Año</th>
+          <th>Mes</th>
+          <th>Registros</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if periodos is defined and periodos %}
+          {% for p in periodos %}
+          <tr>
+            <td>{{ p.anio }}</td>
+            <td>{{ p.mes }}</td>
+            <td>{{ p.registros }}</td>
+            <td>{{ p.total_cantidad }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="4"><em>No hay períodos cargados</em></td></tr>
+        {% endif %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="3">Total períodos</th>
+          <th id="totalPeriodos">0</th>
+        </tr>
+      </tfoot>
+    </table>
   </div>
 </section>
 
@@ -100,8 +141,10 @@
 </section>
 {% endblock %} {% block scripts %}
 <script>
-const CAN_WRITE = {{ 'true' if can_write else 'false' }};
+const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
   (function () {
+    const API_LISTAR = "/api/plan-produccion-mensual/";
+    const API_PERIODOS = "/api/plan-produccion-mensual/periodos";
     const API_RESUMEN = "/api/plan-produccion-mensual/resumen";
     const API_BULK = "/api/plan-produccion-mensual/bulk";
     const API_IMPORT = "/api/plan-produccion-mensual/import";
@@ -116,6 +159,8 @@ const CAN_WRITE = {{ 'true' if can_write else 'false' }};
     const tablaBody = document.querySelector("#tablaPlanes tbody");
     const totalActualEl = document.getElementById("totalActual");
     const totalPrevioEl = document.getElementById("totalPrevio");
+    const periodosBody = document.querySelector("#tablaPeriodos tbody");
+    const totalPeriodosEl = document.getElementById("totalPeriodos");
     const btnImportar = document.getElementById("btnImportar");
     const inputArchivo = document.getElementById("inputArchivo");
     const importFeedback = document.getElementById("importFeedback");
@@ -123,6 +168,7 @@ const CAN_WRITE = {{ 'true' if can_write else 'false' }};
     const btnDescargarCsv = document.getElementById("btnDescargarCsv");
     const btnImportToggle = document.getElementById("btnImportToggle");
     const importMenu = document.getElementById("importMenu");
+    const btnVerGraficos = document.getElementById("btnVerGraficos");
     const btnVerRequerimientos = document.getElementById(
       "btnVerRequerimientos"
     );
@@ -144,8 +190,19 @@ const CAN_WRITE = {{ 'true' if can_write else 'false' }};
       const url = `${API_RESUMEN}?mes=${mes}&anio=${anio}`;
       const resp = await fetch(url);
       if (!resp.ok) {
-        tablaBody.innerHTML =
-          '<tr><td colspan="7"><em>Error consultando datos</em></td></tr>';
+        let detail = "";
+        try {
+          const data = await resp.json();
+          detail = data && data.detail ? String(data.detail) : "";
+        } catch (e) {
+          detail = "";
+        }
+
+        const msg = detail
+          ? `Error (${resp.status}): ${detail}`
+          : `Error (${resp.status}) consultando datos`;
+        feedback.textContent = msg;
+        tablaBody.innerHTML = `<tr><td colspan="7"><em>${msg}</em></td></tr>`;
         return;
       }
       const data = await resp.json();
@@ -156,6 +213,80 @@ const CAN_WRITE = {{ 'true' if can_write else 'false' }};
         0
       );
       totalPrevioEl.textContent = fmt(totalPrevio);
+    }
+
+    async function cargarPeriodos() {
+      periodosBody.innerHTML = '<tr><td colspan="4">Cargando...</td></tr>';
+      totalPeriodosEl.textContent = "0";
+
+      const resp = await fetch(API_PERIODOS);
+      if (!resp.ok) {
+        let detail = "";
+        try {
+          const data = await resp.json();
+          detail = data && data.detail ? String(data.detail) : "";
+        } catch (e) {
+          detail = "";
+        }
+        const msg = detail
+          ? `Error (${resp.status}): ${detail}`
+          : `Error (${resp.status}) consultando períodos cargados`;
+        periodosBody.innerHTML = `<tr><td colspan="4"><em>${msg}</em></td></tr>`;
+        return;
+      }
+      const data = await resp.json();
+      const items = data.items || [];
+      renderPeriodos(items);
+      totalPeriodosEl.textContent = fmt(data.total || items.length || 0);
+    }
+
+    function renderPeriodos(items) {
+      periodosBody.innerHTML = "";
+      if (!items.length) {
+        periodosBody.innerHTML =
+          '<tr><td colspan="4"><em>No hay períodos cargados</em></td></tr>';
+        return;
+      }
+
+      let selectedRow = null;
+      items.forEach((it) => {
+        const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.title = "Click para cargar este período";
+        tr.innerHTML = `
+          <td>${it.anio ?? ""}</td>
+          <td>${it.mes ?? ""}</td>
+          <td>${fmt(it.registros || 0)}</td>
+          <td>${fmt(it.total_cantidad || 0)}</td>
+        `;
+
+        tr.addEventListener("click", async () => {
+          const anio = Number(it.anio);
+          const mes = Number(it.mes);
+          if (!anio || !mes) {
+            return;
+          }
+
+          if (selectedRow) {
+            selectedRow.style.fontWeight = "";
+          }
+          selectedRow = tr;
+          tr.style.fontWeight = "600";
+
+          inputAnio.value = String(anio);
+          inputMes.value = String(mes);
+
+          feedback.textContent = `Cargando plan ${mes}/${anio}...`;
+          await cargarTabla();
+
+          const tablaPlanes = document.getElementById("tablaPlanes");
+          if (tablaPlanes && typeof tablaPlanes.scrollIntoView === "function") {
+            tablaPlanes.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
+
+        periodosBody.appendChild(tr);
+      });
     }
 
     function renderTabla(items) {
@@ -260,8 +391,18 @@ const CAN_WRITE = {{ 'true' if can_write else 'false' }};
       if (resp.ok) {
         feedback.textContent = "Guardado correcto.";
         cargarTabla();
+        cargarPeriodos();
       } else {
-        feedback.textContent = "Error al guardar.";
+        let detail = "";
+        try {
+          const data = await resp.json();
+          detail = data && data.detail ? String(data.detail) : "";
+        } catch (e) {
+          detail = "";
+        }
+        feedback.textContent = detail
+          ? `Error (${resp.status}): ${detail}`
+          : `Error (${resp.status}) al guardar.`;
       }
     }
 
@@ -278,8 +419,18 @@ const CAN_WRITE = {{ 'true' if can_write else 'false' }};
         const data = await resp.json();
         importFeedback.textContent = `Importadas ${data.procesadas} filas.`;
         cargarTabla();
+        cargarPeriodos();
       } else {
-        importFeedback.textContent = "Error al importar.";
+        let detail = "";
+        try {
+          const data = await resp.json();
+          detail = data && data.detail ? String(data.detail) : "";
+        } catch (e) {
+          detail = "";
+        }
+        importFeedback.textContent = detail
+          ? `Error (${resp.status}): ${detail}`
+          : `Error (${resp.status}) al importar.`;
       }
     }
 
@@ -339,6 +490,15 @@ const CAN_WRITE = {{ 'true' if can_write else 'false' }};
     const hoy = new Date();
     if (!inputMes.value) inputMes.value = hoy.getMonth() + 1;
     if (!inputAnio.value) inputAnio.value = hoy.getFullYear();
+
+    // Mostrar modo según permisos
+    const permisoModo = document.getElementById("permisoModo");
+    if (permisoModo) {
+      permisoModo.textContent = CAN_WRITE
+        ? "Modo: escritura habilitada"
+        : "Modo: solo lectura (sin permisos de escritura)";
+    }
+    cargarPeriodos();
     cargarTabla();
   })();
 </script>

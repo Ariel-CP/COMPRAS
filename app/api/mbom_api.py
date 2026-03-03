@@ -1,8 +1,7 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
-
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -12,24 +11,23 @@ from ..services import mbom_service
 from ..services.mbom_costos import calcular_costos
 from ..services.mbom_import_service import importar_mbom_desde_flexxus
 from ..services.mbom_operacion_service import (
-    listar_operaciones_mbom,
-    agregar_operacion_mbom,
     actualizar_operacion_mbom,
+    agregar_operacion_mbom,
     eliminar_operacion_mbom,
+    listar_operaciones_mbom,
     obtener_siguiente_secuencia,
 )
+from ..services.producto_service import crear_producto, listar_productos
 from ..services.ruta_operacion_base_service import (
+    aplicar_ruta_base_a_mbom,
+    crear_ruta_base_desde_mbom,
     listar_rutas_base,
     obtener_ruta_base,
-    crear_ruta_base_desde_mbom,
-    aplicar_ruta_base_a_mbom,
 )
-from ..services.producto_service import listar_productos, crear_producto
 from ..services.unidad_service import listar_unidades
-
+from .deps_auth import require_permission
 
 router = APIRouter()
-from .deps_auth import require_permission
 
 
 @router.get("/mbom/cabecera", response_model=Optional[MBOMCabecera])

@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -9,14 +9,13 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..schemas.precio import PrecioCompraOut, PrecioImportResult
 from ..services.precio_service import (
-    listar_precios_compra,
     generar_template_precios,
     importar_precios_desde_archivo,
+    listar_precios_compra,
 )
-
+from .deps_auth import require_permission
 
 router = APIRouter()
-from .deps_auth import require_permission
 
 
 @router.get("/historial", response_model=list[PrecioCompraOut])
@@ -69,8 +68,6 @@ def descargar_template_precios():
         ),
         headers=headers,
     )
-
-
 
 
 @router.post("/import", response_model=PrecioImportResult)

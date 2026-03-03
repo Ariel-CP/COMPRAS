@@ -6,8 +6,8 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from app.db import SessionLocal
-from app.services import auth_service, user_service
+from app.db import SessionLocal  # noqa: E402
+from app.services import auth_service, user_service  # noqa: E402
 
 ROLES_PERMISSIONS = {
     "comprador": {

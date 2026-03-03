@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.db import _engine
+from app.db import _engine  # noqa: E402
 
 
 def main():
@@ -33,9 +33,10 @@ def main():
         for stmt in statements:
             try:
                 conn.execute(text(stmt))
-            except Exception as e:
+            except Exception as exc:
                 print("Error ejecutando sentencia:")
                 print(stmt)
+                print(exc)
                 raise
         # Si todo ok, confirmar (commit)
         try:
