@@ -79,3 +79,14 @@ local_settings.py
 
 # Generated reports
 reports/
+
+# Archivos locales (pruebas/manuales)
+cookies.txt
+headers.txt
+login.json
+payload.json
+template_precios_historial.xlsx
+ecotermo-logo5.png
+
+# Exportaciones/archivos de ERP usados para pruebas puntuales
+Estructura de Producto_*.csv
