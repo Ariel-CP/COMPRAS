@@ -96,6 +96,88 @@ def importar_mbom_desde_flexxus(
     return {"cabecera": cabecera_final, "lineas": lineas}
 
 
+def generar_template_mbom_flexxus_csv(
+    db: Session, producto_padre_id: int
+) -> tuple[bytes, str]:
+    """Genera una plantilla CSV para importar MBOM desde Flexxus.
+
+    Incluye un ejemplo con múltiples niveles (subestructuras) para que el
+    usuario vea cómo representar jerarquías mediante la columna `Nivel`.
+
+    Nota: la primera fila (Nivel=0) debe coincidir con el producto padre
+    seleccionado, ya que el importador lo valida si está presente.
+    """
+
+    prod_padre = get_producto(db, producto_padre_id)
+    if not prod_padre:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    codigo_padre = str(prod_padre.get("codigo") or "").upper()
+    nombre_padre = str(prod_padre.get("nombre") or "")
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=",", lineterminator="\n")
+    writer.writerow(["CodArt", "Descripcion", "Nivel", "Cantidad"])
+
+    # Ejemplo multinivel (Nivel 0/1/2) para reflejar subestructuras.
+    writer.writerow([codigo_padre, nombre_padre or f"Producto {codigo_padre}", 0, 1])
+    writer.writerow(["SUB_01", "SUBENSAMBLE 01 (WIP)", 1, 1])
+    writer.writerow(["MAT_01", "MATERIA PRIMA 01", 2, 2.5])
+    writer.writerow(["MAT_02", "MATERIA PRIMA 02", 2, 1])
+    writer.writerow(["MAT_03", "MATERIA PRIMA 03", 1, 3])
+
+    # UTF-8 con BOM ayuda a Excel a detectar encoding.
+    csv_text = output.getvalue()
+    content = ("\ufeff" + csv_text).encode("utf-8")
+
+    safe_codigo = "".join(ch for ch in codigo_padre if ch.isalnum() or ch in {"-", "_"})
+    filename = f"template_mbom_flexxus_{safe_codigo or producto_padre_id}.csv"
+    return content, filename
+
+
+def generar_template_mbom_flexxus_xlsx(
+    db: Session, producto_padre_id: int
+) -> tuple[bytes, str]:
+    """Genera una plantilla XLSX para importar MBOM desde Flexxus.
+
+    Requiere `openpyxl` instalado en el servidor.
+    """
+
+    try:
+        from openpyxl import Workbook  # type: ignore
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=400,
+            detail="Soporte XLSX no disponible en el servidor",
+        ) from exc
+
+    prod_padre = get_producto(db, producto_padre_id)
+    if not prod_padre:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    codigo_padre = str(prod_padre.get("codigo") or "").upper()
+    nombre_padre = str(prod_padre.get("nombre") or "")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "MBOM Flexxus"
+
+    ws.append(["CodArt", "Descripcion", "Nivel", "Cantidad"])
+    ws.append([codigo_padre, nombre_padre or f"Producto {codigo_padre}", 0, 1])
+    ws.append(["SUB_01", "SUBENSAMBLE 01 (WIP)", 1, 1])
+    ws.append(["MAT_01", "MATERIA PRIMA 01", 2, 2.5])
+    ws.append(["MAT_02", "MATERIA PRIMA 02", 2, 1])
+    ws.append(["MAT_03", "MATERIA PRIMA 03", 1, 3])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    content = buf.getvalue()
+
+    safe_codigo = "".join(ch for ch in codigo_padre if ch.isalnum() or ch in {"-", "_"})
+    filename = f"template_mbom_flexxus_{safe_codigo or producto_padre_id}.xlsx"
+    return content, filename
+
+
 def _parse_upload(archivo: UploadFile) -> List[Dict[str, object]]:
     content = archivo.file.read()
     if not content:
@@ -319,6 +401,7 @@ def _procesar_nivel(
                 codigo=hijo.normalized_codigo,
                 nombre=hijo.descripcion or hijo.normalized_codigo,
                 tipo_producto=tipo_prod,
+                rubro=None,
                 unidad_medida_id=um_default_id,
                 activo=True,
             )

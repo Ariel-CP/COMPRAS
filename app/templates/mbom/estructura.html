@@ -270,6 +270,8 @@
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
     <input type="file" id="archivoFlexxus" accept=".csv,.xlsx" style="flex:1; min-width:200px;" {{ can_write_attr('mbom') }} />
     <button id="btnImportarFlexxus" type="button" style="background:#059669; color:white; border:none; padding:6px 12px; border-radius:4px;" {{ can_write_attr('mbom') }}>📥 Importar</button>
+    <button id="btnDescargarTemplateFlexxus" type="button" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px;">Descargar plantilla CSV</button>
+    <button id="btnDescargarTemplateFlexxusXlsx" type="button" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px;">Descargar plantilla XLSX</button>
   </div>
     <div style="display:flex; gap:8px; padding:8px; background:#fef3c7; border-radius:4px; border-left:4px solid #f59e0b; align-items:center; flex-wrap:wrap;">
     <button id="btnCorregirTipos30" type="button" style="background:#f59e0b; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" title="Corrige tipo WIP para productos que empiezan con 30" {{ can_write_attr('mbom') }}>🔧 Corregir tipos 30→WIP</button>
@@ -313,6 +315,8 @@
   const prodCount = document.getElementById('prodCount');
   const btnRefrescarProductos = document.getElementById('btnRefrescarProductos');
   const btnImpFlex = document.getElementById('btnImportarFlexxus');
+  const btnDescargarTemplateFlexxus = document.getElementById('btnDescargarTemplateFlexxus');
+  const btnDescargarTemplateFlexxusXlsx = document.getElementById('btnDescargarTemplateFlexxusXlsx');
   const importarFlexMsg = document.getElementById('importarFlexMsg');
   const btnLimpiarMBOMs = document.getElementById('btnLimpiarMBOMs');
   const btnCorregirTipos30 = document.getElementById('btnCorregirTipos30');
@@ -1607,6 +1611,32 @@
   function setImportMsg(text, color){
     importarFlexMsg.textContent = text || '';
     importarFlexMsg.style.color = color || '#555';
+  }
+
+  if(btnDescargarTemplateFlexxus){
+    btnDescargarTemplateFlexxus.addEventListener('click', ()=>{
+      const pid = sel.value;
+      if(!pid){
+        setImportMsg('Seleccione un producto para descargar la plantilla.', '#b00');
+        alert('Seleccione producto');
+        return;
+      }
+      setImportMsg('Descargando plantilla...', '#555');
+      window.location.href = `/api/mbom/${pid}/template-flexxus-csv`;
+    });
+  }
+
+  if(btnDescargarTemplateFlexxusXlsx){
+    btnDescargarTemplateFlexxusXlsx.addEventListener('click', ()=>{
+      const pid = sel.value;
+      if(!pid){
+        setImportMsg('Seleccione un producto para descargar la plantilla.', '#b00');
+        alert('Seleccione producto');
+        return;
+      }
+      setImportMsg('Descargando plantilla...', '#555');
+      window.location.href = `/api/mbom/${pid}/template-flexxus-xlsx`;
+    });
   }
 
   btnImpFlex.addEventListener('click', async ()=>{

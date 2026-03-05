@@ -1,6 +1,8 @@
+import io
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -9,7 +11,11 @@ from ..db import get_db
 from ..schemas.mbom import MBOMCabecera, MBOMEstructura
 from ..services import mbom_service
 from ..services.mbom_costos import calcular_costos
-from ..services.mbom_import_service import importar_mbom_desde_flexxus
+from ..services.mbom_import_service import (
+    generar_template_mbom_flexxus_csv,
+    generar_template_mbom_flexxus_xlsx,
+    importar_mbom_desde_flexxus,
+)
 from ..services.mbom_operacion_service import (
     actualizar_operacion_mbom,
     agregar_operacion_mbom,
@@ -196,6 +202,36 @@ def api_importar_flexxus(
     current_user=Depends(require_permission("mbom", True)),
 ):
     return importar_mbom_desde_flexxus(db, producto_padre_id, archivo)
+
+
+@router.get("/mbom/{producto_padre_id}/template-flexxus-csv")
+def api_descargar_template_flexxus_csv(
+    producto_padre_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", False)),
+):
+    content, filename = generar_template_mbom_flexxus_csv(db, producto_padre_id)
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/mbom/{producto_padre_id}/template-flexxus-xlsx")
+def api_descargar_template_flexxus_xlsx(
+    producto_padre_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", False)),
+):
+    content, filename = generar_template_mbom_flexxus_xlsx(db, producto_padre_id)
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/mbom/demo/{codigo}", response_model=MBOMEstructura)
