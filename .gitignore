@@ -90,3 +90,6 @@ ecotermo-logo5.png
 
 # Exportaciones/archivos de ERP usados para pruebas puntuales
 Estructura de Producto_*.csv
+
+# Assets locales (si más adelante se quieren versionar, quitar esta regla)
+app/static/img/
