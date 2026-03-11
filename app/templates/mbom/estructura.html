@@ -15,7 +15,7 @@
       <select id="productoSelect" style="min-width:200px;">
         <option value="">-- Seleccione --</option>
         {% for p in productos %}
-          <option value="{{ p.id }}" {% if producto_id and producto_id==p.id %}selected{% endif %}>{{ p.codigo }}</option>
+          <option value="{{ p.id }}" {% if ids_con_estructura and p.id in ids_con_estructura %}class="prod-con-estructura" style="color:#0b5cab"{% endif %} {% if producto_id and producto_id==p.id %}selected{% endif %}>{{ p.codigo }}</option>
         {% endfor %}
       </select>
     </label>
@@ -185,6 +185,9 @@
       #tblOperaciones th, #tblOperaciones td { white-space:nowrap; padding:4px 8px; vertical-align:middle; font-size:12px; }
       #tblOperaciones thead th { position: sticky; top: 0; z-index: 2; background: #f4f6f8; }
       #tblOperaciones button { padding:2px 8px; font-size:11px; margin-right:4px; height:22px; }
+
+      /* Selector de producto padre: resaltar productos con MBOM ACTIVA */
+      #productoSelect option.prod-con-estructura { color: #0b5cab; }
     </style>
     <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
       <button id="btnAgregarLinea" type="button" {{ can_write_attr('mbom') }}>Agregar renglón</button>
@@ -279,6 +282,24 @@
     <small style="color:#92400e; margin-left:auto;">Acciones de mantenimiento</small>
   </div>
   <div id="importarFlexMsg" style="margin-top:8px; padding:6px; font-size:13px; color:#555;"></div>
+
+  <!-- Modal progreso importación MBOM -->
+  <div id="mbom-import-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" id="mbom-import-modal-backdrop"></div>
+    <div class="modal-content" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <strong>Importando estructura…</strong>
+          <button id="mbom-import-modal-close" class="btn-ghost" type="button" aria-label="Cerrar" disabled>✕</button>
+        </div>
+        <div id="mbom-import-modal-text" class="muted" style="margin-top:10px;">Iniciando…</div>
+        <div style="margin-top:10px;">
+          <progress id="mbom-import-modal-progress" max="100" value="0" style="width:100%;"></progress>
+          <div id="mbom-import-modal-pct" class="muted" style="text-align:right; margin-top:6px;">0%</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <section class="panel" style="background:#f8f9fa; padding:12px;">
@@ -935,6 +956,8 @@
     console.log('Opciones agregadas al select:', sel.children.length);
     // Restaurar selección si aplica
     if(current){ sel.value = current; }
+    // Re-marcar opciones con estructura (MBOM ACTIVA)
+    await marcarOpcionesConEstructura();
     if(solo){ 
       prodCount.textContent = countPT >= 200 ? `PT: ${countPT} (límite alcanzado, use búsqueda)` : `PT: ${countPT}`; 
     } else { 
@@ -943,6 +966,43 @@
     if(items.length === 0){ prodCount.textContent = solo ? 'PT: 0 (verifique que estén activos)' : '0 productos'; }
     const t1 = performance.now();
   }
+
+  async function marcarOpcionesConEstructura(){
+    try{
+      const ids = Array.from(sel.options)
+        .map(o => (o && o.value ? String(o.value) : ''))
+        .filter(v => v && v !== '');
+      if(ids.length === 0){
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set('ids', ids.join(','));
+      const r = await fetch(`/api/mbom/padres-con-estructura?${params.toString()}`);
+      if(!r.ok){
+        return;
+      }
+      const data = await r.json();
+      const set = new Set((Array.isArray(data) ? data : []).map(v => String(v)));
+      Array.from(sel.options).forEach(opt => {
+        if(!opt || !opt.value){
+          return;
+        }
+        if(set.has(String(opt.value))){
+          opt.classList.add('prod-con-estructura');
+          opt.style.color = '#0b5cab';
+        }else{
+          opt.classList.remove('prod-con-estructura');
+          opt.style.color = '';
+        }
+      });
+    }catch(err){
+      console.error('Error marcando productos con estructura:', err);
+    }
+  }
+
+  // Marcar también para el render inicial (por si el navegador no aplica CSS de option)
+  marcarOpcionesConEstructura();
 
   // Debug deshabilitado
   function setDebug(tag,msg){ /* no-op */ }
@@ -1613,6 +1673,109 @@
     importarFlexMsg.style.color = color || '#555';
   }
 
+  const importModal = document.getElementById('mbom-import-modal');
+  const importModalBackdrop = document.getElementById('mbom-import-modal-backdrop');
+  const importModalClose = document.getElementById('mbom-import-modal-close');
+  const importModalText = document.getElementById('mbom-import-modal-text');
+  const importModalProgress = document.getElementById('mbom-import-modal-progress');
+  const importModalPct = document.getElementById('mbom-import-modal-pct');
+  let importPollTimeout = null;
+  let importJobId = null;
+  let importRunning = false;
+
+  function openImportModal(){
+    if(!importModal){ return; }
+    importModal.classList.remove('hidden');
+    importModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeImportModal(){
+    if(!importModal){ return; }
+    importModal.classList.add('hidden');
+    importModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function setImportProgress(pct, text){
+    const safePct = Math.max(0, Math.min(100, parseInt(pct || 0, 10)));
+    if(importModalProgress){ importModalProgress.value = safePct; }
+    if(importModalPct){ importModalPct.textContent = `${safePct}%`; }
+    if(importModalText){ importModalText.textContent = text || ''; }
+  }
+
+  function stopImportPolling(){
+    if(importPollTimeout){
+      clearTimeout(importPollTimeout);
+      importPollTimeout = null;
+    }
+  }
+
+  async function pollImportJob(){
+    if(!importJobId){ return; }
+    try{
+      const r = await fetch(`/api/mbom/importar-flexxus-job/${importJobId}`);
+      if(!r.ok){
+        throw new Error(`status ${r.status}`);
+      }
+      const st = await r.json();
+      setImportProgress(st.porcentaje, st.mensaje);
+
+      if(st.estado === 'done'){
+        stopImportPolling();
+        importRunning = false;
+        if(importModalClose){ importModalClose.disabled = false; }
+        if(st.result){
+          cabecera = st.result.cabecera;
+          lineas = st.result.lineas || [];
+          await cargarCostos();
+          render();
+        }else{
+          await cargar();
+        }
+        setImportProgress(100, 'Completado.');
+        setImportMsg('Importación completada.', '#0a6');
+        btnImpFlex.disabled = false;
+        // Cerrar modal con un pequeño delay para que se vea el 100%
+        setTimeout(()=>{ closeImportModal(); }, 450);
+        importJobId = null;
+        return;
+      }
+
+      if(st.estado === 'error'){
+        stopImportPolling();
+        importRunning = false;
+        if(importModalClose){ importModalClose.disabled = false; }
+        const msg = st.error || 'Error al importar MBOM';
+        setImportProgress(st.porcentaje || 0, msg);
+        setImportMsg(msg, '#b00');
+        btnImpFlex.disabled = false;
+        alert(msg);
+        importJobId = null;
+        return;
+      }
+    }catch(err){
+      console.error('Error consultando progreso import', err);
+      // Reintentar; no romper por fallas transitorias
+    }
+    importPollTimeout = setTimeout(pollImportJob, 450);
+  }
+
+  function bindImportModalClose(){
+    if(importModalBackdrop){
+      importModalBackdrop.addEventListener('click', ()=>{
+        if(importRunning){ return; }
+        closeImportModal();
+      });
+    }
+    if(importModalClose){
+      importModalClose.addEventListener('click', ()=>{
+        if(importRunning){ return; }
+        closeImportModal();
+      });
+    }
+  }
+
+  bindImportModalClose();
+
   if(btnDescargarTemplateFlexxus){
     btnDescargarTemplateFlexxus.addEventListener('click', ()=>{
       const pid = sel.value;
@@ -1645,30 +1808,47 @@
     const file = f.files && f.files[0];
     if(!file){ alert('Seleccione archivo .csv/.xlsx'); return; }
     const form = new FormData(); form.append('archivo', file);
+    if(importRunning){
+      setImportMsg('Ya hay una importación en curso…', '#555');
+      return;
+    }
+    importRunning = true;
+    btnImpFlex.disabled = true;
+    if(importModalClose){ importModalClose.disabled = true; }
+    openImportModal();
+    setImportProgress(0, 'Subiendo archivo…');
     setImportMsg('Importando MBOM...', '#555');
     try{
-      const r = await fetch(`/api/mbom/${pid}/importar-flexxus`, { method:'POST', body: form });
-      if(r.status===501){ setImportMsg('Funcionalidad aún no implementada', '#b00'); alert('Importación pendiente de implementación'); return; }
+      const r = await fetch(`/api/mbom/${pid}/importar-flexxus-job`, { method:'POST', body: form });
       if(!r.ok){
-        let msg = 'Error al importar MBOM';
+        let msg = 'Error al iniciar importación';
         try{
           const er = await r.json();
           if(er && er.detail){ msg = er.detail; }
         }catch{
           /* ignore parse error */
         }
+        importRunning = false;
+        btnImpFlex.disabled = false;
+        if(importModalClose){ importModalClose.disabled = false; }
         setImportMsg(msg, '#b00');
+        setImportProgress(0, msg);
         alert(msg);
         return;
       }
       const d = await r.json();
-      cabecera = d.cabecera; lineas = d.lineas || [];
-      await cargarCostos();
-      render();
-      setImportMsg('Importación completada.', '#0a6');
+      importJobId = d.job_id;
+      setImportProgress(1, 'Importación iniciada…');
+      stopImportPolling();
+      pollImportJob();
     }catch(err){
       console.error('Error importando MBOM', err);
+      stopImportPolling();
+      importRunning = false;
       setImportMsg('Error de red al importar.', '#b00');
+      setImportProgress(0, 'Error de red al importar.');
+      if(importModalClose){ importModalClose.disabled = false; }
+      btnImpFlex.disabled = false;
       alert('No se pudo conectar con el servidor.');
     }
   });

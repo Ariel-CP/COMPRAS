@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..services.mbom_service import listar_producto_padre_ids_con_estructura_con_datos
 from ..services.producto_service import listar_productos
 from ..services.unidad_service import listar_unidades
 from ..utils.health import db_status
@@ -30,6 +31,11 @@ async def ui_mbom(
     productos = sorted(
         [*productos_pt, *productos_wip], key=lambda p: p.get("codigo") or ""
     )
+    ids_con_estructura = set(
+        listar_producto_padre_ids_con_estructura_con_datos(
+            db, [int(p["id"]) for p in productos if p.get("id") is not None]
+        )
+    )
     unidades = listar_unidades(db)
     um_map = {u["id"]: u["codigo"] for u in unidades}
     status = db_status(db)
@@ -42,5 +48,6 @@ async def ui_mbom(
             "um_map": um_map,
             "producto_id": producto_id,
             "db_status": status,
+            "ids_con_estructura": ids_con_estructura,
         },
     )

@@ -1,4 +1,7 @@
 import io
+import os
+import tempfile
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -7,14 +10,26 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..db import get_db
+from ..db import SessionLocal, get_db
 from ..schemas.mbom import MBOMCabecera, MBOMEstructura
 from ..services import mbom_service
 from ..services.mbom_costos import calcular_costos
+from ..services.mbom_import_jobs import (
+    create_job,
+    get_job,
+    set_done,
+    set_error,
+    set_running,
+    to_public_dict,
+)
+from ..services.mbom_import_jobs import (
+    report as report_job,
+)
 from ..services.mbom_import_service import (
     generar_template_mbom_flexxus_csv,
     generar_template_mbom_flexxus_xlsx,
     importar_mbom_desde_flexxus,
+    importar_mbom_desde_flexxus_content,
 )
 from ..services.mbom_operacion_service import (
     actualizar_operacion_mbom,
@@ -23,6 +38,7 @@ from ..services.mbom_operacion_service import (
     listar_operaciones_mbom,
     obtener_siguiente_secuencia,
 )
+from ..services.mbom_service import listar_producto_padre_ids_con_estructura_con_datos
 from ..services.producto_service import crear_producto, listar_productos
 from ..services.ruta_operacion_base_service import (
     aplicar_ruta_base_a_mbom,
@@ -45,6 +61,47 @@ def api_get_cabecera(
 ):
     cab = mbom_service.get_cabecera_preferida(db, producto_padre_id, preferir)
     return cab
+
+
+@router.get("/mbom/padres-con-estructura", response_model=list[int])
+def api_padres_con_estructura(
+    ids: list[str] = Query(
+        default=[],
+        description=(
+            "IDs de producto padre. Acepta repetidos (?ids=1&ids=2) y/o CSV (?ids=1,2)."
+        ),
+    ),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("mbom", False)),
+):
+    # Parse robusto: soporta ids repetidos y/o CSV en cada item.
+    parsed: list[int] = []
+    for raw in ids:
+        if raw is None:
+            continue
+        for part in str(raw).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                parsed.append(int(part))
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Parámetro 'ids' inválido. Use enteros separados por coma.",
+                )
+
+    if not parsed:
+        return []
+
+    # Límite defensivo para evitar URLs demasiado largas/cargas excesivas.
+    if len(parsed) > 2000:
+        raise HTTPException(
+            status_code=400,
+            detail="Demasiados IDs. Envíe como máximo 2000 por solicitud.",
+        )
+
+    return listar_producto_padre_ids_con_estructura_con_datos(db, parsed)
 
 
 @router.get("/mbom/{producto_padre_id}", response_model=MBOMEstructura)
@@ -202,6 +259,91 @@ def api_importar_flexxus(
     current_user=Depends(require_permission("mbom", True)),
 ):
     return importar_mbom_desde_flexxus(db, producto_padre_id, archivo)
+
+
+def _run_import_flexxus_job(
+    job_id: str,
+    producto_padre_id: int,
+    filename: str,
+    tmp_path: str,
+) -> None:
+    try:
+        set_running(job_id, 1, "Iniciando importación…")
+        with open(tmp_path, "rb") as f:
+            content = f.read()
+
+        def _report(pct: int, message: str) -> None:
+            report_job(job_id, pct, message)
+
+        db = SessionLocal()
+        try:
+            result = importar_mbom_desde_flexxus_content(
+                db=db,
+                producto_padre_id=producto_padre_id,
+                filename=filename,
+                content=content,
+                progress_cb=_report,
+            )
+            set_done(job_id, result)
+        finally:
+            db.close()
+    except HTTPException as exc:
+        # HTTPException.detail puede ser str o dict; se devuelve como texto
+        detail = exc.detail
+        set_error(job_id, str(detail) if detail is not None else str(exc))
+    except Exception as exc:  # pragma: no cover - safety net
+        set_error(job_id, f"Error importando MBOM: {exc}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
+@router.post(
+    "/mbom/{producto_padre_id}/importar-flexxus-job",
+    response_model=dict,
+)
+def api_importar_flexxus_job(
+    producto_padre_id: int,
+    archivo: UploadFile = File(...),
+    current_user=Depends(require_permission("mbom", True)),
+):
+    if not archivo.filename:
+        raise HTTPException(status_code=400, detail="Archivo requerido")
+
+    # Guardar el upload en un archivo temporal para que el thread lo procese.
+    suffix = ".xlsx" if (archivo.filename or "").lower().endswith(".xlsx") else ".csv"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(archivo.file.read())
+        tmp.flush()
+    finally:
+        tmp.close()
+
+    job = create_job(producto_padre_id, archivo.filename)
+    set_running(job.id, 0, "Archivo recibido…")
+    th = threading.Thread(
+        target=_run_import_flexxus_job,
+        args=(job.id, producto_padre_id, archivo.filename, tmp.name),
+        daemon=True,
+    )
+    th.start()
+    return {"job_id": job.id}
+
+
+@router.get(
+    "/mbom/importar-flexxus-job/{job_id}",
+    response_model=dict,
+)
+def api_importar_flexxus_job_status(
+    job_id: str,
+    current_user=Depends(require_permission("mbom", True)),
+):
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    return to_public_dict(job)
 
 
 @router.get("/mbom/{producto_padre_id}/template-flexxus-csv")

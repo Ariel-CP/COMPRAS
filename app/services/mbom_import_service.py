@@ -4,7 +4,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence, TypedDict
+from typing import Any, Callable, Dict, List, Optional, Sequence, TypedDict
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import text
@@ -36,26 +36,110 @@ class FlexxusRow:
         return self.codigo.upper()
 
 
+ProgressCallback = Callable[[int, str], None]
+
+
+@dataclass(slots=True)
+class _ProgressState:
+    total: int
+    processed: int = 0
+    last_pct: int = 0
+    cb: Optional[ProgressCallback] = None
+    base_pct: int = 30
+    span_pct: int = 70
+
+    def tick(self, message: str) -> None:
+        self.processed += 1
+        if not self.cb:
+            return
+        total = self.total if self.total > 0 else 1
+        pct = self.base_pct + int((self.processed * self.span_pct) / total)
+        if pct > (self.base_pct + self.span_pct):
+            pct = self.base_pct + self.span_pct
+        if pct <= self.last_pct:
+            return
+        self.last_pct = pct
+        _safe_report(self.cb, pct, message)
+
+
+def _safe_report(cb: Optional[ProgressCallback], pct: int, message: str) -> None:
+    if not cb:
+        return
+    try:
+        if pct < 0:
+            pct = 0
+        if pct > 100:
+            pct = 100
+        cb(int(pct), message)
+    except Exception:
+        # El progreso nunca debe romper la importación
+        return
+
+
 def importar_mbom_desde_flexxus(
-    db: Session, producto_padre_id: int, archivo: UploadFile
+    db: Session,
+    producto_padre_id: int,
+    archivo: UploadFile,
+    progress_cb: Optional[ProgressCallback] = None,
 ) -> Dict[str, object]:
     """Importa componentes MBOM desde archivo CSV/XLSX de Flexxus."""
     if not archivo.filename:
+        raise HTTPException(status_code=400, detail="Archivo requerido")
+
+    content = archivo.file.read()
+    return importar_mbom_desde_flexxus_content(
+        db=db,
+        producto_padre_id=producto_padre_id,
+        filename=archivo.filename,
+        content=content,
+        progress_cb=progress_cb,
+    )
+
+
+def importar_mbom_desde_flexxus_content(
+    db: Session,
+    producto_padre_id: int,
+    filename: str,
+    content: bytes,
+    progress_cb: Optional[ProgressCallback] = None,
+) -> Dict[str, object]:
+    """Importa componentes MBOM desde contenido (bytes) CSV/XLSX de Flexxus.
+
+    Se usa para soportar ejecución en background (jobs) sin depender de UploadFile.
+    """
+    if not filename:
         raise HTTPException(status_code=400, detail="Archivo requerido")
 
     prod_padre = get_producto(db, producto_padre_id)
     if not prod_padre:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    rows = _parse_upload(archivo)
+    _safe_report(progress_cb, 1, "Leyendo archivo…")
+    rows = _parse_content(filename, content)
     if not rows:
         raise HTTPException(status_code=400, detail="Archivo vacío")
 
+    _safe_report(progress_cb, 10, "Validando filas…")
     normalizados = _normalize_rows(rows)
     _validar_raiz(normalizados, prod_padre["codigo"])
 
     # Construir jerarquía: mapeo de código_padre -> lista de hijos
+    _safe_report(progress_cb, 20, "Construyendo jerarquía…")
     jerarquia = _construir_jerarquia(normalizados)
+
+    total_componentes = sum(
+        1
+        for r in normalizados
+        if r.nivel != 0 and r.codigo and not r.codigo.startswith("PROCESO")
+    )
+    if total_componentes <= 0:
+        total_componentes = 1
+    progress_state = _ProgressState(
+        total=total_componentes,
+        cb=progress_cb,
+        base_pct=30,
+        span_pct=70,
+    )
 
     # Obtener o crear todos los productos necesarios (WIP intermedios + MP)
     unidades = listar_unidades(db)
@@ -67,6 +151,7 @@ def importar_mbom_desde_flexxus(
     um_default_id = unidades[0]["id"]
 
     try:
+        _safe_report(progress_cb, 30, "Procesando estructura…")
         # Procesar jerarquía recursivamente desde el producto padre
         # Los hijos de nivel 1 se mapean con "__ROOT__" en construir_jerarquia
         hijos_raiz = jerarquia.get("__ROOT__", [])
@@ -76,8 +161,10 @@ def importar_mbom_desde_flexxus(
             hijos=hijos_raiz,
             jerarquia=jerarquia,
             um_default_id=um_default_id,
+            progress=progress_state,
         )
         db.commit()
+        _safe_report(progress_cb, 100, "Completado")
     except HTTPException:
         db.rollback()
         raise
@@ -160,6 +247,7 @@ def generar_template_mbom_flexxus_xlsx(
 
     wb = Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "MBOM Flexxus"
 
     ws.append(["CodArt", "Descripcion", "Nivel", "Cantidad"])
@@ -180,10 +268,14 @@ def generar_template_mbom_flexxus_xlsx(
 
 def _parse_upload(archivo: UploadFile) -> List[Dict[str, object]]:
     content = archivo.file.read()
+    return _parse_content(archivo.filename or "", content)
+
+
+def _parse_content(filename: str, content: bytes) -> List[Dict[str, object]]:
     if not content:
         return []
-    filename = (archivo.filename or "").lower()
-    if filename.endswith(".xlsx"):
+    filename_l = (filename or "").lower()
+    if filename_l.endswith(".xlsx"):
         return _parse_xlsx(content)
     return _parse_csv(content)
 
@@ -353,6 +445,7 @@ def _procesar_nivel(
     hijos: List[FlexxusRow],
     jerarquia: Dict[str, List[FlexxusRow]],
     um_default_id: int,
+    progress: Optional[_ProgressState] = None,
 ) -> None:
     """Procesa un nivel de la jerarquía, creando productos WIP y sus MBOMs."""
     # Obtener o crear producto padre
@@ -423,6 +516,8 @@ def _procesar_nivel(
             unidad_medida_id=prod_hijo["unidad_medida_id"],
             notas=hijo.descripcion or None,
         )
+        if progress:
+            progress.tick("Procesando componentes…")
         renglon += 10
 
         # Procesar recursivamente si tiene hijos
@@ -433,6 +528,7 @@ def _procesar_nivel(
                 hijos=jerarquia[hijo.normalized_codigo],
                 jerarquia=jerarquia,
                 um_default_id=um_default_id,
+                progress=progress,
             )
 
 

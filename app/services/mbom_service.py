@@ -1,7 +1,60 @@
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
+
+
+def listar_producto_padre_ids_con_mbom_activa(
+    db: Session, producto_ids: List[int]
+) -> List[int]:
+    """Devuelve los producto_padre_id que tienen al menos una MBOM ACTIVA vigente.
+
+    Vigencia: vigencia_hasta IS NULL o >= CURRENT_DATE().
+    """
+
+    ids = sorted({int(i) for i in producto_ids if i is not None})
+    if not ids:
+        return []
+
+    stmt = text(
+        """
+        SELECT DISTINCT producto_padre_id
+        FROM mbom_cabecera
+        WHERE producto_padre_id IN :ids
+          AND estado = 'ACTIVO'
+          AND (vigencia_hasta IS NULL OR vigencia_hasta >= CURRENT_DATE())
+        """
+    ).bindparams(bindparam("ids", expanding=True))
+
+    rows = db.execute(stmt, {"ids": ids}).fetchall()
+    return [int(r[0]) for r in rows if r and r[0] is not None]
+
+
+def listar_producto_padre_ids_con_estructura_con_datos(
+    db: Session, producto_ids: List[int]
+) -> List[int]:
+    """Devuelve los producto_padre_id que tienen estructura con datos.
+
+    Criterio: existe al menos una línea en mbom_detalle asociada a cualquier
+    cabecera (cualquier estado). Esto evita marcar productos que sólo tienen
+    cabecera vacía (p. ej. BORRADOR creado automáticamente).
+    """
+
+    ids = sorted({int(i) for i in producto_ids if i is not None})
+    if not ids:
+        return []
+
+    stmt = text(
+        """
+        SELECT DISTINCT c.producto_padre_id
+        FROM mbom_cabecera c
+        JOIN mbom_detalle d ON d.mbom_id = c.id
+        WHERE c.producto_padre_id IN :ids
+        """
+    ).bindparams(bindparam("ids", expanding=True))
+
+    rows = db.execute(stmt, {"ids": ids}).fetchall()
+    return [int(r[0]) for r in rows if r and r[0] is not None]
 
 
 def _row_to_cabecera(row: Any) -> Dict[str, Any]:
