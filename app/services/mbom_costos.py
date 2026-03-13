@@ -420,6 +420,7 @@ def _calcular_costos_internal(
             """
             SELECT d.componente_producto_id AS prod_id,
                    p.codigo AS codigo, p.nombre AS nombre,
+                     p.rubro AS rubro,
                    um.codigo AS um_codigo,
                    d.cantidad AS cantidad, d.factor_merma AS merma
             FROM mbom_detalle d
@@ -469,6 +470,7 @@ def _calcular_costos_internal(
                 "producto_id": int(r.prod_id),
                 "codigo": r.codigo,
                 "nombre": r.nombre,
+                "rubro": r.rubro,
                 "um_codigo": r.um_codigo,
                 "cantidad": cantidad,
                 "factor_merma": merma,

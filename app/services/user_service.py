@@ -6,6 +6,39 @@ from sqlalchemy.orm import Session
 from app.services import auth_service
 
 
+PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
+    ("admin_backups", "Administracion de backups"),
+    ("admin_roles", "Administracion de roles"),
+    ("admin_usuarios", "Administracion de usuarios"),
+    ("informes", "Informes"),
+    ("mbom", "MBOM"),
+    ("plan", "Plan de produccion"),
+    ("precios", "Precios"),
+    ("productos", "Articulos"),
+    ("rubros", "Rubros"),
+    ("stock", "Stock"),
+    ("tipo_cambio", "Tipo de cambio"),
+    ("unidades", "Unidades"),
+)
+
+LEGACY_PERMISSION_ALIASES: dict[str, str] = {
+    "producto": "productos",
+    "plan_produccion_mensual": "plan",
+    "stock_disponible_mes": "stock",
+}
+
+
+def list_permission_catalog() -> List[dict]:
+    return [{"form_key": fk, "label": label} for fk, label in PERMISSION_CATALOG]
+
+
+def _normalize_form_key(form_key: str) -> str:
+    key = (form_key or "").strip()
+    if not key:
+        return ""
+    return LEGACY_PERMISSION_ALIASES.get(key, key)
+
+
 def list_users(
     db: Session,
     q: Optional[str] = None,
@@ -191,12 +224,57 @@ def get_role_perms(db: Session, rol_id: int) -> List[dict]:
         ),
         {"rid": rol_id},
     ).mappings().all()
-    return [dict(r) for r in rows]
+    merged: dict[str, dict] = {}
+    for r in rows:
+        row = dict(r)
+        normalized = _normalize_form_key(str(row.get("form_key", "")))
+        if not normalized:
+            continue
+        if normalized not in merged:
+            row["form_key"] = normalized
+            merged[normalized] = row
+            continue
+        merged_row = merged[normalized]
+        merged_row["puede_leer"] = bool(merged_row.get("puede_leer")) or bool(
+            row.get("puede_leer")
+        )
+        merged_row["puede_escribir"] = bool(merged_row.get("puede_escribir")) or bool(
+            row.get("puede_escribir")
+        )
+    return sorted(merged.values(), key=lambda x: str(x.get("form_key", "")))
 
 
 def set_role_perms(db: Session, rol_id: int, perms: List[dict]) -> List[dict]:
+    valid_keys = {fk for fk, _ in PERMISSION_CATALOG}
+    normalized_perms: dict[str, dict] = {}
+    invalid_keys: list[str] = []
+
+    for p in perms:
+        normalized_key = _normalize_form_key(str(p.get("form_key", "")))
+        if not normalized_key:
+            continue
+        if normalized_key not in valid_keys:
+            invalid_keys.append(str(p.get("form_key", "")))
+            continue
+
+        prev = normalized_perms.get(normalized_key)
+        current = {
+            "form_key": normalized_key,
+            "puede_leer": bool(p.get("puede_leer", True)),
+            "puede_escribir": bool(p.get("puede_escribir", False)),
+        }
+        if prev is None:
+            normalized_perms[normalized_key] = current
+        else:
+            prev["puede_leer"] = prev["puede_leer"] or current["puede_leer"]
+            prev["puede_escribir"] = prev["puede_escribir"] or current["puede_escribir"]
+
+    if invalid_keys:
+        invalid_list = ", ".join(sorted(set(invalid_keys)))
+        raise ValueError(f"form_key invalido: {invalid_list}")
+
     db.execute(text("DELETE FROM permiso_form WHERE rol_id = :rid"), {"rid": rol_id})
-    if perms:
+    if normalized_perms:
         insert_sql = text(
             "INSERT INTO permiso_form (rol_id, form_key, puede_leer, puede_escribir) "
             "VALUES (:rid, :fk, :pl, :pe)"
@@ -210,7 +288,7 @@ def set_role_perms(db: Session, rol_id: int, perms: List[dict]) -> List[dict]:
                     "pl": 1 if p.get("puede_leer", True) else 0,
                     "pe": 1 if p.get("puede_escribir", False) else 0,
                 }
-                for p in perms
+                for p in normalized_perms.values()
             ],
         )
     return get_role_perms(db, rol_id)
@@ -219,7 +297,7 @@ def set_role_perms(db: Session, rol_id: int, perms: List[dict]) -> List[dict]:
 def _sync_roles(db: Session, user_id: int, roles: List[str]) -> None:
     role_ids = []
     for r in roles:
-        rid = auth_service._ensure_rol(db, r)  # type: ignore[attr-defined]
+        rid = auth_service.ensure_role(db, r)
         role_ids.append(rid)
     if role_ids:
         delete_stmt = (

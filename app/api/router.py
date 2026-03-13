@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from .auth import router as auth_router
+from .backups import router as backups_router
 from .health import router as health_router
 from .informes import router as informes_router
 from .mbom_api import router as mbom_router
@@ -21,6 +22,7 @@ api_router = APIRouter()
 api_router.include_router(plan_router, prefix="/plan", tags=["plan"])
 api_router.include_router(stock_router, prefix="/stock", tags=["stock"])
 api_router.include_router(health_router, prefix="/health")
+api_router.include_router(backups_router, prefix="/backups", tags=["backups"])
 api_router.include_router(productos_router, prefix="/productos", tags=["productos"])
 api_router.include_router(unidades_router, prefix="/unidades", tags=["unidades"])
 api_router.include_router(mbom_router, tags=["mbom"])

@@ -90,7 +90,7 @@
       <tbody>
         {% if periodos is defined and periodos %}
           {% for p in periodos %}
-          <tr>
+          <tr data-anio="{{ p.anio }}" data-mes="{{ p.mes }}">
             <td>{{ p.anio }}</td>
             <td>{{ p.mes }}</td>
             <td>{{ p.registros }}</td>
@@ -172,6 +172,25 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     const btnVerRequerimientos = document.getElementById(
       "btnVerRequerimientos"
     );
+    let selectedPeriodoKey = "";
+
+    function buildPeriodoKey(anio, mes) {
+      const parsedAnio = Number(anio);
+      const parsedMes = Number(mes);
+      if (!parsedAnio || !parsedMes) {
+        return "";
+      }
+      return `${parsedAnio}-${parsedMes}`;
+    }
+
+    function syncPeriodoSeleccionado() {
+      const currentKey = selectedPeriodoKey || buildPeriodoKey(inputAnio.value, inputMes.value);
+      const rows = periodosBody.querySelectorAll("tr[data-anio][data-mes]");
+      rows.forEach((row) => {
+        const rowKey = buildPeriodoKey(row.dataset.anio, row.dataset.mes);
+        row.classList.toggle("periodo-seleccionado", !!currentKey && rowKey === currentKey);
+      });
+    }
 
     function fmt(n) {
       const num = Number(n || 0);
@@ -248,9 +267,10 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
         return;
       }
 
-      let selectedRow = null;
       items.forEach((it) => {
         const tr = document.createElement("tr");
+        tr.dataset.anio = String(it.anio ?? "");
+        tr.dataset.mes = String(it.mes ?? "");
         tr.style.cursor = "pointer";
         tr.title = "Click para cargar este período";
         tr.innerHTML = `
@@ -267,11 +287,8 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
             return;
           }
 
-          if (selectedRow) {
-            selectedRow.style.fontWeight = "";
-          }
-          selectedRow = tr;
-          tr.style.fontWeight = "600";
+          selectedPeriodoKey = buildPeriodoKey(anio, mes);
+          syncPeriodoSeleccionado();
 
           inputAnio.value = String(anio);
           inputMes.value = String(mes);
@@ -287,6 +304,8 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
 
         periodosBody.appendChild(tr);
       });
+
+      syncPeriodoSeleccionado();
     }
 
     function renderTabla(items) {
@@ -490,6 +509,8 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     const hoy = new Date();
     if (!inputMes.value) inputMes.value = hoy.getMonth() + 1;
     if (!inputAnio.value) inputAnio.value = hoy.getFullYear();
+    selectedPeriodoKey = buildPeriodoKey(inputAnio.value, inputMes.value);
+    syncPeriodoSeleccionado();
 
     // Mostrar modo según permisos
     const permisoModo = document.getElementById("permisoModo");

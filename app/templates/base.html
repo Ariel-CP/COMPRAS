@@ -25,11 +25,14 @@
       {% endif %}
       {% if perms.get('precios', (False, False))[0] %}<a href="/ui/precios">Precios</a>{% endif %}
       {% if perms.get('tipo_cambio', (False, False))[0] %}<a href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
-      {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] %}
+      {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] or perms.get('admin_backups', (False, False))[0] %}
       {% if show_admin %}
       <span class="import-dropdown" style="vertical-align:middle;">
         <button class="btn-accion dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Configuración ▾</button>
         <div class="dropdown-menu hidden" role="menu">
+          {% if perms.get('admin_backups', (False, False))[0] %}
+            <a class="dropdown-item" href="/ui/admin/backups">Backups</a>
+          {% endif %}
           {% if perms.get('admin_usuarios', (False, False))[0] %}
             <a class="dropdown-item" href="/ui/admin/usuarios">Admin</a>
           {% endif %}
@@ -49,15 +52,6 @@
         <a class="btn-accion" href="/ui/logout">Logout</a>
       {% else %}
         <a class="btn-accion" href="/ui/login">Login</a>
-      {% endif %}
-    </div>
-    <div class="db-status">
-      {% if db_status and db_status.ok == 'true' %}
-        <span class="ok">DB: {{ db_status.database }} (OK)</span>
-      {% elif db_status %}
-        <span class="err" title="{{ db_status.message }}">DB: ERROR</span>
-      {% else %}
-        <span class="warn">DB: desconocida</span>
       {% endif %}
     </div>
   </header>

@@ -107,6 +107,19 @@ table.productos-table { width:100%; }
 .var-equal{color:#b8860b}
 .var-neutral{color:#6c757d}
 
+#tablaPeriodos tbody tr[data-anio][data-mes] {
+	transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+#tablaPeriodos tbody tr[data-anio][data-mes]:hover {
+	background: #eef6ff;
+}
+
+#tablaPeriodos tbody tr.periodo-seleccionado {
+	background: #dbeafe;
+	box-shadow: inset 4px 0 0 #0b5cab;
+	font-weight: 600;
+}
 /* Sesiones UI */
 .sessions-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .sessions-count{font-weight:600;color:#0b5cab}

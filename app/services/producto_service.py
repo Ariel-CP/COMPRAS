@@ -164,3 +164,15 @@ def actualizar_producto(
         },
     )
     return get_producto(db, prod_id)  # type: ignore[return-value]
+
+
+def eliminar_producto(db: Session, prod_id: int) -> None:
+    # Validar existencia para devolver error claro al usuario
+    base = get_producto(db, prod_id)
+    if not base:
+        raise ValueError("Producto no encontrado")
+
+    db.execute(
+        text("DELETE FROM producto WHERE id=:id"),
+        {"id": prod_id},
+    )

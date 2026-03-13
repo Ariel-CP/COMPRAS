@@ -83,7 +83,7 @@ def create_user(
         user_id = db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
     if roles:
         for rol_nombre in roles:
-            rol_id = _ensure_rol(db, rol_nombre)
+            rol_id = ensure_role(db, rol_nombre)
             db.execute(
                 text(
                     "INSERT IGNORE INTO usuario_rol (usuario_id, rol_id) "
@@ -94,7 +94,7 @@ def create_user(
     return get_user_by_id(db, int(user_id))  # type: ignore[arg-type]
 
 
-def _ensure_rol(db: Session, nombre: str) -> int:
+def ensure_role(db: Session, nombre: str) -> int:
     row = db.execute(
         text("SELECT id FROM rol WHERE nombre = :n"), {"n": nombre}
     ).scalar()
@@ -108,6 +108,10 @@ def _ensure_rol(db: Session, nombre: str) -> int:
     if not rid:
         rid = db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
     return int(rid)
+
+
+def _ensure_rol(db: Session, nombre: str) -> int:
+    return ensure_role(db, nombre)
 
 
 def get_user_roles(db: Session, user_id: int) -> List[str]:
@@ -139,6 +143,20 @@ def get_permissions(db: Session, user_id: int) -> Dict[str, Tuple[bool, bool]]:
         else:
             old_read, old_write = perms[form_key]
             perms[form_key] = (old_read or bool(leer), old_write or bool(escribir))
+
+    # Compatibilidad: si el usuario ya es admin por roles/usuarios,
+    # habilitar acceso al modulo de backups aunque aun no tenga form_key explicita.
+    admin_users_read, admin_users_write = perms.get("admin_usuarios", (False, False))
+    admin_roles_read, admin_roles_write = perms.get("admin_roles", (False, False))
+    inferred_read = admin_users_read or admin_roles_read
+    inferred_write = admin_users_write or admin_roles_write
+    backup_read, backup_write = perms.get("admin_backups", (False, False))
+    if inferred_read or inferred_write:
+        perms["admin_backups"] = (
+            backup_read or inferred_read,
+            backup_write or inferred_write,
+        )
+
     return perms
 
 
@@ -165,8 +183,10 @@ def create_session(
     """Inserta una sesión en la tabla `user_session`. Commit dentro."""
     db.execute(
         text(
-            "INSERT INTO user_session (user_id, jti, created_at, expires_at, persistent, ip, user_agent, device_name, revoked) "
-            "VALUES (:uid, :jti, CURRENT_TIMESTAMP, :exp, :persistent, :ip, :ua, :dn, 0)"
+            "INSERT INTO user_session ("
+            "user_id, jti, created_at, expires_at, persistent, ip, "
+            "user_agent, device_name, revoked"
+            ") VALUES (:uid, :jti, CURRENT_TIMESTAMP, :exp, :persistent, :ip, :ua, :dn, 0)"
         ),
         {
             "uid": user_id,

@@ -1,0 +1,570 @@
+{% extends "base.html" %} {% block title %}Administracion de Backups{% endblock
+%} {% block content %}
+<section class="productos-wrapper">
+  <h2>Administracion de backups</h2>
+
+  <div class="panel panel-alta">
+    <h3>Nuevo backup</h3>
+    <p class="hint">Genera un dump SQL de la base actual usando mysqldump.</p>
+    <div class="tabla-controles">
+      <label>
+        Directorio de destino:
+        <input
+          id="backupDirInput"
+          type="text"
+          placeholder="Ej: backups o E:\\Compras_Backups"
+          style="min-width: 340px"
+        />
+      </label>
+      <button id="btnAplicarDirectorio" type="button" class="btn-accion">
+        Cargar directorio
+      </button>
+    </div>
+    <div class="tabla-controles">
+      <label>
+        Favoritos:
+        <select id="backupFavoriteSelect" style="min-width: 280px">
+          <option value="">(sin favoritos)</option>
+        </select>
+      </label>
+      <button id="btnUsarFavorito" type="button" class="btn-accion">Usar</button>
+      <button id="btnGuardarFavorito" type="button" class="btn-accion">Guardar favorito</button>
+      <button id="btnQuitarFavorito" type="button" class="btn-danger">Quitar favorito</button>
+    </div>
+    <p class="hint">
+      Puede usar carpeta local o pendrive (por ejemplo <strong>E:\\Backups</strong>).
+    </p>
+    <div class="tabla-controles">
+      <button id="btnGenerarBackup" type="button" class="btn-accion">
+        Generar backup
+      </button>
+      <span id="backupStatus" class="hint"></span>
+    </div>
+    <div class="hint">Directorio: <span id="backupDir"></span></div>
+    <div id="backupToolStatus" class="hint" style="margin-top: 6px"></div>
+    <div id="mysqlToolStatus" class="hint" style="margin-top: 6px"></div>
+  </div>
+
+  <div class="panel panel-alta">
+    <h3>Dias de respaldo automatico</h3>
+    <p class="hint">Programa una hora fija y elige los dias de la semana para ejecutar el backup automaticamente.</p>
+    <div class="tabla-controles">
+      <label>
+        <input id="chkAutoBackupEnabled" type="checkbox" />
+        Habilitar backup automatico
+      </label>
+      <label>
+        Hora:
+        <input id="autoBackupTime" type="time" value="02:00" />
+      </label>
+    </div>
+    <div class="tabla-controles" id="autoWeekdaysGroup">
+      <label><input type="checkbox" name="autoWeekday" value="0" /> Lunes</label>
+      <label><input type="checkbox" name="autoWeekday" value="1" /> Martes</label>
+      <label><input type="checkbox" name="autoWeekday" value="2" /> Miercoles</label>
+      <label><input type="checkbox" name="autoWeekday" value="3" /> Jueves</label>
+      <label><input type="checkbox" name="autoWeekday" value="4" /> Viernes</label>
+      <label><input type="checkbox" name="autoWeekday" value="5" /> Sabado</label>
+      <label><input type="checkbox" name="autoWeekday" value="6" /> Domingo</label>
+    </div>
+    <div class="tabla-controles">
+      <label>
+        Directorio automatico:
+        <input id="autoBackupDir" type="text" placeholder="Opcional. Si vacio usa el directorio actual" style="min-width: 340px" />
+      </label>
+      <button id="btnCopiarDirActual" type="button" class="btn-accion">Usar directorio actual</button>
+      <button id="btnGuardarProgramacion" type="button" class="btn-accion">Guardar programacion</button>
+      <span id="programStatus" class="hint"></span>
+    </div>
+    <div id="autoBackupLastRun" class="hint"></div>
+  </div>
+
+  <div class="panel panel-alta">
+    <h3>Restaurar backup (operacion destructiva)</h3>
+    <div class="error-banner">
+      Esta accion puede sobrescribir datos actuales y causar perdida de datos
+      cargados despues de la fecha del backup.
+    </div>
+    <form id="formRestore" onsubmit="return false;">
+      <div class="tabla-controles">
+        <label>
+          Archivo .sql:
+          <input id="restoreFile" type="file" accept=".sql" />
+        </label>
+      </div>
+      <div class="tabla-controles">
+        <label>
+          <input id="chkOverwrite" type="checkbox" />
+          Entiendo que se puede sobrescribir la base actual.
+        </label>
+      </div>
+      <div class="tabla-controles">
+        <label>
+          <input id="chkDataLoss" type="checkbox" />
+          Entiendo que puede haber perdida de datos.
+        </label>
+      </div>
+      <div class="tabla-controles">
+        <label>
+          Confirmacion:
+          <input
+            id="txtConfirmRestore"
+            type="text"
+            placeholder="Escriba RESTAURAR"
+            maxlength="32"
+          />
+        </label>
+      </div>
+      <div class="tabla-controles">
+        <label>
+          <input id="chkSafetyBackup" type="checkbox" checked />
+          Crear backup de seguridad antes de restaurar.
+        </label>
+      </div>
+      <div class="tabla-controles">
+        <button id="btnRestaurarBackup" type="button" class="btn-danger">
+          Restaurar backup
+        </button>
+        <span id="restoreStatus" class="hint"></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel panel-listado">
+    <h3>Backups disponibles</h3>
+    <div class="tabla-scroll">
+      <table class="productos-table" id="tablaBackups">
+        <thead>
+          <tr>
+            <th>Archivo</th>
+            <th>Fecha</th>
+            <th>Tamano</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+  const API_BACKUPS = '/api/backups';
+  const API_BACKUP_PREFS = '/api/backups/preferences';
+  let backupInfo = {{ backup_info | tojson }};
+  let backupPrefs = {
+    auto_enabled: false,
+    auto_time: '02:00',
+    auto_dir: '',
+    auto_weekdays: [0, 1, 2, 3, 4, 5, 6],
+    favorite_dirs: [],
+    last_run: null,
+    last_status: null,
+    last_message: null,
+  };
+
+  function getSelectedWeekdays(){
+    const days = Array.from(document.querySelectorAll('input[name="autoWeekday"]:checked'))
+      .map((el) => Number(el.value))
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+    return Array.from(new Set(days)).sort((a, b) => a - b);
+  }
+
+  function getSelectedBackupDir(){
+    const input = document.getElementById('backupDirInput');
+    return (input && input.value ? input.value : '').trim();
+  }
+
+  function setSelectedBackupDir(value){
+    const input = document.getElementById('backupDirInput');
+    if(input) input.value = (value || '').trim();
+  }
+
+  function renderFavoriteDirs(){
+    const sel = document.getElementById('backupFavoriteSelect');
+    if(!sel) return;
+    const dirs = Array.isArray(backupPrefs.favorite_dirs) ? backupPrefs.favorite_dirs : [];
+    sel.innerHTML = '';
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = '(sin favoritos)';
+    sel.appendChild(empty);
+    dirs.forEach((dir) => {
+      const op = document.createElement('option');
+      op.value = dir;
+      op.textContent = dir;
+      sel.appendChild(op);
+    });
+  }
+
+  function renderProgramacion(){
+    const chk = document.getElementById('chkAutoBackupEnabled');
+    const time = document.getElementById('autoBackupTime');
+    const dir = document.getElementById('autoBackupDir');
+    const last = document.getElementById('autoBackupLastRun');
+
+    chk.checked = !!backupPrefs.auto_enabled;
+    time.value = backupPrefs.auto_time || '02:00';
+    dir.value = backupPrefs.auto_dir || '';
+
+    const selectedDays = Array.isArray(backupPrefs.auto_weekdays)
+      ? backupPrefs.auto_weekdays
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6)
+      : [];
+    const selectedSet = new Set(selectedDays.length ? selectedDays : [0, 1, 2, 3, 4, 5, 6]);
+    document.querySelectorAll('input[name="autoWeekday"]').forEach((el) => {
+      const idx = Number(el.value);
+      el.checked = selectedSet.has(idx);
+    });
+
+    if(backupPrefs.last_run){
+      const status = backupPrefs.last_status || 'N/D';
+      const msg = backupPrefs.last_message || '';
+      last.textContent = `Ultima ejecucion: ${backupPrefs.last_run} | Estado: ${status}${msg ? ` | ${msg}` : ''}`;
+      last.className = status === 'OK' ? 'ok' : 'err';
+    } else {
+      last.textContent = 'Aun no hay ejecuciones automaticas registradas.';
+      last.className = 'hint';
+    }
+  }
+
+  async function loadBackupPreferences(){
+    const res = await fetch(API_BACKUP_PREFS);
+    if(!res.ok){
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'No se pudieron cargar las preferencias de backup');
+    }
+    backupPrefs = await res.json();
+    if(!Array.isArray(backupPrefs.auto_weekdays)){
+      backupPrefs.auto_weekdays = [0, 1, 2, 3, 4, 5, 6];
+    }
+    renderFavoriteDirs();
+    renderProgramacion();
+  }
+
+  async function saveBackupPreferences(statusTargetId){
+    const statusEl = document.getElementById(statusTargetId || 'programStatus');
+    const chk = document.getElementById('chkAutoBackupEnabled');
+    const time = document.getElementById('autoBackupTime');
+    const dir = document.getElementById('autoBackupDir');
+
+    const payload = {
+      auto_enabled: !!chk.checked,
+      auto_time: (time.value || '').trim() || '02:00',
+      auto_dir: (dir.value || '').trim() || null,
+      auto_weekdays: getSelectedWeekdays(),
+      favorite_dirs: Array.isArray(backupPrefs.favorite_dirs) ? backupPrefs.favorite_dirs : [],
+    };
+
+    if(payload.auto_enabled && payload.auto_weekdays.length === 0){
+      if(statusEl){
+        statusEl.textContent = 'Debe seleccionar al menos un dia para la programacion automatica';
+        statusEl.className = 'err';
+      }
+      return false;
+    }
+
+    if(statusEl){
+      statusEl.textContent = 'Guardando...';
+      statusEl.className = 'hint';
+    }
+
+    const res = await fetch(API_BACKUP_PREFS, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if(!res.ok){
+      const err = await res.json().catch(() => ({}));
+      if(statusEl){
+        statusEl.textContent = err.detail || 'No se pudo guardar';
+        statusEl.className = 'err';
+      }
+      return false;
+    }
+    backupPrefs = await res.json();
+    renderFavoriteDirs();
+    renderProgramacion();
+    if(statusEl){
+      statusEl.textContent = 'Guardado';
+      statusEl.className = 'ok';
+    }
+    return true;
+  }
+
+  function withBackupDir(url){
+    const selectedDir = getSelectedBackupDir();
+    if(!selectedDir) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}backup_dir=${encodeURIComponent(selectedDir)}`;
+  }
+
+  function formatSize(bytes){
+    const value = Number(bytes || 0);
+    if(value < 1024) return `${value} B`;
+    if(value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    if(value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  function formatDate(value){
+    if(!value) return '—';
+    const date = new Date(value);
+    if(Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('es-AR');
+  }
+
+  function renderToolStatus(){
+    const dirEl = document.getElementById('backupDir');
+    const toolEl = document.getElementById('backupToolStatus');
+    const mysqlEl = document.getElementById('mysqlToolStatus');
+    const inputDir = document.getElementById('backupDirInput');
+    dirEl.textContent = backupInfo.backup_dir || '—';
+    if(inputDir && !inputDir.value){
+      inputDir.value = backupInfo.backup_dir || '';
+    }
+    if(backupInfo.mysqldump_available){
+      toolEl.textContent = `mysqldump disponible: ${backupInfo.mysqldump_path}`;
+      toolEl.className = 'ok';
+      document.getElementById('btnGenerarBackup').disabled = false;
+    } else {
+      toolEl.textContent = 'mysqldump no disponible. Configure MYSQLDUMP_PATH o agreguelo al PATH.';
+      toolEl.className = 'err';
+      document.getElementById('btnGenerarBackup').disabled = true;
+    }
+
+    if(backupInfo.mysql_available){
+      mysqlEl.textContent = `mysql disponible: ${backupInfo.mysql_path}`;
+      mysqlEl.className = 'ok';
+      document.getElementById('btnRestaurarBackup').disabled = false;
+    } else {
+      mysqlEl.textContent = 'mysql no disponible. Configure MYSQL_CLIENT_PATH o agreguelo al PATH.';
+      mysqlEl.className = 'err';
+      document.getElementById('btnRestaurarBackup').disabled = true;
+    }
+  }
+
+  function renderBackups(){
+    const tbody = document.querySelector('#tablaBackups tbody');
+    tbody.innerHTML = '';
+    const items = Array.isArray(backupInfo.items) ? backupInfo.items : [];
+    const selectedDir = getSelectedBackupDir();
+    if(!items.length){
+      tbody.innerHTML = '<tr><td colspan="4"><em>No hay backups generados</em></td></tr>';
+      return;
+    }
+    items.forEach((item) => {
+      const tr = document.createElement('tr');
+      tr.dataset.filename = item.filename;
+      tr.innerHTML = `
+        <td>${item.filename}</td>
+        <td>${formatDate(item.created_at)}</td>
+        <td>${formatSize(item.size_bytes)}</td>
+        <td class="acciones-tabla">
+          <a class="btn-accion" href="${withBackupDir(`${API_BACKUPS}/${encodeURIComponent(item.filename)}/download`)}">Descargar</a>
+          <button type="button" class="btn-danger btn-eliminar-backup">Eliminar</button>
+        </td>
+      `;
+      tr.dataset.backupDir = selectedDir;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function refreshBackups(){
+    const res = await fetch(withBackupDir(API_BACKUPS));
+    if(!res.ok){
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'No se pudo cargar la lista de backups');
+    }
+    backupInfo = await res.json();
+    renderToolStatus();
+    renderBackups();
+  }
+
+  async function generarBackup(){
+    const statusEl = document.getElementById('backupStatus');
+    statusEl.textContent = 'Generando backup...';
+    statusEl.className = 'hint';
+    const res = await fetch(withBackupDir(API_BACKUPS), { method: 'POST' });
+    if(!res.ok){
+      const err = await res.json().catch(() => ({}));
+      statusEl.textContent = err.detail || 'Error generando backup';
+      statusEl.className = 'err';
+      return;
+    }
+    const data = await res.json();
+    statusEl.textContent = `Backup generado: ${data.filename}`;
+    statusEl.className = 'ok';
+    await refreshBackups();
+  }
+
+  async function eliminarBackup(filename){
+    const statusEl = document.getElementById('backupStatus');
+    if(!confirm(`Eliminar backup ${filename}?`)) return;
+    const res = await fetch(withBackupDir(`${API_BACKUPS}/${encodeURIComponent(filename)}`), { method: 'DELETE' });
+    if(!res.ok){
+      const err = await res.json().catch(() => ({}));
+      statusEl.textContent = err.detail || 'Error eliminando backup';
+      statusEl.className = 'err';
+      return;
+    }
+    statusEl.textContent = `Backup eliminado: ${filename}`;
+    statusEl.className = 'ok';
+    await refreshBackups();
+  }
+
+  async function restaurarBackup(){
+    const statusEl = document.getElementById('restoreStatus');
+    const fileInput = document.getElementById('restoreFile');
+    const chkOverwrite = document.getElementById('chkOverwrite');
+    const chkDataLoss = document.getElementById('chkDataLoss');
+    const txtConfirm = document.getElementById('txtConfirmRestore');
+    const chkSafety = document.getElementById('chkSafetyBackup');
+
+    const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if(!file){
+      statusEl.textContent = 'Seleccione un archivo .sql';
+      statusEl.className = 'err';
+      return;
+    }
+    if(!String(file.name || '').toLowerCase().endsWith('.sql')){
+      statusEl.textContent = 'Solo se permiten archivos .sql';
+      statusEl.className = 'err';
+      return;
+    }
+    if(!chkOverwrite.checked || !chkDataLoss.checked){
+      statusEl.textContent = 'Debe aceptar las advertencias de sobreescritura y perdida de datos';
+      statusEl.className = 'err';
+      return;
+    }
+    if((txtConfirm.value || '').trim().toUpperCase() !== 'RESTAURAR'){
+      statusEl.textContent = 'Escriba RESTAURAR para confirmar';
+      statusEl.className = 'err';
+      return;
+    }
+
+    const finalConfirm = confirm(
+      'Operacion destructiva: se restaurara la base de datos y se pueden perder datos actuales. Desea continuar?'
+    );
+    if(!finalConfirm) return;
+
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('confirm_overwrite', String(chkOverwrite.checked));
+    fd.append('confirm_data_loss', String(chkDataLoss.checked));
+    fd.append('confirm_text', txtConfirm.value || '');
+    fd.append('create_safety_backup', String(chkSafety.checked));
+    fd.append('backup_dir', getSelectedBackupDir());
+
+    statusEl.textContent = 'Restaurando backup... no cierre esta ventana.';
+    statusEl.className = 'hint';
+
+    const res = await fetch(`${API_BACKUPS}/restore`, {
+      method: 'POST',
+      body: fd,
+    });
+    if(!res.ok){
+      const err = await res.json().catch(() => ({}));
+      statusEl.textContent = err.detail || 'Error restaurando backup';
+      statusEl.className = 'err';
+      return;
+    }
+
+    const data = await res.json();
+    const safety = data.safety_backup_filename
+      ? ` Backup de seguridad: ${data.safety_backup_filename}`
+      : '';
+    statusEl.textContent = `Restore completado.${safety}`;
+    statusEl.className = 'ok';
+    await refreshBackups();
+  }
+
+  document.getElementById('btnGenerarBackup').addEventListener('click', generarBackup);
+  document.getElementById('btnAplicarDirectorio').addEventListener('click', async () => {
+    const statusEl = document.getElementById('backupStatus');
+    statusEl.textContent = 'Cargando backups del directorio seleccionado...';
+    statusEl.className = 'hint';
+    try {
+      await refreshBackups();
+      statusEl.textContent = 'Directorio aplicado';
+      statusEl.className = 'ok';
+    } catch (error) {
+      statusEl.textContent = error.message || 'No se pudo aplicar el directorio';
+      statusEl.className = 'err';
+    }
+  });
+
+  document.getElementById('btnUsarFavorito').addEventListener('click', () => {
+    const sel = document.getElementById('backupFavoriteSelect');
+    const value = sel && sel.value ? sel.value : '';
+    if(!value) return;
+    setSelectedBackupDir(value);
+  });
+
+  document.getElementById('btnGuardarFavorito').addEventListener('click', async () => {
+    const currentDir = getSelectedBackupDir();
+    const statusEl = document.getElementById('backupStatus');
+    if(!currentDir){
+      statusEl.textContent = 'Indique un directorio para guardarlo como favorito';
+      statusEl.className = 'err';
+      return;
+    }
+    const dirs = Array.isArray(backupPrefs.favorite_dirs) ? backupPrefs.favorite_dirs.slice() : [];
+    if(!dirs.includes(currentDir)) dirs.unshift(currentDir);
+    backupPrefs.favorite_dirs = dirs.slice(0, 20);
+    const ok = await saveBackupPreferences('backupStatus');
+    if(ok){
+      statusEl.textContent = 'Favorito guardado';
+      statusEl.className = 'ok';
+    }
+  });
+
+  document.getElementById('btnQuitarFavorito').addEventListener('click', async () => {
+    const sel = document.getElementById('backupFavoriteSelect');
+    const value = sel && sel.value ? sel.value : '';
+    const statusEl = document.getElementById('backupStatus');
+    if(!value){
+      statusEl.textContent = 'Seleccione un favorito para quitar';
+      statusEl.className = 'err';
+      return;
+    }
+    backupPrefs.favorite_dirs = (backupPrefs.favorite_dirs || []).filter((d) => d !== value);
+    const ok = await saveBackupPreferences('backupStatus');
+    if(ok){
+      statusEl.textContent = 'Favorito eliminado';
+      statusEl.className = 'ok';
+    }
+  });
+
+  document.getElementById('btnCopiarDirActual').addEventListener('click', () => {
+    const autoInput = document.getElementById('autoBackupDir');
+    autoInput.value = getSelectedBackupDir();
+  });
+
+  document.getElementById('btnGuardarProgramacion').addEventListener('click', async () => {
+    await saveBackupPreferences('programStatus');
+  });
+
+  document.getElementById('btnRestaurarBackup').addEventListener('click', restaurarBackup);
+  document.getElementById('tablaBackups').addEventListener('click', (event) => {
+    const btn = event.target.closest('.btn-eliminar-backup');
+    if(!btn) return;
+    const row = btn.closest('tr');
+    if(!row) return;
+    eliminarBackup(row.dataset.filename || '');
+  });
+
+  (async () => {
+    renderToolStatus();
+    renderBackups();
+    try {
+      await loadBackupPreferences();
+    } catch (error) {
+      const statusEl = document.getElementById('programStatus');
+      statusEl.textContent = error.message || 'No se pudo cargar la programacion';
+      statusEl.className = 'err';
+    }
+  })();
+</script>
+{% endblock %}

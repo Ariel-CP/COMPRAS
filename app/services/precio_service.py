@@ -1,12 +1,12 @@
-from typing import Any, Dict, List, Optional
-from datetime import date, datetime
 import csv
 import io
 import logging
 import re
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, UploadFile
-from openpyxl import load_workbook, Workbook
+from openpyxl import Workbook, load_workbook
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -87,6 +87,119 @@ def listar_precios_compra(
 
     rows = db.execute(sql, params).fetchall()
     return [_row_to_precio(r) for r in rows]
+
+
+def crear_precio_compra_manual(
+    db: Session,
+    *,
+    producto_id: int,
+    proveedor_codigo: str,
+    proveedor_nombre: Optional[str],
+    fecha_precio: date,
+    precio_unitario: float,
+    moneda: str,
+    referencia_doc: Optional[str],
+    notas: Optional[str],
+) -> Dict[str, Any]:
+    producto = db.execute(
+        text("SELECT id, codigo, nombre FROM producto WHERE id = :id LIMIT 1"),
+        {"id": producto_id},
+    ).first()
+    if not producto:
+        raise ValueError("Articulo no encontrado")
+
+    proveedor_codigo_value = (proveedor_codigo or "").strip()
+    if not proveedor_codigo_value:
+        raise ValueError("Proveedor codigo es obligatorio")
+
+    try:
+        precio_raw = str(precio_unitario).strip().replace(",", ".")
+        precio_value = float(precio_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Precio unitario invalido") from exc
+    if precio_value <= 0:
+        raise ValueError("Precio unitario debe ser mayor a cero")
+
+    moneda_value = _normalize_moneda_value(moneda, "ARS")
+    if not moneda_value:
+        raise ValueError("Moneda invalida")
+
+    proveedor_nombre_value = (proveedor_nombre or "").strip() or proveedor_codigo_value
+    referencia_value = (referencia_doc or "").strip() or None
+    notas_value = (notas or "").strip() or None
+
+    existing = db.execute(
+        text(
+            "SELECT id FROM precio_compra_hist "
+            "WHERE producto_id=:pid AND proveedor_codigo=:prov "
+            "AND fecha_precio=:fecha AND moneda=:moneda"
+        ),
+        {
+            "pid": producto_id,
+            "prov": proveedor_codigo_value,
+            "fecha": fecha_precio,
+            "moneda": moneda_value,
+        },
+    ).first()
+
+    if existing:
+        db.execute(
+            text(
+                "UPDATE precio_compra_hist SET "
+                "proveedor_nombre=:prov_nom, precio_unitario=:precio, "
+                "origen='MANUAL', referencia_doc=:ref, notas=:notas "
+                "WHERE id=:id"
+            ),
+            {
+                "prov_nom": proveedor_nombre_value,
+                "precio": precio_value,
+                "ref": referencia_value,
+                "notas": notas_value,
+                "id": existing[0],
+            },
+        )
+        target_id = int(existing[0])
+    else:
+        db.execute(
+            text(
+                "INSERT INTO precio_compra_hist "
+                "(producto_id, proveedor_codigo, proveedor_nombre, fecha_precio, "
+                "precio_unitario, moneda, origen, referencia_doc, notas) VALUES "
+                "(:pid, :prov, :prov_nom, :fecha, :precio, :moneda, 'MANUAL', :ref, :notas)"
+            ),
+            {
+                "pid": producto_id,
+                "prov": proveedor_codigo_value,
+                "prov_nom": proveedor_nombre_value,
+                "fecha": fecha_precio,
+                "precio": precio_value,
+                "moneda": moneda_value,
+                "ref": referencia_value,
+                "notas": notas_value,
+            },
+        )
+        target_id = int(db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar() or 0)
+
+    db.commit()
+
+    row = db.execute(
+        text(
+            """
+            SELECT h.id, h.producto_id, h.proveedor_codigo, h.proveedor_nombre,
+                   h.fecha_precio, h.precio_unitario, h.moneda, h.origen,
+                   h.referencia_doc, h.notas,
+                   p.codigo AS producto_codigo, p.nombre AS producto_nombre
+            FROM precio_compra_hist h
+            JOIN producto p ON p.id = h.producto_id
+            WHERE h.id = :id
+            LIMIT 1
+            """
+        ),
+        {"id": target_id},
+    ).first()
+    if not row:
+        raise ValueError("No se pudo recuperar el precio guardado")
+    return _row_to_precio(row)
 
 
 ALLOWED_MONEDAS = {"ARS", "USD", "USD_MAY", "EUR"}

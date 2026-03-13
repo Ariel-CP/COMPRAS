@@ -21,6 +21,10 @@ from .api import (
     ui_tipo_cambio,
 )
 from .api.router import api_router
+from .services.backup_scheduler import (
+    start_backup_scheduler,
+    stop_backup_scheduler,
+)
 
 
 def create_app() -> FastAPI:
@@ -73,6 +77,14 @@ def create_app() -> FastAPI:
         StaticFiles(directory="app/static"),
         name="static",
     )
+
+    @application.on_event("startup")
+    def _startup_backup_scheduler() -> None:
+        start_backup_scheduler()
+
+    @application.on_event("shutdown")
+    def _shutdown_backup_scheduler() -> None:
+        stop_backup_scheduler()
 
     @application.middleware("http")
     async def ui_login_middleware(request, call_next):

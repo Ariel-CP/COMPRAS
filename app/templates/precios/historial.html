@@ -40,6 +40,46 @@
 </section>
 
 <section class="panel">
+  <h3>Nuevo precio manual</h3>
+  <form id="manualPriceForm" onsubmit="return false" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+    <div>
+      <label>Artículo seleccionado</label>
+      <div id="manualProductoInfo" class="chip" style="min-height:36px; display:flex; align-items:center;">
+        Seleccione un artículo para cargar un precio
+      </div>
+    </div>
+    <label>Fecha
+      <input type="date" id="manualFechaPrecio" {{ can_write_attr('precios') }}>
+    </label>
+    <label>Precio
+      <input type="number" id="manualPrecioUnitario" min="0.000001" step="0.000001" placeholder="0.000000" {{ can_write_attr('precios') }}>
+    </label>
+    <label>Moneda
+      <select id="manualMoneda" {{ can_write_attr('precios') }}>
+        <option value="ARS">ARS</option>
+        <option value="USD">USD</option>
+        <option value="USD_MAY">USD_MAY</option>
+        <option value="EUR">EUR</option>
+      </select>
+    </label>
+    <label>Proveedor código
+      <input type="text" id="manualProveedorCodigo" maxlength="64" placeholder="Ej: PROV01" {{ can_write_attr('precios') }}>
+    </label>
+    <label>Proveedor nombre
+      <input type="text" id="manualProveedorNombre" maxlength="128" placeholder="Proveedor" {{ can_write_attr('precios') }}>
+    </label>
+    <label>Referencia
+      <input type="text" id="manualReferencia" maxlength="64" placeholder="OC / factura" {{ can_write_attr('precios') }}>
+    </label>
+    <label style="min-width:260px; flex:1 1 260px;">Notas
+      <input type="text" id="manualNotas" maxlength="255" placeholder="Opcional" {{ can_write_attr('precios') }}>
+    </label>
+    <button type="button" id="btnGuardarPrecioManual" {{ can_write_attr('precios') }}>Guardar precio</button>
+  </form>
+  <div id="manualPriceResult"></div>
+</section>
+
+<section class="panel">
   <h3>Importar historial</h3>
   <form id="importForm" enctype="multipart/form-data" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
     <label>Archivo CSV/XLSX
@@ -120,6 +160,7 @@
 {% block scripts %}
 <script>
 (function(){
+  const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
   const q = document.getElementById('q');
   const proveedor = document.getElementById('proveedor');
   const desde = document.getElementById('desde');
@@ -137,6 +178,61 @@
   const importForm = document.getElementById('importForm');
   const importFile = document.getElementById('importFile');
   const importResult = document.getElementById('importResult');
+  const manualProductoInfo = document.getElementById('manualProductoInfo');
+  const manualFechaPrecio = document.getElementById('manualFechaPrecio');
+  const manualPrecioUnitario = document.getElementById('manualPrecioUnitario');
+  const manualMoneda = document.getElementById('manualMoneda');
+  const manualProveedorCodigo = document.getElementById('manualProveedorCodigo');
+  const manualProveedorNombre = document.getElementById('manualProveedorNombre');
+  const manualReferencia = document.getElementById('manualReferencia');
+  const manualNotas = document.getElementById('manualNotas');
+  const btnGuardarPrecioManual = document.getElementById('btnGuardarPrecioManual');
+  const manualPriceResult = document.getElementById('manualPriceResult');
+  let selectedProduct = null;
+
+  function hoyISO(){
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function syncManualFormState(){
+    const hasProduct = !!((selectedProduct && selectedProduct.id) || (productoIdInput && productoIdInput.value));
+    if(manualProductoInfo){
+      manualProductoInfo.textContent = hasProduct
+        ? `${selectedProduct.codigo} - ${selectedProduct.nombre}`
+        : 'Seleccione un artículo para cargar un precio';
+    }
+    if(btnGuardarPrecioManual){
+      btnGuardarPrecioManual.disabled = !CAN_WRITE || !hasProduct;
+    }
+  }
+
+  function clearManualStatus(){
+    if(manualPriceResult) manualPriceResult.textContent = '';
+  }
+
+  function parsePrecio(value){
+    const raw = (value || '').toString().trim();
+    if(!raw) return NaN;
+    const normalized = raw.replace(',', '.');
+    return Number(normalized);
+  }
+
+  function extractApiError(payload){
+    if(!payload) return '';
+    if(typeof payload === 'string') return payload;
+    if(typeof payload.detail === 'string') return payload.detail;
+    if(Array.isArray(payload.detail)){
+      return payload.detail
+        .map((item) => {
+          const msg = item && item.msg ? String(item.msg) : '';
+          const loc = item && Array.isArray(item.loc) ? item.loc.join('.') : '';
+          return [loc, msg].filter(Boolean).join(': ');
+        })
+        .filter(Boolean)
+        .join(' | ');
+    }
+    return payload.error || '';
+  }
 
   function fmtOrigen(val){
     // Evitar mostrar nombres de marca directamente
@@ -216,7 +312,10 @@
         btn.textContent = `${item.codigo} - ${item.nombre}`;
         btn.addEventListener('click', ()=>{
           if(productoIdInput){ productoIdInput.value = item.id; }
+          selectedProduct = item;
           mostrarProductoSeleccion(item.codigo, item.nombre);
+          syncManualFormState();
+          clearManualStatus();
           productoResultados.innerHTML = '';
           cargar();
         });
@@ -246,10 +345,12 @@
 
   function limpiarProductoSeleccion(){
     if(productoIdInput){ productoIdInput.value = ''; }
+    selectedProduct = null;
     if(productoSeleccion){
       productoSeleccion.style.display = 'none';
       productoSeleccion.textContent = '';
     }
+    syncManualFormState();
   }
 
   if(btnBuscarProducto){ btnBuscarProducto.addEventListener('click', buscarProducto); }
@@ -276,9 +377,73 @@
       const resp = await fetch(`/api/productos/${productoIdInput.value}`);
       if(!resp.ok){ return; }
       const prod = await resp.json();
+      selectedProduct = prod;
       mostrarProductoSeleccion(prod.codigo, prod.nombre);
+      syncManualFormState();
     }catch(_err){
       // ignorar error inicial
+    }
+  }
+
+  async function guardarPrecioManual(){
+    const selectedId = Number((selectedProduct && selectedProduct.id) || (productoIdInput && productoIdInput.value) || 0);
+    if(!Number.isInteger(selectedId) || selectedId <= 0){
+      manualPriceResult.textContent = 'Seleccione un artículo';
+      return;
+    }
+
+    const payload = {
+      producto_id: selectedId,
+      proveedor_codigo: (manualProveedorCodigo.value || '').trim(),
+      proveedor_nombre: (manualProveedorNombre.value || '').trim() || null,
+      fecha_precio: (manualFechaPrecio.value || '').trim(),
+      precio_unitario: parsePrecio(manualPrecioUnitario.value),
+      moneda: manualMoneda.value || 'ARS',
+      referencia_doc: (manualReferencia.value || '').trim() || null,
+      notas: (manualNotas.value || '').trim() || null,
+    };
+
+    if(!payload.proveedor_codigo){
+      manualPriceResult.textContent = 'Ingrese el código de proveedor';
+      return;
+    }
+    if(!payload.fecha_precio){
+      manualPriceResult.textContent = 'Ingrese la fecha del precio';
+      return;
+    }
+    if(!Number.isFinite(payload.precio_unitario) || payload.precio_unitario <= 0){
+      manualPriceResult.textContent = 'Ingrese un precio mayor a cero';
+      return;
+    }
+
+    manualPriceResult.textContent = 'Guardando precio...';
+    try{
+      const res = await fetch('/api/precios/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok){
+        const detail = extractApiError(data);
+        if(res.status === 403){
+          manualPriceResult.textContent = 'No tiene permisos para guardar precios';
+        } else {
+          manualPriceResult.textContent = detail || 'No se pudo guardar el precio';
+        }
+        return;
+      }
+      manualPriceResult.textContent = `Precio guardado para ${data.producto_codigo} con proveedor ${data.proveedor_codigo}`;
+      manualPrecioUnitario.value = '';
+      manualProveedorCodigo.value = '';
+      manualProveedorNombre.value = '';
+      manualReferencia.value = '';
+      manualNotas.value = '';
+      manualMoneda.value = data.moneda || 'ARS';
+      manualFechaPrecio.value = data.fecha_precio || hoyISO();
+      await cargar();
+    }catch(err){
+      manualPriceResult.textContent = `Error inesperado: ${err}`;
     }
   }
 
@@ -320,6 +485,13 @@
     });
   }
 
+  if(manualFechaPrecio && !manualFechaPrecio.value){
+    manualFechaPrecio.value = hoyISO();
+  }
+  if(btnGuardarPrecioManual){
+    btnGuardarPrecioManual.addEventListener('click', guardarPrecioManual);
+  }
+  syncManualFormState();
   cargarProductoInicial();
 })();
 </script>

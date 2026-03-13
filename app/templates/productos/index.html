@@ -1,12 +1,11 @@
 {% extends "base.html" %}
+{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
+{% set CAN_WRITE_JS = can_write_js('productos') %}
 {% block title %}Artículos{% endblock %}
 
 {% block content %}
 <section class="productos-wrapper">
   <h2>Artículos</h2>
-  {% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
-  {% set _ = namespace() %}
-  {% set CAN_WRITE_JS = can_write_js('productos') %}
   <div class="tabla-controles" style="margin-bottom: 10px;">
     <a class="btn-accion" href="/ui/rubros">Ir a rubros</a>
   </div>
@@ -43,15 +42,12 @@
 
   <form method="get" class="panel panel-filtros">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar código o nombre" />
-<<<<<<< HEAD
     <select name="rubro">
       <option value="">Todos los rubros</option>
       {% for r in rubros %}
       <option value="{{ r.nombre }}" {% if rubro == r.nombre %}selected{% endif %}>{{ r.nombre }}</option>
       {% endfor %}
     </select>
-=======
->>>>>>> e0cbf5e965dc7e466c7150be8761ee1658919b54
     <select name="tipo">
       <option value="">Todos los tipos</option>
       {% for t in ['PT','WIP','MP','EMB','SERV','HERR'] %}
@@ -106,7 +102,8 @@
         <td title="{{ p.um_nombre }}">{{ p.um_codigo }}</td>
         <td>{{ 'Sí' if p.activo else 'No' }}</td>
         <td>
-          <button type="button" class="btn-accion" onclick="editarFila(this)" {{ can_write_attr('productos') }}>Editar</button>
+          <button type="button" class="btn-accion btn-editar" {{ can_write_attr('productos') }}>Editar</button>
+          <button type="button" class="btn-secundario btn-eliminar" {{ can_write_attr('productos') }}>Eliminar</button>
         </td>
       </tr>
       {% endfor %}
@@ -124,13 +121,13 @@ let currentOffset = {{ productos|length }};
 const pageSize = 100; // tamaño adicional por carga
 const unidadesMap = {
   {% for um in unidades %}
-  {{ um.id }}: {codigo: "{{ um.codigo }}", nombre: "{{ um.nombre }}"},
+  {{ um.id }}: {codigo: {{ um.codigo | tojson }}, nombre: {{ um.nombre | tojson }}},
   {% endfor %}
 };
 const tiposProd = ['PT','WIP','MP','EMB','SERV','HERR'];
 const rubrosList = [
   "",
-  {% for r in rubros %}"{{ r.nombre|e }}"{% if not loop.last %},{% endif %}{% endfor %}
+  {% for r in rubros %}{{ r.nombre | tojson }}{% if not loop.last %},{% endif %}{% endfor %}
 ];
 
 async function crearProducto(ev) {
@@ -182,8 +179,8 @@ function editarFila(btn){
 
   // Acciones Guardar/Cancelar
   tr.children[6].innerHTML = `
-    <button type="button" class="btn-accion" onclick="guardarFila(this)">Guardar</button>
-    <button type="button" class="btn-secundario" onclick="cancelarFila(this)">Cancelar</button>
+    <button type="button" class="btn-accion btn-guardar">Guardar</button>
+    <button type="button" class="btn-secundario btn-cancelar">Cancelar</button>
   `;
 }
 
@@ -245,7 +242,7 @@ async function guardarFila(btn){
     tr.children[3].textContent = p.rubro || '—';
     tr.children[4].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
     tr.children[5].textContent = p.activo ? 'Sí' : 'No';
-    tr.children[6].innerHTML = `<button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>`;
+    tr.children[6].innerHTML = `<button type="button" class="btn-accion btn-editar">Editar</button> <button type="button" class="btn-secundario btn-eliminar">Eliminar</button>`;
     tr.classList.remove('edit-mode');
   }catch(err){
     alert('No se pudo guardar: ' + err.message);
@@ -268,8 +265,32 @@ function cancelarFila(btn){
   tr.children[3].textContent = rubro || '—';
   tr.children[4].innerHTML = `<span title="${um.nombre}">${um.codigo}</span>`;
   tr.children[5].textContent = activo ? 'Sí' : 'No';
-  tr.children[6].innerHTML = `<button type=\"button\" class=\"btn-accion\" onclick=\"editarFila(this)\">Editar</button>`;
+  tr.children[6].innerHTML = `<button type="button" class="btn-accion btn-editar">Editar</button> <button type="button" class="btn-secundario btn-eliminar">Eliminar</button>`;
   tr.classList.remove('edit-mode');
+}
+
+async function eliminarFila(btn){
+  const tr = btn.closest('tr');
+  const id = tr.dataset.id;
+  const codigo = (tr.dataset.codigo || '').trim();
+  const nombre = (tr.dataset.nombre || '').trim();
+  const etiqueta = codigo || nombre || `ID ${id}`;
+
+  if (!confirm(`¿Eliminar artículo ${etiqueta}? Esta acción no se puede deshacer.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/productos/${id}`, { method: 'DELETE' });
+    if (res.status !== 204) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || res.statusText || 'No se pudo eliminar');
+    }
+    tr.remove();
+    if (currentOffset > 0) currentOffset -= 1;
+  } catch (err) {
+    alert('No se pudo eliminar: ' + err.message);
+  }
 }
 
 function escapeHtml(str){
@@ -289,9 +310,12 @@ async function loadMore(){
   btn.disabled = true; btn.textContent = 'Cargando...';
   try {
     const params = new URLSearchParams();
-    if('{{ q or "" }}') params.set('q','{{ q }}');
-    if('{{ tipo or "" }}') params.set('tipo','{{ tipo }}');
-    if('{{ activo if activo is not none else "" }}') params.set('activo','{{ 'true' if activo else 'false' }}');
+    const _q = {{ (q or '') | tojson }};
+    const _tipo = {{ (tipo or '') | tojson }};
+    const _activo = {{ ('true' if activo else ('false' if activo is not none else '')) | tojson }};
+    if(_q) params.set('q', _q);
+    if(_tipo) params.set('tipo', _tipo);
+    if(_activo) params.set('activo', _activo);
     params.set('limit', pageSize);
     params.set('offset', currentOffset);
     const res = await fetch('/api/productos/?' + params.toString());
@@ -316,7 +340,7 @@ async function loadMore(){
         <td>${p.rubro || '—'}</td>
         <td title="${um.nombre}">${um.codigo}</td>
         <td>${p.activo ? 'Sí':'No'}</td>
-        <td>${CAN_WRITE ? `<button type="button" class="btn-accion" onclick="editarFila(this)">Editar</button>` : `<button type="button" class="btn-accion" disabled title="No tiene permisos de escritura">Editar</button>`}</td>
+        <td>${CAN_WRITE ? `<button type="button" class="btn-accion btn-editar">Editar</button> <button type="button" class="btn-secundario btn-eliminar">Eliminar</button>` : `<button type="button" class="btn-accion" disabled title="No tiene permisos de escritura">Editar</button> <button type="button" class="btn-secundario" disabled title="No tiene permisos de escritura">Eliminar</button>`}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -329,5 +353,23 @@ async function loadMore(){
     btn.disabled = false;
   }
 }
+
+// Event delegation — nunca depende del scope global para los botones de la tabla
+document.addEventListener('DOMContentLoaded', function() {
+  const tabla = document.getElementById('tablaProductos');
+  if (!tabla) return;
+  tabla.addEventListener('click', function(e) {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+    if (btn.classList.contains('btn-editar')) editarFila(btn);
+    else if (btn.classList.contains('btn-guardar')) guardarFila(btn);
+    else if (btn.classList.contains('btn-cancelar')) cancelarFila(btn);
+    else if (btn.classList.contains('btn-eliminar')) eliminarFila(btn);
+  });
+});
+
+window.crearProducto = crearProducto;
+window.cambiarLimite = cambiarLimite;
+window.loadMore = loadMore;
 </script>
 {% endblock %}

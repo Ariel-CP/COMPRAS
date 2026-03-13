@@ -276,11 +276,6 @@
     <button id="btnDescargarTemplateFlexxus" type="button" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px;">Descargar plantilla CSV</button>
     <button id="btnDescargarTemplateFlexxusXlsx" type="button" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px;">Descargar plantilla XLSX</button>
   </div>
-    <div style="display:flex; gap:8px; padding:8px; background:#fef3c7; border-radius:4px; border-left:4px solid #f59e0b; align-items:center; flex-wrap:wrap;">
-    <button id="btnCorregirTipos30" type="button" style="background:#f59e0b; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" title="Corrige tipo WIP para productos que empiezan con 30" {{ can_write_attr('mbom') }}>🔧 Corregir tipos 30→WIP</button>
-    <button id="btnLimpiarMBOMs" type="button" style="background:#dc2626; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;" title="PELIGRO: Elimina todas las estructuras MBOM" {{ can_write_attr('mbom') }}>⚠ Limpiar todo</button>
-    <small style="color:#92400e; margin-left:auto;">Acciones de mantenimiento</small>
-  </div>
   <div id="importarFlexMsg" style="margin-top:8px; padding:6px; font-size:13px; color:#555;"></div>
 
   <!-- Modal progreso importación MBOM -->
@@ -310,7 +305,8 @@
       <button id="btnClonarRevision" type="button" disabled style="padding:6px 14px; border-radius:4px;">📋 Clonar revisión</button>
     </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button id="btnImprimir" type="button" disabled style="padding:6px 14px; border-radius:4px;">🖨 Imprimir</button>
+      <button id="btnImprimir" type="button" style="padding:6px 14px; border-radius:4px;">🖨 Imprimir</button>
+      <button id="btnExportarPdf" type="button" style="padding:6px 14px; border-radius:4px;">📄 Exportar PDF</button>
       <button id="btnEliminar" type="button" style="background:#f59e0b; color:white; padding:6px 14px; border:none; border-radius:4px;" {% if not can_write %}disabled title="No tiene permisos de escritura"{% endif %}>📦 Archivar</button>
       <button id="btnSalir" type="button" onclick="window.location='/ui'" style="padding:6px 14px; border-radius:4px;">← Salir</button>
     </div>
@@ -329,6 +325,8 @@
   const btnAgregar = document.getElementById('btnAgregarLinea');
   const btnGrabar = document.getElementById('btnGrabar');
   const btnEliminar = document.getElementById('btnEliminar');
+  const btnImprimir = document.getElementById('btnImprimir');
+  const btnExportarPdf = document.getElementById('btnExportarPdf');
   const btnActivar = document.getElementById('btnActivar');
   const btnClonarRev = document.getElementById('btnClonarRevision');
   const inpBuscar = document.getElementById('prodBuscar');
@@ -339,8 +337,6 @@
   const btnDescargarTemplateFlexxus = document.getElementById('btnDescargarTemplateFlexxus');
   const btnDescargarTemplateFlexxusXlsx = document.getElementById('btnDescargarTemplateFlexxusXlsx');
   const importarFlexMsg = document.getElementById('importarFlexMsg');
-  const btnLimpiarMBOMs = document.getElementById('btnLimpiarMBOMs');
-  const btnCorregirTipos30 = document.getElementById('btnCorregirTipos30');
   const btnCostosMateriales = document.getElementById('btnCostosMateriales');
   const btnCostosProcesos = document.getElementById('btnCostosProcesos');
   const btnCostosTotal = document.getElementById('btnCostosTotal');
@@ -1667,6 +1663,199 @@
     await cargarCostos();
     render();
   });
+  const imprimirCostosMateriales = (forzarPDF = false) => {
+    const panelMateriales = document.getElementById('costosMaterialesTabla');
+    if(!sel || !sel.value){
+      alert('Seleccione un producto padre antes de imprimir.');
+      return;
+    }
+    if(!panelMateriales || !panelMateriales.querySelector('table')){
+      alert('No hay listado de costos de materiales para imprimir.');
+      return;
+    }
+
+    const productoTxt = sel.selectedOptions && sel.selectedOptions[0]
+      ? (sel.selectedOptions[0].textContent || '').trim()
+      : 'Producto no seleccionado';
+    const revisionTxt = cabecera?.revision ? `Rev ${cabecera.revision}` : 'Sin revisión';
+    const fechaTxt = new Date().toLocaleString('es-AR');
+    const tablaHtml = panelMateriales.innerHTML;
+    const componentes = Array.isArray(costosCache?.materiales?.componentes)
+      ? costosCache.materiales.componentes
+      : [];
+    const operaciones = Array.isArray(costosCache?.procesos?.operaciones)
+      ? costosCache.procesos.operaciones
+      : [];
+    const totalMateriales = Number(costosCache?.materiales?.total || 0);
+    const totalProcesos = Number(costosCache?.procesos?.total || 0);
+    const totalGeneral = Number(costosCache?.total || 0);
+    const pctMatTotal = totalGeneral > 0 ? (totalMateriales / totalGeneral) * 100 : 0;
+    const pctProcTotal = totalGeneral > 0 ? (totalProcesos / totalGeneral) * 100 : 0;
+
+    const escapeHtml = (value) => String(value || '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+
+    const rubroAgg = new Map();
+    componentes.forEach((c)=>{
+      const rubro = (c?.rubro || 'Sin rubro').toString().trim() || 'Sin rubro';
+      const totalLinea = Number(c?.costo_total || 0);
+      rubroAgg.set(rubro, (rubroAgg.get(rubro) || 0) + totalLinea);
+    });
+
+    const rubrosOrdenados = Array.from(rubroAgg.entries())
+      .map(([rubro, total]) => ({ rubro, total }))
+      .sort((a, b) => b.total - a.total);
+
+    const leyendaRubrosHtml = rubrosOrdenados.length
+      ? `
+        <div style="margin: 14px 0 12px;">
+          <div style="font-weight:700; margin-bottom:6px;">Leyenda por rubro</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Rubro</th>
+                <th class="num">Costo total</th>
+                <th class="num">% del total materiales</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rubrosOrdenados.map((it) => {
+                const pct = totalMateriales > 0 ? (it.total / totalMateriales) * 100 : 0;
+                return `<tr><td>${escapeHtml(it.rubro)}</td><td class="num">${formatMoneda2(it.total)}</td><td class="num">${pct.toFixed(2)}%</td></tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `
+      : '<div style="margin: 12px 0; color:#4b5563;">Leyenda por rubro no disponible.</div>';
+
+    const resumenTotalesHtml = `
+      <div style="margin: 12px 0 14px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Concepto</th>
+              <th class="num">Monto</th>
+              <th class="num">% sobre total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Materiales</td>
+              <td class="num">${formatMoneda2(totalMateriales)}</td>
+              <td class="num">${pctMatTotal.toFixed(2)}%</td>
+            </tr>
+            <tr>
+              <td>Procesos</td>
+              <td class="num">${formatMoneda2(totalProcesos)}</td>
+              <td class="num">${pctProcTotal.toFixed(2)}%</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Total general</th>
+              <th class="num">${formatMoneda2(totalGeneral)}</th>
+              <th class="num">100.00%</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `;
+
+    const tablaProcesosHtml = operaciones.length
+      ? `
+        <div style="margin-top:16px;">
+          <div style="font-weight:700; margin-bottom:6px;">Listado de costos de procesos</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Sec</th>
+                <th>Código</th>
+                <th>Operación</th>
+                <th class="num">Tiempo (min)</th>
+                <th class="num">Costo/hora</th>
+                <th class="num">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${operaciones.map((op) => `
+                <tr>
+                  <td>${escapeHtml(op?.secuencia ?? '')}</td>
+                  <td>${escapeHtml(op?.codigo || '')}</td>
+                  <td>${escapeHtml(op?.nombre || '')}</td>
+                  <td class="num">${Number(op?.tiempo_min || 0).toFixed(2)}</td>
+                  <td class="num">${Number(op?.costo_hora || 0).toFixed(2)} ${escapeHtml(op?.moneda || '')}</td>
+                  <td class="num">${Number(op?.subtotal || 0).toFixed(2)} ${escapeHtml(op?.moneda || '')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="5">Total Procesos</th>
+                <th class="num">${formatMoneda2(totalProcesos)}</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `
+      : '<div style="margin-top: 14px; color:#4b5563;">Sin costos de procesos para esta MBOM.</div>';
+
+    const win = window.open('', '_blank');
+    if(!win){
+      alert('No se pudo abrir la ventana de impresión. Verifique el bloqueador de ventanas.');
+      return;
+    }
+
+    win.document.open();
+    win.document.write(`
+      <!doctype html>
+      <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Costos MBOM - ${productoTxt}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+          h1 { font-size: 18px; margin: 0 0 6px; }
+          .meta { font-size: 12px; color: #4b5563; margin-bottom: 14px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; }
+          td.num, th.num { text-align: right; }
+          thead th { background: #f3f4f6; }
+          tfoot th, tfoot td { font-weight: 700; background: #f9fafb; }
+          .fila-sin-precio { background: #fef3c7; }
+          @page { size: A4 portrait; margin: 12mm; }
+        </style>
+      </head>
+      <body>
+        <h1>Listado de costos MBOM</h1>
+        <div class="meta">Producto padre: ${productoTxt}</div>
+        <div class="meta">${revisionTxt} | Emitido: ${fechaTxt}</div>
+        ${resumenTotalesHtml}
+        <div style="font-weight:700; margin: 4px 0 6px;">Listado de costos de materiales</div>
+        ${leyendaRubrosHtml}
+        ${tablaHtml}
+        ${tablaProcesosHtml}
+      </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    if(forzarPDF){
+      alert('En el diálogo, elija destino: Guardar como PDF.');
+    }
+    win.print();
+  };
+
+  btnImprimir.addEventListener('click', ()=>{
+    imprimirCostosMateriales(false);
+  });
+  btnExportarPdf.addEventListener('click', ()=>{
+    imprimirCostosMateriales(true);
+  });
 
   function setImportMsg(text, color){
     importarFlexMsg.textContent = text || '';
@@ -1852,76 +2041,6 @@
       alert('No se pudo conectar con el servidor.');
     }
   });
-
-
-  btnLimpiarMBOMs.addEventListener('click', async ()=>{
-    if(!confirm('⚠ PELIGRO: Se eliminarán TODAS las estructuras MBOM de la base de datos.\n\nEsto NO se puede deshacer.\n\n¿Continuar?')){
-      return;
-    }
-    if(!confirm('¿Está SEGURO? Esta acción es irreversible.')){
-      return;
-    }
-    setImportMsg('Eliminando MBOMs...', '#b00');
-    try{
-      const r = await fetch('/api/mbom/limpiar-todo', { method:'DELETE' });
-      if(!r.ok){
-        let msg = 'Error al limpiar';
-        try{
-          const er = await r.json();
-          if(er && er.detail){ msg = er.detail; }
-        }catch{ /* ignore */ }
-        setImportMsg(msg, '#b00');
-        alert(msg);
-        return;
-      }
-      const d = await r.json();
-      setImportMsg(`Limpieza completada: ${d.mbom_cabecera} cabeceras, ${d.mbom_detalle} detalles eliminados.`, '#0a6');
-      // Limpiar vista actual
-      cabecera = null;
-      lineas = [];
-      costosCache = { componentes: [], total: 0, map: new Map() };
-      render();
-      actualizarCostosResumen();
-      alert('MBOMs eliminadas. Puede re-importar ahora.');
-    }catch(err){
-      console.error('Error limpiando MBOMs', err);
-      setImportMsg('Error de red.', '#b00');
-      alert('No se pudo conectar con el servidor.');
-    }
-  });
-
-
-  btnCorregirTipos30.addEventListener('click', async ()=>{
-    if(!confirm('¿Actualizar todos los productos que empiezan con "30" a tipo WIP?\n\nEsto es útil para productos creados antes de la detección automática de tipos.')){
-      return;
-    }
-    setImportMsg('Actualizando tipos...', '#f59e0b');
-    try{
-      const r = await fetch('/api/productos/corregir-tipos-30', { method:'POST' });
-      if(!r.ok){
-        let msg = 'Error al actualizar tipos';
-        try{
-          const er = await r.json();
-          if(er && er.detail){ msg = er.detail; }
-        }catch{ /* ignore */ }
-        setImportMsg(msg, '#b00');
-        alert(msg);
-        return;
-      }
-      const d = await r.json();
-      setImportMsg(`${d.productos_actualizados} productos actualizados a WIP (total: ${d.total_productos_30})`, '#0a6');
-      alert(`✓ Tipos corregidos: ${d.productos_actualizados} productos actualizados a WIP`);
-      // Recargar estructura si hay una seleccionada
-      if(cabecera){
-        await cargar();
-      }
-    }catch(err){
-      console.error('Error corrigiendo tipos', err);
-      setImportMsg('Error de red.', '#b00');
-      alert('No se pudo conectar con el servidor.');
-    }
-  });
-
 
   btnCrearProducto.addEventListener('click', async ()=>{
     crearProdMsg.textContent='';

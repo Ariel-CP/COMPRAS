@@ -55,6 +55,7 @@ block content %}
         <thead>
           <tr>
             <th>form_key</th>
+            <th>Descripción</th>
             <th>Leer</th>
             <th>Escribir</th>
             <th>Acciones</th>
@@ -70,6 +71,40 @@ block content %}
   let roles = {{ roles|tojson }};
   let permisos = {{ permisos|tojson }};
   let selectedRole = {{ selected_role|tojson }};
+  const permissionCatalog = {{ permission_catalog|tojson }}.slice().sort((a, b) => {
+    const la = (a?.label || '').toString();
+    const lb = (b?.label || '').toString();
+    return la.localeCompare(lb, 'es', { sensitivity: 'base' });
+  });
+
+  function getPermissionLabel(formKey){
+    const key = (formKey || '').trim();
+    const found = permissionCatalog.find(p => p.form_key === key);
+    return found ? found.label : 'Clave legacy/no catalogada';
+  }
+
+  function onFormKeyChanged(selectEl){
+    const tr = selectEl.closest('tr');
+    if(!tr) return;
+    const labelCell = tr.querySelector('.perm-label');
+    if(!labelCell) return;
+    labelCell.textContent = getPermissionLabel(selectEl.value);
+  }
+
+  function renderFormKeySelect(actual){
+    const current = (actual || '').trim();
+    const exists = permissionCatalog.some(p => p.form_key === current);
+    const options = permissionCatalog.map(p => {
+      const selected = p.form_key === current ? 'selected' : '';
+      return `<option value="${escapeHtml(p.form_key)}" ${selected}>${escapeHtml(p.label)} (${escapeHtml(p.form_key)})</option>`;
+    }).join('');
+
+    const legacyOption = (current && !exists)
+      ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (legacy)</option>`
+      : '';
+
+    return `<select name="form_key" onchange="onFormKeyChanged(this)">${legacyOption}${options}</select>`;
+  }
 
   function renderPerms(data){
     const tbody = document.querySelector('#tablaPerms tbody');
@@ -78,7 +113,8 @@ block content %}
       const tr = document.createElement('tr');
       tr.dataset.id = p.id || '';
       tr.innerHTML = `
-        <td><input name="form_key" value="${escapeHtml(p.form_key)}" maxlength="64" /></td>
+        <td>${renderFormKeySelect(p.form_key)}</td>
+        <td class="perm-label">${escapeHtml(getPermissionLabel(p.form_key))}</td>
         <td><input type="checkbox" name="leer" ${p.puede_leer ? 'checked':''} /></td>
         <td><input type="checkbox" name="escribir" ${p.puede_escribir ? 'checked':''} /></td>
         <td><button class="btn-accion" type="button" onclick="eliminarFila(this)">Eliminar</button></td>
@@ -88,7 +124,8 @@ block content %}
   }
 
   function agregarFila(){
-    permisos.push({id:null, form_key:'', puede_leer:true, puede_escribir:false});
+    const defaultKey = permissionCatalog.length ? permissionCatalog[0].form_key : '';
+    permisos.push({id:null, form_key: defaultKey, puede_leer:true, puede_escribir:false});
     renderPerms(permisos);
   }
 
@@ -106,7 +143,7 @@ block content %}
     return Array.from(rows).map(tr => {
       return {
         id: tr.dataset.id || null,
-        form_key: tr.querySelector('input[name="form_key"]').value.trim(),
+        form_key: tr.querySelector('select[name="form_key"]').value.trim(),
         puede_leer: tr.querySelector('input[name="leer"]').checked,
         puede_escribir: tr.querySelector('input[name="escribir"]').checked,
       };

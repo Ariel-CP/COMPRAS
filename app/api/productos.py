@@ -10,6 +10,7 @@ from ..schemas.producto import ProductoIn, ProductoOut
 from ..services.producto_service import (
     actualizar_producto,
     crear_producto,
+    eliminar_producto,
     get_producto,
     listar_productos,
 )
@@ -139,6 +140,29 @@ def api_actualizar_producto(
         raise HTTPException(
             status_code=500, detail=str(getattr(ex, "orig", ex))
         ) from ex
+
+
+@router.delete("/{prod_id}", status_code=status.HTTP_204_NO_CONTENT)
+def api_eliminar_producto(
+    prod_id: int,
+    db: Session = Depends(get_db),
+    _current_user: dict = Depends(require_permission("productos", True)),
+):
+    try:
+        eliminar_producto(db, prod_id)
+        return None
+    except ValueError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(ex)
+        ) from ex
+    except SQLAlchemyError as ex:
+        msg = str(getattr(ex, "orig", ex))
+        if "foreign key constraint fails" in msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No se puede eliminar: el producto está referenciado en otros registros",
+            ) from ex
+        raise HTTPException(status_code=500, detail=msg) from ex
 
 
 @router.get("/pt-activos", response_model=list)

@@ -400,3 +400,46 @@ Notas y recomendaciones:
 - Reinicia `uvicorn` cuando actualices plantillas para evitar caché de reloader en algunos entornos.
 - Considerar agregar CSRF y rate-limiting para endpoints de autenticación y de importación de archivos en producción.
 
+## Cambios recientes (13 de marzo de 2026)
+
+### Módulo de administración de backups
+
+Se agregó un módulo específico para administrar backups de base de datos desde UI y API.
+
+- Vista UI (requiere permiso):
+  - `GET /ui/admin/backups`
+
+- Endpoints API:
+  - `GET /api/backups/` → lista backups disponibles
+  - `POST /api/backups/` → genera nuevo backup SQL
+  - `GET /api/backups/{filename}/download` → descarga backup
+  - `DELETE /api/backups/{filename}` → elimina backup
+  - `POST /api/backups/restore` → sube archivo `.sql` y restaura la base actual
+
+- Configuración:
+  - `BACKUP_DIR` (opcional): directorio destino para los `.sql` (default `backups/`)
+  - `MYSQLDUMP_PATH` (opcional): ruta explícita de `mysqldump` si no está en `PATH`
+  - `MYSQL_CLIENT_PATH` (opcional): ruta explícita de `mysql` para restauración si no está en `PATH`
+  - Desde la UI de backups también se puede elegir un directorio puntual por operación (incluye rutas de pendrive como `E:\Backups`).
+  - La UI permite guardar directorios favoritos y programar backup automático por hora y días seleccionados.
+
+- Permisos:
+  - Nuevo `form_key`: `admin_backups`
+  - Se muestra como opción en **Configuración** del menú superior para usuarios con acceso.
+
+Ejemplo (Windows PowerShell):
+
+```powershell
+$env:BACKUP_DIR = "backups"
+$env:MYSQLDUMP_PATH = "C:\\Program Files\\MariaDB 11.4\\bin\\mysqldump.exe"
+$env:MYSQL_CLIENT_PATH = "C:\\Program Files\\MariaDB 11.4\\bin\\mysql.exe"
+```
+
+Notas:
+
+- El directorio `backups/` está excluido de git en `.gitignore`.
+- La pantalla `/ui/admin/backups` informa si `mysqldump` está disponible antes de permitir generar backups.
+- La restauración es una operación destructiva: puede sobrescribir datos y causar pérdida de información posterior al backup.
+- La UI exige confirmaciones explícitas de sobreescritura/pérdida de datos y el texto `RESTAURAR` antes de ejecutar.
+- Programación automática: la app ejecuta un backup en los días seleccionados a la hora configurada en la pantalla de backups (se guarda en `parametro_sistema`).
+

@@ -1,62 +1,61 @@
 import os
 import sys
 
+from sqlalchemy import text
+
 # Asegura que la raíz del proyecto esté en sys.path para permitir imports de `app`
 ROOT = os.path.dirname(os.path.dirname(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from app.db import SessionLocal  # noqa: E402
-from app.services import auth_service, user_service  # noqa: E402
+from app.services import user_service  # noqa: E402
 
 ROLES_PERMISSIONS = {
     "comprador": {
-        "producto": (True, False),
-        "sugerencia_compra": (True, True),
-        "precio_compra_hist": (True, False),
-        "proveedor": (True, True),
-        "importacion_stock": (True, False),
+        "productos": (True, False),
+        "precios": (True, True),
+        "stock": (True, False),
     },
     "analista_compras": {
-        "producto": (True, False),
-        "precio_compra_hist": (True, False),
-        "reporte_ia": (True, True),
-        "sugerencia_compra": (True, False),
+        "productos": (True, False),
+        "precios": (True, True),
+        "informes": (True, True),
     },
     "planificador": {
-        "plan_produccion_mensual": (True, True),
-        "requerimiento_material_mensual": (True, True),
-        "mbom": (True, False),
+        "plan": (True, True),
+        "mbom": (True, True),
     },
     "operador_almacen": {
-        "stock_disponible_mes": (True, True),
-        "movimientos_stock": (True, True),
+        "stock": (True, True),
+        "productos": (True, False),
     },
     "integrador_erp": {
-        "importacion_stock": (True, True),
-        "mappeo_flexxus": (True, True),
+        "stock": (True, True),
+        "productos": (True, False),
     },
     "contabilidad": {
-        "costo_producto": (True, False),
-        "precio_compra_hist": (True, True),
+        "precios": (True, True),
+        "informes": (True, False),
     },
     "auditor": {
-        "producto": (True, False),
-        "precio_compra_hist": (True, False),
-        "reporte_ia": (True, False),
-        "logs": (True, False),
+        "productos": (True, False),
+        "precios": (True, False),
+        "plan": (True, False),
+        "mbom": (True, False),
+        "informes": (True, False),
     },
     "analista_ia": {
-        "reporte_ia": (True, True),
-        "precio_compra_hist": (True, False),
-        "plan_produccion_mensual": (True, False),
+        "informes": (True, True),
+        "precios": (True, False),
+        "plan": (True, False),
     },
     "proveedor": {
-        "pedidos_proveedor": (True, False),
+        "productos": (True, False),
     },
     "viewer": {
-        "producto": (True, False),
-        "reportes": (True, False),
+        "productos": (True, False),
+        "informes": (True, False),
     },
 }
 
@@ -65,7 +64,7 @@ def run_seed(dry_run: bool = False) -> None:
     db = SessionLocal()
     try:
         for rol_nombre, perms in ROLES_PERMISSIONS.items():
-            rid = auth_service._ensure_rol(db, rol_nombre)
+            rid = _ensure_role(db, rol_nombre)
             print(f"Rol asegurado: {rol_nombre} (id={rid})")
             # preparar lista de permisos en el formato esperado por user_service.set_role_perms
             perms_list = [
@@ -84,11 +83,29 @@ def run_seed(dry_run: bool = False) -> None:
         if not dry_run:
             db.commit()
             print("Seed completado.")
-    except Exception as ex:
+    except RuntimeError:
         db.rollback()
-        print("Error durante seed:", ex)
+        raise
     finally:
         db.close()
+
+
+def _ensure_role(db, role_name: str) -> int:
+    rid = db.execute(
+        text("SELECT id FROM rol WHERE nombre=:n"),
+        {"n": role_name},
+    ).scalar()
+    if rid:
+        return int(rid)
+
+    db.execute(
+        text("INSERT INTO rol (nombre, descripcion) VALUES (:n, :d)"),
+        {"n": role_name, "d": None},
+    )
+    rid = db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
+    if not rid:
+        raise RuntimeError(f"No se pudo crear/leer rol: {role_name}")
+    return int(rid)
 
 
 if __name__ == "__main__":

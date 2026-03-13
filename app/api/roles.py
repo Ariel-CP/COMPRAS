@@ -116,6 +116,8 @@ def set_role_perms(
             raise HTTPException(status_code=404, detail="Rol no encontrado")
         perms = user_service.set_role_perms(db, rol_id, [p.dict() for p in payload])
         return {"rol": role, "permisos": perms}
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
     except SQLAlchemyError as ex:
         raise HTTPException(
             status_code=400, detail=str(getattr(ex, "orig", ex))

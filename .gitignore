@@ -41,6 +41,8 @@ pytestdebug.log
 .mypy_cache/
 .pyre/
 .pytype/
+.ruff_cache/
+backups/
 
 # Jupyter / IPython
 .ipynb_checkpoints/

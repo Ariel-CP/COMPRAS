@@ -23,6 +23,7 @@ from app.db import SessionLocal  # noqa: E402
 from app.services import auth_service  # noqa: E402
 
 DEFAULT_FORMS = [
+    "admin_backups",
     "productos",
     "rubros",
     "stock",
@@ -100,7 +101,7 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        role_id = auth_service._ensure_rol(db, "admin")  # type: ignore[attr-defined]
+        role_id = auth_service.ensure_role(db, "admin")
         upsert_permissions(db, role_id, args.forms)
         ensure_user_with_roles(
             db,

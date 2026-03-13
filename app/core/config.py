@@ -15,6 +15,9 @@ class Settings:
     database_url: str
     mysql_pool_size: int = 10
     mysql_max_overflow: int = 10
+    backup_dir: str = "backups"
+    mysqldump_path: Optional[str] = None
+    mysql_client_path: Optional[str] = None
     max_upload_mb: int = 10
     auth_secret_key: str = "change-me"
     auth_access_token_minutes: int = 120
@@ -72,6 +75,11 @@ def get_settings() -> Settings:
     )
     mysql_max_overflow = int(
         os.environ.get("MYSQL_MAX_OVERFLOW", cfg.get("mysql_max_overflow", 10))
+    )
+    backup_dir = str(os.environ.get("BACKUP_DIR", cfg.get("backup_dir", "backups")))
+    mysqldump_path = os.environ.get("MYSQLDUMP_PATH") or cfg.get("mysqldump_path")
+    mysql_client_path = os.environ.get("MYSQL_CLIENT_PATH") or cfg.get(
+        "mysql_client_path"
     )
     max_upload_mb = int(
         os.environ.get("MAX_UPLOAD_MB", cfg.get("max_upload_mb", 10))
@@ -137,6 +145,9 @@ def get_settings() -> Settings:
         database_url=database_url,
         mysql_pool_size=mysql_pool_size,
         mysql_max_overflow=mysql_max_overflow,
+        backup_dir=backup_dir,
+        mysqldump_path=mysqldump_path,
+        mysql_client_path=mysql_client_path,
         max_upload_mb=max_upload_mb,
         auth_secret_key=auth_secret_key,
         auth_access_token_minutes=auth_access_token_minutes,
