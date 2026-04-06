@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
+from datetime import datetime, timezone
+from typing import Any
+
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -9,18 +13,16 @@ from app.schemas.auth import (
     LoginResponse,
     MeResponse,
     Permission,
-    UserPublic,
     SessionInfo,
+    UserPublic,
 )
-import jwt
-from datetime import datetime, timezone
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 
 
-def _to_user_public(user: dict) -> UserPublic:
+def _to_user_public(user: dict[str, Any]) -> UserPublic:
     perms_dict = {
         key: Permission(
             puede_leer=bool(values[0]), puede_escribir=bool(values[1])
@@ -28,8 +30,8 @@ def _to_user_public(user: dict) -> UserPublic:
         for key, values in user.get("permissions", {}).items()
     }
     return UserPublic(
-        id=user["id"],
-        email=user["email"],
+        id=int(user["id"]),
+        email=str(user["email"]),
         nombre=user.get("nombre"),
         roles=user.get("roles", []),
         permissions=perms_dict,
@@ -43,112 +45,90 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    # request added below to capture IP/UA for session; keep db dependency before
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    # Validación más explícita para retornar errores por campo (compatible con frontend)
-    email = getattr(payload, "email", None)
-    pwd = getattr(payload, "password", None)
+    email = str(payload.email)
+    pwd = payload.password
 
-    # Intento de login: devolver mensaje genérico para evitar enumeración de usuarios.
+    # Mensaje genérico para evitar enumeración de usuarios.
     user = auth_service.get_user_by_email(db, email)
     pwd_ok = False
     if user and user.get("activo"):
-        pwd_ok = auth_service.verify_password(pwd, user.get("password_hash", ""))
+        password_hash = str(user.get("password_hash") or "")
+        pwd_ok = auth_service.verify_password(pwd, password_hash)
     else:
-        # En caso de usuario inexistente o inactivo, ejecutar verify_password
-        # contra un hash fijo para reducir diferencias de timing.
+        # Ejecuta verify con hash fijo para reducir diferencias de timing.
         try:
             auth_service.verify_password(pwd, "$2b$12$invalidinvalidinvalidinvalidinvA")
-        except Exception:
-            # ignorar cualquier error del verificador
+        except ValueError:
             pass
 
     if not (user and user.get("activo") and pwd_ok):
-        # Mensaje genérico para credenciales inválidas
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=[{"loc": ["body", "__all__"], "msg": "Credenciales inválidas.", "type": "value_error"}],
+            detail=[
+                {
+                    "loc": ["body", "__all__"],
+                    "msg": "Credenciales inválidas.",
+                    "type": "value_error",
+                }
+            ],
         )
 
-    user["roles"] = auth_service.get_user_roles(db, user["id"])
-    user["permissions"] = auth_service.get_permissions(db, user["id"])
+    user["roles"] = auth_service.get_user_roles(db, int(user["id"]))
+    user["permissions"] = auth_service.get_permissions(db, int(user["id"]))
 
-    # crear token (auth_service genera un `jti` internamente)
     token = auth_service.create_access_token(str(user["id"]))
-    # decodificar para extraer jti y exp
     try:
         payload_dec = jwt.decode(token, settings.auth_secret_key, algorithms=["HS256"])
         jti = payload_dec.get("jti")
-        exp_ts = int(payload_dec.get("exp"))
+        exp_raw = payload_dec.get("exp")
+        if exp_raw is None:
+            raise ValueError("Missing exp in token payload")
+        exp_ts = int(exp_raw)
         expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
-    except Exception:
-        # Si algo falla, no crear sesión
+    except (jwt.PyJWTError, TypeError, ValueError):
         jti = None
         expires_at = datetime.now(timezone.utc)
-    # Establecer cookie: persistente si el cliente pidió remember_me
-    cookie_params = dict(
-        key="access_token",
-        value=token,
-        httponly=True,
-        secure=settings.auth_cookie_secure,
-        samesite="lax",
-        path="/",
-    )
-    if getattr(payload, "remember_me", False):
-        max_age = int(settings.auth_remember_days) * 24 * 3600
-        cookie_params["max_age"] = max_age
-    # apply cookie
-    response.set_cookie(**cookie_params)
 
-    # crear registro de sesión en DB (si jti disponible)
+    if payload.remember_me:
+        max_age = int(settings.auth_remember_days) * 24 * 3600
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=settings.auth_cookie_secure,
+            samesite="lax",
+            path="/",
+            max_age=max_age,
+        )
+    else:
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=settings.auth_cookie_secure,
+            samesite="lax",
+            path="/",
+        )
+
     try:
         if jti:
-            # obtener meta desde request
-            ip = None
-            ua = None
-            device = None
-            try:
-                if request.client:
-                    ip = request.client.host
-            except Exception:
-                ip = None
+            ip = request.client.host if request.client else None
             ua = request.headers.get("user-agent")
             device = request.headers.get("x-device-name")
-            # crear sesión
             auth_service.create_session(
                 db,
                 int(user["id"]),
                 jti,
                 expires_at,
-                bool(getattr(payload, "remember_me", False)),
+                bool(payload.remember_me),
                 ip,
                 ua,
                 device,
             )
-    except Exception:
-        # no bloquear login por error en registro de sesión
+    except (TypeError, ValueError):
+        # No bloquear login por error en registro de sesión.
         pass
+
     return LoginResponse(access_token=token, user=_to_user_public(user))
 
 
@@ -163,15 +143,18 @@ def list_sessions(
     db: Session = Depends(get_db),
 ):
     rows = auth_service.list_sessions_for_user(db, int(current_user["id"]))
-    # normalizar fechas a ISO
-    out = []
+
+    def _iso_or_none(value: Any) -> str | None:
+        return value.isoformat() if hasattr(value, "isoformat") else None
+
+    out: list[dict[str, Any]] = []
     for r in rows:
         out.append(
             {
-                "jti": r.get("jti"),
-                "created_at": r.get("created_at").isoformat() if r.get("created_at") else None,
-                "last_used_at": r.get("last_used_at").isoformat() if r.get("last_used_at") else None,
-                "expires_at": r.get("expires_at").isoformat() if r.get("expires_at") else None,
+                "jti": str(r.get("jti") or ""),
+                "created_at": _iso_or_none(r.get("created_at")) or "",
+                "last_used_at": _iso_or_none(r.get("last_used_at")),
+                "expires_at": _iso_or_none(r.get("expires_at")) or "",
                 "persistent": bool(r.get("persistent")),
                 "revoked": bool(r.get("revoked")),
                 "ip": r.get("ip"),
@@ -189,7 +172,8 @@ def delete_session(
     db: Session = Depends(get_db),
 ):
     sess = auth_service.get_session_by_jti(db, jti)
-    if not sess or int(sess.get("user_id")) != int(current_user["id"]):
+    sess_user_id = sess.get("user_id") if sess else None
+    if sess is None or sess_user_id is None or int(sess_user_id) != int(current_user["id"]):
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
     auth_service.revoke_session(db, jti)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

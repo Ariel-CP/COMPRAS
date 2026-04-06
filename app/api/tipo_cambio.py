@@ -44,7 +44,11 @@ router = APIRouter()
 settings = get_settings()
 
 
-@router.get("/", response_model=list[TipoCambioOut])
+@router.get(
+    "/",
+    response_model=list[TipoCambioOut],
+    dependencies=[Depends(require_permission("tipo_cambio", False))],
+)
 def api_listar_tipos_cambio(
     moneda: str | None = Query(
         default=None, description="Moneda"
@@ -59,7 +63,6 @@ def api_listar_tipos_cambio(
         default=None, description="Fecha hasta (YYYY-MM-DD)"
     ),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("tipo_cambio", False)),
 ):
     desde_dt = date.fromisoformat(desde) if desde else None
     hasta_dt = date.fromisoformat(hasta) if hasta else None
@@ -92,12 +95,15 @@ def api_upsert_tipo_cambio(
         ) from ex
 
 
-@router.put("/{tipo_cambio_id}", response_model=TipoCambioOut)
+@router.put(
+    "/{tipo_cambio_id}",
+    response_model=TipoCambioOut,
+    dependencies=[Depends(require_permission("tipo_cambio", True))],
+)
 def api_actualizar_tipo_cambio(
     tipo_cambio_id: int,
     data: TipoCambioUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("tipo_cambio", True)),
 ):
     try:
         ok = actualizar_tipo_cambio(db, tipo_cambio_id, data)
@@ -118,7 +124,11 @@ def api_actualizar_tipo_cambio(
         ) from ex
 
 
-@router.post("/import", response_model=BulkImportResult)
+@router.post(
+    "/import",
+    response_model=BulkImportResult,
+    dependencies=[Depends(require_permission("tipo_cambio", True))],
+)
 def api_importar_csv(
     csv_contenido: str = Body(
         ..., embed=True, description="Contenido CSV fecha,tasa"
@@ -127,7 +137,6 @@ def api_importar_csv(
     tipo: str = Body("VENTA", embed=True),
     origen: str = Body("MANUAL", embed=True),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("tipo_cambio", True)),
 ):
     try:
         insertados, actualizados, errores = bulk_import_csv(
@@ -145,7 +154,11 @@ def api_importar_csv(
         ) from ex
 
 
-@router.post("/import-xlsx", response_model=BulkImportResult)
+@router.post(
+    "/import-xlsx",
+    response_model=BulkImportResult,
+    dependencies=[Depends(require_permission("tipo_cambio", True))],
+)
 async def api_importar_xlsx(
     file: UploadFile = File(...),
     moneda: str = Form("USD"),
@@ -153,7 +166,6 @@ async def api_importar_xlsx(
     origen: str = Form("MANUAL"),
     sheet_name: str | None = Form(None),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("tipo_cambio", True)),
 ):
     try:
         contenido = await file.read()

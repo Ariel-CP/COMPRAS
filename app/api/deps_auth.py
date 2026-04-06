@@ -3,6 +3,7 @@ from typing import Callable
 import jwt
 from datetime import datetime, timezone
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -75,9 +76,12 @@ def get_current_user(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión expirada")
     # actualizar last_used_at (no bloqueo)
     try:
-        db.execute("UPDATE user_session SET last_used_at=CURRENT_TIMESTAMP WHERE jti=:jti", {"jti": jti})
+        db.execute(
+            text("UPDATE user_session SET last_used_at=CURRENT_TIMESTAMP WHERE jti=:jti"),
+            {"jti": jti},
+        )
         db.commit()
-    except Exception:
+    except RuntimeError:
         db.rollback()
 
     roles = auth_service.get_user_roles(db, user["id"])
@@ -109,7 +113,7 @@ def decode_current_user_from_cookie(request: Request, db: Session):
         return None
     try:
         payload = jwt.decode(token, settings.auth_secret_key, algorithms=["HS256"])
-    except Exception:
+    except jwt.PyJWTError:
         return None
 
     user_id = payload.get("sub")
@@ -131,7 +135,7 @@ def decode_current_user_from_cookie(request: Request, db: Session):
     try:
         if exp and exp < datetime.now(timezone.utc):
             return None
-    except Exception:
+    except TypeError:
         pass
     roles = auth_service.get_user_roles(db, user["id"])
     permissions = auth_service.get_permissions(db, user["id"])

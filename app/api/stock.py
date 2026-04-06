@@ -27,16 +27,17 @@ def descargar_template_xlsx():
     return FileResponse(file_path, filename="template_stock_mensual.xlsx")
 
 
-
-
-@router.post("/{anio}/{mes}/import", response_model=StockImportResult)
+@router.post(
+    "/{anio}/{mes}/import",
+    response_model=StockImportResult,
+    dependencies=[Depends(require_permission("stock", True))],
+)
 def importar_stock(
     anio: int,
     mes: int,
     archivo: UploadFile = File(...),
     fecha_corte: str = Form(..., description="Fecha de corte YYYY-MM-DD"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(require_permission("stock", True)),
 ):
     if not 1 <= mes <= 12:
         raise HTTPException(
@@ -48,13 +49,16 @@ def importar_stock(
     return importar_stock_csv_o_excel(db, anio, mes, archivo, fecha_corte)
 
 
-@router.get("/{anio}/{mes}", response_model=List[StockItemOut])
+@router.get(
+    "/{anio}/{mes}",
+    response_model=List[StockItemOut],
+    dependencies=[Depends(require_permission("stock", False))],
+)
 def listar_stock(
     anio: int,
     mes: int,
     q: str | None = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("stock", False)),
 ):
     if not (1 <= mes <= 12):
         raise HTTPException(

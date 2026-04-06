@@ -5,6 +5,7 @@ from fastapi.openapi.docs import (
     get_swagger_ui_oauth2_redirect_html,
 )
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from app.api.deps_auth import get_current_user
 
@@ -25,6 +26,40 @@ from .services.backup_scheduler import (
     start_backup_scheduler,
     stop_backup_scheduler,
 )
+
+
+def _patch_template_response_compat() -> None:
+    """Mantiene compatibilidad con la firma vieja de TemplateResponse.
+
+    En Starlette nuevas versiones esperan `request=` explícito. El proyecto
+    usa la forma histórica `TemplateResponse(name, context)` en múltiples
+    vistas UI.
+    """
+
+    original = Jinja2Templates.TemplateResponse
+    if getattr(original, "_compras_compat", False):
+        return
+
+    def compat_template_response(self, *args, **kwargs):
+        if len(args) >= 2 and isinstance(args[0], str) and isinstance(args[1], dict):
+            name = args[0]
+            context = args[1]
+            request = kwargs.pop("request", None) or context.get("request")
+            if request is not None:
+                return original(
+                    self,
+                    request=request,
+                    name=name,
+                    context=context,
+                    **kwargs,
+                )
+        return original(self, *args, **kwargs)
+
+    setattr(compat_template_response, "_compras_compat", True)
+    setattr(Jinja2Templates, "TemplateResponse", compat_template_response)
+
+
+_patch_template_response_compat()
 
 
 def create_app() -> FastAPI:
@@ -94,6 +129,7 @@ def create_app() -> FastAPI:
         - Para GET/HEAD: redirige a `/ui/login?next=...`.
         - Para otras methods: devuelve JSON 401.
         """
+        request.state.current_user = None
         path = request.url.path or ""
         if path.startswith("/ui"):
             # exclusiones públicas
@@ -130,7 +166,9 @@ def create_app() -> FastAPI:
 
     @application.get("/")
     def root():
-        return {"name": "compras", "status": "ok"}
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(url="/ui/login", status_code=302)
 
     @application.get("/health")
     def health():

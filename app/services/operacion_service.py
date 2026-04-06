@@ -1,7 +1,7 @@
-"""
-Servicio para gestión de operaciones (catálogo maestro).
-"""
-from typing import Optional
+"""Servicio para gestion de operaciones (catalogo maestro)."""
+
+from typing import Any, Optional
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,7 @@ def listar_operaciones(
 ) -> list[dict]:
     """Lista operaciones con filtros opcionales."""
     where_clauses = []
-    params = {"limit": limit, "offset": offset}
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
 
     if q:
         where_clauses.append(
@@ -114,7 +114,7 @@ def crear_operacion(
         (:codigo, :nombre, :centro, :tiempo, :costo, :moneda)
     """)
 
-    result = db.execute(query, {
+    db.execute(query, {
         "codigo": codigo,
         "nombre": nombre,
         "centro": centro_trabajo,
@@ -122,9 +122,16 @@ def crear_operacion(
         "costo": costo_hora,
         "moneda": moneda,
     })
-    db.commit()
 
-    return obtener_operacion(db, result.lastrowid)
+    inserted_id = db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
+    db.commit()
+    if inserted_id is None:
+        raise ValueError("No se pudo obtener el ID de la operacion creada")
+
+    created = obtener_operacion(db, int(inserted_id))
+    if not created:
+        raise ValueError("La operacion creada no pudo recuperarse")
+    return created
 
 
 def actualizar_operacion(
@@ -139,7 +146,7 @@ def actualizar_operacion(
 ) -> Optional[dict]:
     """Actualiza una operación existente."""
     updates = []
-    params = {"id": operacion_id}
+    params: dict[str, Any] = {"id": operacion_id}
 
     if codigo is not None:
         updates.append("codigo = :codigo")
@@ -186,6 +193,7 @@ def actualizar_operacion(
 def eliminar_operacion(db: Session, operacion_id: int) -> bool:
     """Elimina una operación (solo si no está referenciada)."""
     query = text("DELETE FROM operacion WHERE id = :id")
-    result = db.execute(query, {"id": operacion_id})
+    db.execute(query, {"id": operacion_id})
+    affected = db.execute(text("SELECT ROW_COUNT() AS affected")).scalar()
     db.commit()
-    return result.rowcount > 0
+    return int(affected or 0) > 0

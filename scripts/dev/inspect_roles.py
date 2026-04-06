@@ -8,6 +8,7 @@ if ROOT not in sys.path:
 from app.db import SessionLocal  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
+
 def main():
     db = SessionLocal()
     try:
@@ -17,6 +18,7 @@ def main():
             print(r[0], r[1], r[2])
     finally:
         db.close()
+
 
 if __name__ == '__main__':
     main()

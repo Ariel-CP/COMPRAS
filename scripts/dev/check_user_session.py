@@ -1,5 +1,6 @@
 """Comprueba si la tabla `user_session` existe en la base de datos configurada."""
 from sqlalchemy import inspect
+from sqlalchemy.exc import SQLAlchemyError
 from app.db import _engine
 
 
@@ -12,7 +13,7 @@ def main():
         else:
             print("user_session: NOT FOUND")
             print("Tablas en la BD:\n", tables)
-    except Exception as e:
+    except SQLAlchemyError as e:
         print("Error al inspeccionar la base de datos:", e)
 
 

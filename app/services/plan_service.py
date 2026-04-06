@@ -73,7 +73,8 @@ def upsert_plan_periodo(
                 upd,
                 {"cant": it.cantidad, "anio": anio, "mes": mes, "pid": prod_id},
             )
-            if r.rowcount and r.rowcount > 0:
+            affected = getattr(r, "rowcount", None)
+            if isinstance(affected, int) and affected > 0:
                 actualizados += 1
             else:
                 ins = text(
@@ -96,7 +97,8 @@ def update_plan_item(db: Session, item_id: int, body: PlanItemIn) -> PlanItemOut
         "UPDATE plan_produccion_mensual SET cantidad_planificada=:cant WHERE id=:id"
     )
     r = db.execute(upd, {"cant": body.cantidad, "id": item_id})
-    if r.rowcount == 0:
+    affected = getattr(r, "rowcount", None)
+    if not isinstance(affected, int) or affected == 0:
         raise ValueError("Item no encontrado")
 
     q = text(

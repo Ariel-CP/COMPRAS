@@ -1,5 +1,5 @@
-from datetime import date
-from typing import List, Optional, Sequence, Tuple, Union
+from datetime import date, datetime
+from typing import Any, List, Optional, Sequence, Tuple, Union
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
@@ -40,10 +40,10 @@ def listar_tipos_cambio(
     {where_sql}
     ORDER BY fecha DESC, moneda, tipo
     """.strip()
-    result = conn.execute(text(sql), params)
+    result = conn.execute(text(sql), params).mappings()
     rows = []
     for r in result:
-        row_dict = dict(r._mapping)
+        row_dict = dict(r)
         # Convertir tipos no serializables a JSON
         if row_dict.get("fecha"):
             row_dict["fecha"] = row_dict["fecha"].isoformat()
@@ -72,10 +72,10 @@ def obtener_resumen_ultimas_tasas(conn: SQLConn) -> List[dict]:
         ORDER BY t.moneda, t.tipo
         """
     )
-    result = conn.execute(sql)
+    result = conn.execute(sql).mappings()
     resumen: List[dict] = []
     for row in result:
-        data = dict(row._mapping)
+        data = dict(row)
         data["fecha"] = data["fecha"].isoformat()
         data["tasa"] = float(data["tasa"])
         resumen.append(data)
@@ -132,7 +132,7 @@ def actualizar_tipo_cambio(
     conn: SQLConn, id_: int, data: TipoCambioUpdate
 ) -> bool:
     set_parts = []
-    params = {"id": id_}
+    params: dict[str, Any] = {"id": id_}
     if data.tasa is not None:
         set_parts.append("tasa=:tasa")
         params["tasa"] = data.tasa
@@ -157,10 +157,10 @@ def obtener_por_id(conn: SQLConn, id_: int) -> Optional[dict]:
         SELECT id, fecha, moneda, tipo, tasa, origen, notas, fecha_creacion
         FROM tipo_cambio_hist WHERE id=:id
     """)
-    row = conn.execute(sql, {"id": id_}).fetchone()
+    row = conn.execute(sql, {"id": id_}).mappings().first()
     if not row:
         return None
-    row_dict = dict(row._mapping)
+    row_dict = dict(row)
     # Convertir tipos no serializables a JSON
     if row_dict.get("fecha"):
         row_dict["fecha"] = row_dict["fecha"].isoformat()
@@ -295,6 +295,8 @@ def bulk_import_xlsx(
         if sheet_name and sheet_name in wb.sheetnames
         else wb.active
     )
+    if ws is None:
+        return 0, 0, ["No se encontró una hoja activa en el archivo XLSX"]
 
     # Detectar encabezados
     header_row = None
@@ -329,19 +331,21 @@ def bulk_import_xlsx(
             continue
         try:
             # Convertir fecha si es datetime/date
-            if hasattr(fecha_cell, "date"):
-                fecha_dt = (
-                    fecha_cell.date()
-                    if hasattr(fecha_cell, "date")
-                    else fecha_cell
-                )
+            if isinstance(fecha_cell, datetime):
+                fecha_dt_obj = fecha_cell.date()
+            elif isinstance(fecha_cell, date):
+                fecha_dt_obj = fecha_cell
             else:
-                fecha_dt = date.fromisoformat(str(fecha_cell).strip())
+                fecha_dt_obj = date.fromisoformat(str(fecha_cell).strip())
+
+            if not isinstance(fecha_dt_obj, date):
+                raise ValueError("Fecha inválida")
+
             tasa_val = float(str(tasa_cell).strip())
             creado, _ = upsert_tipo_cambio(
                 conn,
                 TipoCambioCreate(
-                    fecha=fecha_dt,
+                    fecha=fecha_dt_obj,
                     moneda=moneda,
                     tipo=tipo,
                     tasa=tasa_val,
@@ -382,9 +386,9 @@ def obtener_tasa_cercana(
     exact = conn.execute(
         text(f"{base_sql} AND fecha=:fecha ORDER BY fecha DESC LIMIT 1"),
         params,
-    ).first()
+    ).mappings().first()
     if exact:
-        row = dict(exact._mapping)
+        row = dict(exact)
         row["tasa"] = float(row["tasa"])
         row["fecha"] = row["fecha"]
         row["es_estimativa"] = False
@@ -396,9 +400,9 @@ def obtener_tasa_cercana(
             f"{base_sql} AND fecha < :fecha ORDER BY fecha DESC LIMIT 1"
         ),
         params,
-    ).first()
+    ).mappings().first()
     if prev:
-        row = dict(prev._mapping)
+        row = dict(prev)
         row["tasa"] = float(row["tasa"])
         row["es_estimativa"] = True
         row["origen_busqueda"] = "anterior"
@@ -409,9 +413,9 @@ def obtener_tasa_cercana(
             f"{base_sql} AND fecha > :fecha ORDER BY fecha ASC LIMIT 1"
         ),
         params,
-    ).first()
+    ).mappings().first()
     if nxt:
-        row = dict(nxt._mapping)
+        row = dict(nxt)
         row["tasa"] = float(row["tasa"])
         row["es_estimativa"] = True
         row["origen_busqueda"] = "posterior"

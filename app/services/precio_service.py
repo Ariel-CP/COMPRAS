@@ -344,6 +344,8 @@ def _parse_xlsx_rows(content: bytes) -> List[Dict[str, Any]]:
             detail=f"Archivo XLSX inválido: {exc}",
         ) from exc
     ws = wb.active
+    if ws is None:
+        return []
     try:
         headers = [
             str(c.value).strip().lower() if c.value is not None else ""
@@ -380,6 +382,8 @@ def _get_producto_id(
 def generar_template_precios() -> io.BytesIO:
     wb = Workbook()
     ws = wb.active
+    if ws is None:
+        raise RuntimeError("No se pudo crear la hoja activa")
     ws.title = "precios"
     ws.append(
         [

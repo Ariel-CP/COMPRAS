@@ -1,4 +1,4 @@
-"""Script sencillo para aplicar una migración SQL usando la conexión SQLAlchemy del proyecto.
+r"""Script sencillo para aplicar una migración SQL usando la conexión SQLAlchemy del proyecto.
 
 Uso:
     .venv\Scripts\python.exe scripts/apply_migration.py
@@ -41,7 +41,7 @@ def main():
         # Si todo ok, confirmar (commit)
         try:
             conn.commit()
-        except Exception:
+        except RuntimeError:
             # algunos drivers/autocommit manejan commit distinto
             pass
 

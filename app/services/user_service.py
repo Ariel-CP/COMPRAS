@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
@@ -47,7 +47,7 @@ def list_users(
     offset: int = 0,
 ) -> List[dict]:
     filtros = []
-    params = {}
+    params: dict[str, Any] = {}
     if q:
         filtros.append("(u.email LIKE :q OR u.nombre LIKE :q)")
         params["q"] = f"%{q}%"
@@ -120,7 +120,10 @@ def create_user(
         user_id = db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
     if roles:
         _sync_roles(db, int(user_id), roles)
-    return get_user(db, int(user_id))  # type: ignore[arg-type]
+    created_user = get_user(db, int(user_id))
+    if created_user is None:
+        raise RuntimeError("No se pudo recuperar el usuario creado")
+    return created_user
 
 
 def update_user(
@@ -132,7 +135,7 @@ def update_user(
     roles: Optional[List[str]] = None,
 ) -> Optional[dict]:
     sets = []
-    params = {"id": user_id}
+    params: dict[str, Any] = {"id": user_id}
     if nombre is not None:
         sets.append("nombre = :nombre")
         params["nombre"] = nombre
@@ -187,14 +190,17 @@ def create_role(db: Session, nombre: str, descripcion: Optional[str]) -> dict:
     rid = res.lastrowid  # type: ignore[attr-defined]
     if not rid:
         rid = db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
-    return get_role(db, int(rid))  # type: ignore[arg-type]
+    created_role = get_role(db, int(rid))
+    if created_role is None:
+        raise RuntimeError("No se pudo recuperar el rol creado")
+    return created_role
 
 
 def update_role(
     db: Session, rol_id: int, nombre: Optional[str], descripcion: Optional[str]
 ) -> Optional[dict]:
     sets = []
-    params = {"id": rol_id}
+    params: dict[str, Any] = {"id": rol_id}
     if nombre is not None:
         sets.append("nombre = :nombre")
         params["nombre"] = nombre

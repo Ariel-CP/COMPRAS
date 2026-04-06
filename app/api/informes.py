@@ -24,13 +24,15 @@ class InformeCostosComparacionIn(BaseModel):
         return len(self.producto_ids) + len(self.codigos)
 
 
-@router.get("/costos-pt")
+@router.get(
+    "/costos-pt",
+    dependencies=[Depends(require_permission("informes", False))],
+)
 def obtener_costos_pt(
     q: Optional[str] = Query(default=None, description="Filtro por código o nombre"),
     limit: int = Query(default=50, ge=1, le=200, description="Cantidad máxima de registros a devolver"),
     offset: int = Query(default=0, ge=0, description="Desplazamiento para paginado"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("informes", False)),
 ) -> dict:
     """Devuelve el listado de productos terminados con su costo agregado."""
 
@@ -38,11 +40,13 @@ def obtener_costos_pt(
     return {"items": items, "count": len(items)}
 
 
-@router.post("/costos-pt/comparar")
+@router.post(
+    "/costos-pt/comparar",
+    dependencies=[Depends(require_permission("informes", False))],
+)
 def comparar_costos_pt(
     payload: InformeCostosComparacionIn,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("informes", False)),
 ) -> dict:
     """Devuelve la comparación de costos para los productos solicitados."""
 

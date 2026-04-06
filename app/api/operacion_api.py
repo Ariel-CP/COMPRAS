@@ -82,7 +82,7 @@ def crear_operacion_endpoint(
         raise HTTPException(
             status_code=400,
             detail=f"Error al crear operación: {str(e)}"
-        )
+        ) from e
 
 
 @router.put("/operaciones/{operacion_id}")
@@ -112,7 +112,7 @@ def actualizar_operacion_endpoint(
         raise HTTPException(
             status_code=400,
             detail=f"Error al actualizar operación: {str(e)}"
-        )
+        ) from e
 
 
 @router.delete("/operaciones/{operacion_id}", status_code=204)
@@ -132,4 +132,4 @@ def eliminar_operacion_endpoint(
         raise HTTPException(
             status_code=400,
             detail=f"Error al eliminar operación: {str(e)}"
-        )
+        ) from e

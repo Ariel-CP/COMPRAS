@@ -192,6 +192,77 @@ setx DB_USER compras
 setx DB_PASS TU_PASSWORD_SEGURA
 ```
 
+### Instalador Automático para Raspberry Pi
+
+Se incluye un instalador para dejar listo entorno, base de datos y servicio `systemd` en un solo paso.
+
+Archivo: `scripts/install_raspberry.sh`
+
+Uso rápido (modo schema):
+
+```bash
+cd ~/COMPRAS
+chmod +x scripts/install_raspberry.sh
+DB_USER=acepeda DB_PASS=2211 DB_INIT_MODE=schema DB_RESET=true ./scripts/install_raspberry.sh
+```
+
+Uso con clon completo de datos (dump):
+
+```bash
+cd ~/COMPRAS
+chmod +x scripts/install_raspberry.sh
+DB_USER=acepeda DB_PASS=2211 DB_INIT_MODE=dump DB_RESET=true DUMP_FILE=~/COMPRAS/backups_local_dump.clean.sql ./scripts/install_raspberry.sh
+```
+
+Variables soportadas:
+
+- `APP_USER` (default: usuario actual)
+- `DB_NAME` (default: `compras_db`)
+- `DB_USER` (default: `acepeda`)
+- `DB_PASS` (default: `2211`)
+- `DB_HOST` (default: `127.0.0.1`)
+- `DB_PORT` (default: `3306`)
+- `DB_INIT_MODE` (`schema` o `dump`, default: `schema`)
+- `DB_RESET` (`true`/`false`, default: `false`)
+- `DUMP_FILE` (ruta del dump cuando `DB_INIT_MODE=dump`)
+- `CREATE_SERVICE` (`true`/`false`, default: `true`)
+- `WRITE_ENV` (`true`/`false`, default: `true`)
+- `INSTALL_PACKAGES` (`true`/`false`, default: `true`)
+
+Comandos de control del servicio:
+
+```bash
+sudo systemctl status compras-api
+sudo systemctl restart compras-api
+sudo journalctl -u compras-api -f
+```
+
+### Deploy rápido desde Windows a Raspberry
+
+Para actualizar código en una Raspberry y reiniciar el servicio sin entrar archivo por archivo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy_raspberry.ps1 -Host compras-dev
+```
+
+Opciones útiles:
+
+```powershell
+# Incluir carpeta database en el deploy
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy_raspberry.ps1 -Host compras-dev -IncludeDatabase
+
+# Ejecutar también el instalador remoto luego de copiar archivos
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy_raspberry.ps1 -Host compras-dev -RunInstaller
+```
+
+El script:
+
+- empaqueta `app/`, `requirements.txt`, `requirements-dev.txt` y `scripts/install_raspberry.sh`
+- copia el paquete a la Raspberry por `scp`
+- descomprime en el proyecto remoto
+- reinicia `compras-api`
+- valida que `/ui/login` responda `200`
+
 ## Ejecución
 
 ```powershell

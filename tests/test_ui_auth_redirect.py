@@ -4,10 +4,12 @@ from app.main import app
 
 client = TestClient(app)
 
+
 def test_root_ok():
-    r = client.get("/")
-    assert r.status_code == 200
-    assert r.json().get("name") == "compras"
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code in (302, 307)
+    assert r.headers.get("location", "").startswith("/ui/login")
+
 
 def test_ui_requires_login_redirect():
     r = client.get("/ui/mbom", follow_redirects=False)

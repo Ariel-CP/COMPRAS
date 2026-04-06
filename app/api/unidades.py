@@ -11,8 +11,12 @@ from .deps_auth import require_permission
 router = APIRouter()
 
 
-@router.get("/", response_model=list[UnidadMedidaOut])
-def api_listar_unidades(db: Session = Depends(get_db), current_user=Depends(require_permission("unidades", False))):
+@router.get(
+    "/",
+    response_model=list[UnidadMedidaOut],
+    dependencies=[Depends(require_permission("unidades", False))],
+)
+def api_listar_unidades(db: Session = Depends(get_db)):
     try:
         return listar_unidades(db)
     except SQLAlchemyError as ex:

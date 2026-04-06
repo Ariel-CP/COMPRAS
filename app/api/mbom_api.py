@@ -1,4 +1,4 @@
-import io
+﻿import io
 import os
 import tempfile
 import threading
@@ -52,18 +52,25 @@ from .deps_auth import require_permission
 router = APIRouter()
 
 
-@router.get("/mbom/cabecera", response_model=Optional[MBOMCabecera])
+@router.get(
+    "/mbom/cabecera",
+    response_model=Optional[MBOMCabecera],
+    dependencies=[Depends(require_permission("mbom", False))],
+)
 def api_get_cabecera(
     producto_padre_id: int = Query(..., description="ID de producto padre"),
     preferir: str = Query("ACTIVO", description="ACTIVO|BORRADOR|ARCHIVADO"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", False)),
 ):
     cab = mbom_service.get_cabecera_preferida(db, producto_padre_id, preferir)
     return cab
 
 
-@router.get("/mbom/padres-con-estructura", response_model=list[int])
+@router.get(
+    "/mbom/padres-con-estructura",
+    response_model=list[int],
+    dependencies=[Depends(require_permission("mbom", False))],
+)
 def api_padres_con_estructura(
     ids: list[str] = Query(
         default=[],
@@ -72,7 +79,6 @@ def api_padres_con_estructura(
         ),
     ),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", False)),
 ):
     # Parse robusto: soporta ids repetidos y/o CSV en cada item.
     parsed: list[int] = []
@@ -85,31 +91,34 @@ def api_padres_con_estructura(
                 continue
             try:
                 parsed.append(int(part))
-            except ValueError:
+            except ValueError as exc:
                 raise HTTPException(
                     status_code=400,
-                    detail="Parámetro 'ids' inválido. Use enteros separados por coma.",
-                )
+                    detail="Parámetro 'ids' inválido. Use enteros separados por coma."
+                ) from exc
 
     if not parsed:
         return []
 
-    # Límite defensivo para evitar URLs demasiado largas/cargas excesivas.
+    # LÃ­mite defensivo para evitar URLs demasiado largas/cargas excesivas.
     if len(parsed) > 2000:
         raise HTTPException(
             status_code=400,
-            detail="Demasiados IDs. Envíe como máximo 2000 por solicitud.",
+            detail="Demasiados IDs. EnvÃ­e como mÃ¡ximo 2000 por solicitud.",
         )
 
     return listar_producto_padre_ids_con_estructura_con_datos(db, parsed)
 
 
-@router.get("/mbom/{producto_padre_id}", response_model=MBOMEstructura)
+@router.get(
+    "/mbom/{producto_padre_id}",
+    response_model=MBOMEstructura,
+    dependencies=[Depends(require_permission("mbom", False))],
+)
 def api_get_estructura(
     producto_padre_id: int,
     estado: str = Query("ACTIVO", description="ACTIVO|BORRADOR (preferido)"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", False)),
 ):
     cab = mbom_service.get_cabecera_preferida(db, producto_padre_id, estado)
     if not cab:
@@ -122,16 +131,15 @@ def api_get_estructura(
     return {"cabecera": cab, "lineas": lineas}
 
 
-@router.get("/mbom/{producto_padre_id}/arbol-completo")
+@router.get("/mbom/{producto_padre_id}/arbol-completo", dependencies=[Depends(require_permission("mbom", False))])
 def api_get_estructura_completa(
     producto_padre_id: int,
     estado: str = Query("BORRADOR", description="ACTIVO|BORRADOR (preferido)"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", False)),
 ):
     """
     Devuelve estructura MBOM completa con todos los niveles anidados.
-    Cada línea incluye campo 'nivel' para indentación visual.
+    Cada lÃ­nea incluye campo 'nivel' para indentaciÃ³n visual.
     """
     lineas_arbol = mbom_service.obtener_estructura_completa_recursiva(
         db, producto_padre_id, estado
@@ -163,16 +171,19 @@ class GuardarRutaBasePayload(BaseModel):
     creado_por: Optional[str] = Field(default=None, max_length=64)
 
 
-@router.post("/mbom/{producto_padre_id}", response_model=MBOMEstructura)
+@router.post(
+    "/mbom/{producto_padre_id}",
+    response_model=MBOMEstructura,
+    dependencies=[Depends(require_permission("mbom", True))],
+)
 def api_post_estructura(
     producto_padre_id: int,
     payload: MBOMGuardarPayload,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", True)),
 ):
     cab = mbom_service.obtener_o_crear_borrador(db, producto_padre_id)
     mbom_id = int(cab["id"])  # type: ignore[index]
-    # Upsert de cada línea recibida
+    # Upsert de cada lÃ­nea recibida
     for ln in payload.lineas:
         mbom_service.upsert_linea(
             db=db,
@@ -192,17 +203,16 @@ def api_post_estructura(
     return {"cabecera": cab, "lineas": lineas}
 
 
-@router.put("/mbom/{mbom_id}", response_model=MBOMEstructura)
+@router.put("/mbom/{mbom_id}", response_model=MBOMEstructura, dependencies=[Depends(require_permission("mbom", True))])
 def api_put_estructura(
     mbom_id: int,
     payload: MBOMGuardarPayload,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", True)),
 ):
     cab = mbom_service.get_cabecera_por_id(db, mbom_id)
     if not cab:
         raise HTTPException(status_code=404, detail="MBOM no encontrada")
-    # Actualizar cabecera si viene información
+    # Actualizar cabecera si viene informaciÃ³n
     pc = payload.cabecera
     mbom_service.actualizar_cabecera(
         db,
@@ -213,7 +223,7 @@ def api_put_estructura(
         vigencia_hasta=pc.vigencia_hasta,
         notas=pc.notas,
     )
-    # Upsert de líneas
+    # Upsert de lÃ­neas
     for ln in payload.lineas:
         mbom_service.upsert_linea(
             db=db,
@@ -234,8 +244,8 @@ def api_put_estructura(
     return {"cabecera": cab_actual, "lineas": lineas}
 
 
-@router.delete("/mbom/detalle/{detalle_id}")
-def api_delete_detalle(detalle_id: int, db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
+@router.delete("/mbom/detalle/{detalle_id}", dependencies=[Depends(require_permission("mbom", True))])
+def api_delete_detalle(detalle_id: int, db: Session = Depends(get_db)):
     mbom_service.borrar_linea(db, detalle_id)
     return {"ok": True}
 
@@ -251,12 +261,12 @@ def api_get_costos(mbom_id: int, db: Session = Depends(get_db)):
 @router.post(
     "/mbom/{producto_padre_id}/importar-flexxus",
     response_model=MBOMEstructura,
+    dependencies=[Depends(require_permission("mbom", True))],
 )
 def api_importar_flexxus(
     producto_padre_id: int,
     archivo: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", True)),
 ):
     return importar_mbom_desde_flexxus(db, producto_padre_id, archivo)
 
@@ -268,7 +278,7 @@ def _run_import_flexxus_job(
     tmp_path: str,
 ) -> None:
     try:
-        set_running(job_id, 1, "Iniciando importación…")
+        set_running(job_id, 1, "Iniciando importaciÃ³nâ€¦")
         with open(tmp_path, "rb") as f:
             content = f.read()
 
@@ -303,11 +313,11 @@ def _run_import_flexxus_job(
 @router.post(
     "/mbom/{producto_padre_id}/importar-flexxus-job",
     response_model=dict,
+    dependencies=[Depends(require_permission("mbom", True))],
 )
 def api_importar_flexxus_job(
     producto_padre_id: int,
     archivo: UploadFile = File(...),
-    current_user=Depends(require_permission("mbom", True)),
 ):
     if not archivo.filename:
         raise HTTPException(status_code=400, detail="Archivo requerido")
@@ -322,7 +332,7 @@ def api_importar_flexxus_job(
         tmp.close()
 
     job = create_job(producto_padre_id, archivo.filename)
-    set_running(job.id, 0, "Archivo recibido…")
+    set_running(job.id, 0, "Archivo recibidoâ€¦")
     th = threading.Thread(
         target=_run_import_flexxus_job,
         args=(job.id, producto_padre_id, archivo.filename, tmp.name),
@@ -335,10 +345,10 @@ def api_importar_flexxus_job(
 @router.get(
     "/mbom/importar-flexxus-job/{job_id}",
     response_model=dict,
+    dependencies=[Depends(require_permission("mbom", True))],
 )
 def api_importar_flexxus_job_status(
     job_id: str,
-    current_user=Depends(require_permission("mbom", True)),
 ):
     job = get_job(job_id)
     if not job:
@@ -346,11 +356,13 @@ def api_importar_flexxus_job_status(
     return to_public_dict(job)
 
 
-@router.get("/mbom/{producto_padre_id}/template-flexxus-csv")
+@router.get(
+    "/mbom/{producto_padre_id}/template-flexxus-csv",
+    dependencies=[Depends(require_permission("mbom", False))],
+)
 def api_descargar_template_flexxus_csv(
     producto_padre_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", False)),
 ):
     content, filename = generar_template_mbom_flexxus_csv(db, producto_padre_id)
     return StreamingResponse(
@@ -360,11 +372,13 @@ def api_descargar_template_flexxus_csv(
     )
 
 
-@router.get("/mbom/{producto_padre_id}/template-flexxus-xlsx")
+@router.get(
+    "/mbom/{producto_padre_id}/template-flexxus-xlsx",
+    dependencies=[Depends(require_permission("mbom", False))],
+)
 def api_descargar_template_flexxus_xlsx(
     producto_padre_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", False)),
 ):
     content, filename = generar_template_mbom_flexxus_xlsx(db, producto_padre_id)
     return StreamingResponse(
@@ -376,7 +390,11 @@ def api_descargar_template_flexxus_xlsx(
     )
 
 
-@router.post("/mbom/demo/{codigo}", response_model=MBOMEstructura)
+@router.post(
+    "/mbom/demo/{codigo}",
+    response_model=MBOMEstructura,
+    dependencies=[Depends(require_permission("mbom", True))],
+)
 def api_crear_demo_mbom(
     codigo: str,
     componentes: Optional[str] = Query(
@@ -386,12 +404,11 @@ def api_crear_demo_mbom(
         ),
     ),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("mbom", True)),
 ):
     """Crear (si no existe) producto padre PT + MBOM BORRADOR demo."""
     codigo = codigo.strip().upper()
     if not codigo:
-        raise HTTPException(status_code=400, detail="Código requerido")
+        raise HTTPException(status_code=400, detail="CÃ³digo requerido")
 
     prod_existentes = listar_productos(
         db, q=codigo, tipo=None, activo=True, limit=5, offset=0
@@ -473,9 +490,13 @@ def api_crear_demo_mbom(
     return {"cabecera": cab, "lineas": lineas_final}
 
 
-@router.post("/mbom/{mbom_id}/activar", response_model=MBOMEstructura)
-def api_activar_revision(mbom_id: int, db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
-    """Activar la revisión indicada y devolver estructura completa."""
+@router.post(
+    "/mbom/{mbom_id}/activar",
+    response_model=MBOMEstructura,
+    dependencies=[Depends(require_permission("mbom", True))],
+)
+def api_activar_revision(mbom_id: int, db: Session = Depends(get_db)):
+    """Activar la revisiÃ³n indicada y devolver estructura completa."""
     cab = mbom_service.get_cabecera_por_id(db, mbom_id)
     if not cab:
         raise HTTPException(status_code=404, detail="MBOM no encontrada")
@@ -487,9 +508,13 @@ def api_activar_revision(mbom_id: int, db: Session = Depends(get_db), current_us
     return {"cabecera": cab_act, "lineas": lineas}
 
 
-@router.post("/mbom/{mbom_id}/clonar", response_model=MBOMEstructura)
-def api_clonar_revision(mbom_id: int, db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
-    """Clonar revisión existente a nueva BORRADOR (incrementa revision)."""
+@router.post(
+    "/mbom/{mbom_id}/clonar",
+    response_model=MBOMEstructura,
+    dependencies=[Depends(require_permission("mbom", True))],
+)
+def api_clonar_revision(mbom_id: int, db: Session = Depends(get_db)):
+    """Clonar revisiÃ³n existente a nueva BORRADOR (incrementa revision)."""
     cab = mbom_service.get_cabecera_por_id(db, mbom_id)
     if not cab:
         raise HTTPException(status_code=404, detail="MBOM no encontrada")
@@ -501,14 +526,14 @@ def api_clonar_revision(mbom_id: int, db: Session = Depends(get_db), current_use
     return {"cabecera": cab_nueva, "lineas": lineas}
 
 
-@router.delete("/mbom/limpiar-todo")
-def api_limpiar_mbom_test(db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
+@router.delete("/mbom/limpiar-todo", dependencies=[Depends(require_permission("mbom", True))])
+def api_limpiar_mbom_test(db: Session = Depends(get_db)):
     """
     PELIGRO: Elimina TODAS las estructuras MBOM de la base de datos.
-    Solo para desarrollo/testing. NO usar en producción.
+    Solo para desarrollo/testing. NO usar en producciÃ³n.
     """
     try:
-        # Eliminar todas las líneas primero (FK constraint)
+        # Eliminar todas las lÃ­neas primero (FK constraint)
         db.execute(text("DELETE FROM mbom_detalle"))
         # Eliminar todos los encabezados
         db.execute(text("DELETE FROM mbom_cabecera"))
@@ -534,12 +559,12 @@ def api_limpiar_mbom_test(db: Session = Depends(get_db), current_user=Depends(re
         ) from e
 
 
-@router.post("/productos/corregir-tipos-30")
-def api_corregir_tipos_productos_30(db: Session = Depends(get_db), current_user=Depends(require_permission("mbom", True))):
+@router.post("/productos/corregir-tipos-30", dependencies=[Depends(require_permission("mbom", True))])
+def api_corregir_tipos_productos_30(db: Session = Depends(get_db)):
     """
     Actualiza todos los productos que empiezan con '30' a tipo WIP.
-    Útil para corregir productos creados antes de implementar
-    detección automática de tipos.
+    Ãštil para corregir productos creados antes de implementar
+    detecciÃ³n automÃ¡tica de tipos.
     """
     try:
         result = db.execute(
@@ -580,7 +605,7 @@ def api_corregir_tipos_productos_30(db: Session = Depends(get_db), current_user=
 def api_listar_rutas_base_endpoint(
     q: Optional[str] = Query(
         None,
-        description="Filtrar por nombre o descripción",
+        description="Filtrar por nombre o descripciÃ³n",
     ),
     solo_activas: Optional[bool] = Query(
         None,
@@ -698,7 +723,7 @@ def api_agregar_operacion_mbom(
     notas: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Agrega una operación a la ruta del MBOM."""
+    """Agrega una operaciÃ³n a la ruta del MBOM."""
     if secuencia is None:
         secuencia = obtener_siguiente_secuencia(db, mbom_id)
 
@@ -715,7 +740,7 @@ def api_agregar_operacion_mbom(
         raise HTTPException(
             status_code=400,
             detail=f"Error al agregar operación: {str(e)}"
-        )
+        ) from e
 
 
 @router.put("/mbom/operaciones/{mbom_operacion_id}")
@@ -725,7 +750,7 @@ def api_actualizar_operacion_mbom(
     notas: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """Actualiza una operación en la ruta del MBOM."""
+    """Actualiza una operaciÃ³n en la ruta del MBOM."""
     try:
         actualizar_operacion_mbom(
             db=db,
@@ -733,13 +758,13 @@ def api_actualizar_operacion_mbom(
             secuencia=secuencia,
             notas=notas,
         )
-        return {"mensaje": "Operación actualizada"}
+        return {"mensaje": "OperaciÃ³n actualizada"}
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=400,
             detail=f"Error al actualizar: {str(e)}"
-        )
+        ) from e
 
 
 @router.delete("/mbom/operaciones/{mbom_operacion_id}", status_code=204)
@@ -747,16 +772,16 @@ def api_eliminar_operacion_mbom(
     mbom_operacion_id: int,
     db: Session = Depends(get_db),
 ):
-    """Elimina una operación de la ruta del MBOM."""
+    """Elimina una operaciÃ³n de la ruta del MBOM."""
     try:
         if not eliminar_operacion_mbom(db, mbom_operacion_id):
             raise HTTPException(
                 status_code=404,
-                detail="Operación no encontrada"
+                detail="OperaciÃ³n no encontrada"
             )
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=400,
             detail=f"Error al eliminar: {str(e)}"
-        )
+        ) from e

@@ -12,14 +12,17 @@ from app.services import user_service
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/", response_model=list[UserOut])
+@router.get(
+    "/",
+    response_model=list[UserOut],
+    dependencies=[Depends(require_permission("admin_usuarios", False))],
+)
 def list_users(
     q: Optional[str] = Query(default=None),
     activo: Optional[str] = Query(default=None, description="true|false"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_usuarios", False)),
 ):
     try:
         activo_val: Optional[bool]
@@ -45,11 +48,14 @@ def list_users(
         ) from ex
 
 
-@router.get("/{user_id}", response_model=UserOut)
+@router.get(
+    "/{user_id}",
+    response_model=UserOut,
+    dependencies=[Depends(require_permission("admin_usuarios", False))],
+)
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_usuarios", False)),
 ):
     try:
         user = user_service.get_user(db, user_id)
@@ -62,11 +68,15 @@ def get_user(
         ) from ex
 
 
-@router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("admin_usuarios", True))],
+)
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_usuarios", True)),
 ):
     try:
         existing = user_service.list_users(db, q=payload.email, limit=1)
@@ -86,12 +96,15 @@ def create_user(
         ) from ex
 
 
-@router.put("/{user_id}", response_model=UserOut)
+@router.put(
+    "/{user_id}",
+    response_model=UserOut,
+    dependencies=[Depends(require_permission("admin_usuarios", True))],
+)
 def update_user(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_usuarios", True)),
 ):
     try:
         user = user_service.get_user(db, user_id)
@@ -112,11 +125,14 @@ def update_user(
         ) from ex
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("admin_usuarios", True))],
+)
 def deactivate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_usuarios", True)),
 ):
     try:
         user = user_service.get_user(db, user_id)

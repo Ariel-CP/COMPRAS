@@ -1,4 +1,4 @@
-from typing import List
+﻿from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,10 +18,13 @@ from app.services import user_service
 router = APIRouter(prefix="/roles", tags=["roles"])
 
 
-@router.get("/", response_model=List[RoleOut])
+@router.get(
+    "/",
+    response_model=List[RoleOut],
+    dependencies=[Depends(require_permission("admin_roles", False))],
+)
 def list_roles(
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_roles", False)),
 ):
     try:
         return user_service.list_roles(db)
@@ -31,11 +34,16 @@ def list_roles(
         ) from ex
 
 
-@router.post("/", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/",
+    response_model=RoleOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("admin_roles", True))],
+)
 def create_role(
     payload: RoleCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_roles", True)),
 ):
     try:
         return user_service.create_role(db, payload.nombre, payload.descripcion)
@@ -44,13 +52,15 @@ def create_role(
             status_code=400, detail=str(getattr(ex, "orig", ex))
         ) from ex
 
-
-@router.put("/{rol_id}", response_model=RoleOut)
+@router.put(
+    "/{rol_id}",
+    response_model=RoleOut,
+    dependencies=[Depends(require_permission("admin_roles", True))],
+)
 def update_role(
     rol_id: int,
     payload: RoleUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_roles", True)),
 ):
     try:
         role = user_service.get_role(db, rol_id)
@@ -66,11 +76,14 @@ def update_role(
         ) from ex
 
 
-@router.delete("/{rol_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{rol_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("admin_roles", True))],
+)
 def delete_role(
     rol_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_roles", True)),
 ):
     try:
         role = user_service.get_role(db, rol_id)
@@ -85,11 +98,14 @@ def delete_role(
         ) from ex
 
 
-@router.get("/{rol_id}/perms", response_model=RolePerms)
+@router.get(
+    "/{rol_id}/perms",
+    response_model=RolePerms,
+    dependencies=[Depends(require_permission("admin_roles", False))],
+)
 def get_role_perms(
     rol_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_roles", False)),
 ):
     try:
         role = user_service.get_role(db, rol_id)
@@ -103,12 +119,15 @@ def get_role_perms(
         ) from ex
 
 
-@router.put("/{rol_id}/perms", response_model=RolePerms)
+@router.put(
+    "/{rol_id}/perms",
+    response_model=RolePerms,
+    dependencies=[Depends(require_permission("admin_roles", True))],
+)
 def set_role_perms(
     rol_id: int,
     payload: List[PermissionIn],
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("admin_roles", True)),
 ):
     try:
         role = user_service.get_role(db, rol_id)

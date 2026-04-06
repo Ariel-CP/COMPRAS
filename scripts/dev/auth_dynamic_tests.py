@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pruebas dinámicas básicas para el sistema de login.
+r"""Pruebas dinámicas básicas para el sistema de login.
 - POST /auth/login
 - Verifica Set-Cookie flags
 - Lista /auth/sessions, revoca y comprueba acceso
@@ -8,7 +8,7 @@
 Ejecutar: .venv\Scripts\python.exe scripts\auth_dynamic_tests.py
 """
 
-import requests
+import requests  # type: ignore[import-untyped]
 import time
 import sys
 

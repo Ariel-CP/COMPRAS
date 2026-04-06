@@ -1,7 +1,7 @@
-"""
-Servicio para gestión de la ruta de operaciones de un MBOM (mbom_operacion).
-"""
-from typing import Optional
+"""Servicio para gestion de la ruta de operaciones de un MBOM."""
+
+from typing import Any, Optional
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -61,21 +61,28 @@ def agregar_operacion_mbom(
         (:mbom_id, :operacion_id, :secuencia, :notas)
     """)
 
-    result = db.execute(query, {
+    db.execute(query, {
         "mbom_id": mbom_id,
         "operacion_id": operacion_id,
         "secuencia": secuencia,
         "notas": notas,
     })
+
+    inserted_id = db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar()
     db.commit()
 
-    # Retornar la operación completa
+    # Retornar la operacion completa
+    inserted_id_int = int(inserted_id or 0)
     ops = listar_operaciones_mbom(db, mbom_id)
     for op in ops:
-        if op["id"] == result.lastrowid:
+        if int(op["id"]) == inserted_id_int:
             return op
 
-    return {"id": result.lastrowid, "mbom_id": mbom_id, "secuencia": secuencia}
+    return {
+        "id": inserted_id_int,
+        "mbom_id": mbom_id,
+        "secuencia": secuencia,
+    }
 
 
 def actualizar_operacion_mbom(
@@ -86,7 +93,7 @@ def actualizar_operacion_mbom(
 ) -> bool:
     """Actualiza una operación en la ruta del MBOM."""
     updates = []
-    params = {"id": mbom_operacion_id}
+    params: dict[str, Any] = {"id": mbom_operacion_id}
 
     if secuencia is not None:
         updates.append("secuencia = :secuencia")
@@ -114,9 +121,10 @@ def actualizar_operacion_mbom(
 def eliminar_operacion_mbom(db: Session, mbom_operacion_id: int) -> bool:
     """Elimina una operación de la ruta del MBOM."""
     query = text("DELETE FROM mbom_operacion WHERE id = :id")
-    result = db.execute(query, {"id": mbom_operacion_id})
+    db.execute(query, {"id": mbom_operacion_id})
+    affected = db.execute(text("SELECT ROW_COUNT() AS affected")).scalar()
     db.commit()
-    return result.rowcount > 0
+    return int(affected or 0) > 0
 
 
 def obtener_siguiente_secuencia(db: Session, mbom_id: int) -> int:

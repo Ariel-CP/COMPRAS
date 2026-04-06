@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Tuple
 
 import jwt
 import uuid
-from passlib.context import CryptContext
+from passlib.context import CryptContext  # type: ignore[import-untyped]
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -91,7 +91,10 @@ def create_user(
                 ),
                 {"uid": user_id, "rid": rol_id},
             )
-    return get_user_by_id(db, int(user_id))  # type: ignore[arg-type]
+    created_user = get_user_by_id(db, int(user_id))
+    if created_user is None:
+        raise RuntimeError("No se pudo recuperar el usuario creado")
+    return created_user
 
 
 def ensure_role(db: Session, nombre: str) -> int:

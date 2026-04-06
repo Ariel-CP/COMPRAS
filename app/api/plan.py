@@ -15,34 +15,48 @@ from ..services.plan_service import (
 router = APIRouter()
 
 
-@router.get("/{anio}/{mes}", response_model=List[PlanItemOut])
-def listar_plan(anio: int, mes: int, db: Session = Depends(get_db), current_user=Depends(require_permission("plan", False))):
+@router.get(
+    "/{anio}/{mes}",
+    response_model=List[PlanItemOut],
+    dependencies=[Depends(require_permission("plan", False))],
+)
+def listar_plan(anio: int, mes: int, db: Session = Depends(get_db)):
     if not (1 <= mes <= 12):
         raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
     return get_plan_periodo(db, anio, mes)
 
 
-@router.post("/{anio}/{mes}", response_model=PlanUpsertResult)
+@router.post(
+    "/{anio}/{mes}",
+    response_model=PlanUpsertResult,
+    dependencies=[Depends(require_permission("plan", True))],
+)
 def upsert_plan(
     anio: int,
     mes: int,
     payload: PlanUpsertIn,
     sobrescribir: bool = Query(False, description="Si true, borra y re-inserta el periodo"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("plan", True)),
 ):
     if not (1 <= mes <= 12):
         raise HTTPException(status_code=400, detail="mes debe estar entre 1 y 12")
     return upsert_plan_periodo(db, anio, mes, payload.items, sobrescribir)
 
 
-@router.put("/{item_id}", response_model=PlanItemOut)
-def actualizar_item(item_id: int, body: PlanItemIn, db: Session = Depends(get_db), current_user=Depends(require_permission("plan", True))):
+@router.put(
+    "/{item_id}",
+    response_model=PlanItemOut,
+    dependencies=[Depends(require_permission("plan", True))],
+)
+def actualizar_item(item_id: int, body: PlanItemIn, db: Session = Depends(get_db)):
     return update_plan_item(db, item_id, body)
 
 
-@router.delete("/{anio}/{mes}")
-def borrar_periodo(anio: int, mes: int, confirmar: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(require_permission("plan", True))):
+@router.delete(
+    "/{anio}/{mes}",
+    dependencies=[Depends(require_permission("plan", True))],
+)
+def borrar_periodo(anio: int, mes: int, confirmar: bool = Query(False), db: Session = Depends(get_db)):
     if not confirmar:
         raise HTTPException(status_code=400, detail="Confirmar=true requerido para borrar el periodo")
     delete_plan_periodo(db, anio, mes)
