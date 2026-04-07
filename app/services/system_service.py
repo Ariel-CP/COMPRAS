@@ -11,6 +11,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from app.core.version import APP_VERSION
+
 logger = logging.getLogger(__name__)
 
 # Ruta al script de actualización (relativa a la raíz del repo)
@@ -80,6 +82,7 @@ def get_update_status() -> dict:
         "available": available,
         "local_commit": local,
         "remote_commit": remote,
+        "current_version": APP_VERSION,
         "git_available": True,
         "script_available": script_available,
     }

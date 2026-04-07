@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+
+from .core.version import APP_VERSION
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import (
     get_swagger_ui_html,
@@ -46,6 +48,8 @@ def _patch_template_response_compat() -> None:
         if len(args) >= 2 and isinstance(args[0], str) and isinstance(args[1], dict):
             name = args[0]
             context = args[1]
+            # Inyectar app_version en todos los contextos de template
+            context.setdefault("app_version", APP_VERSION)
             request = kwargs.pop("request", None) or context.get("request")
             if request is not None:
                 return original(
@@ -77,7 +81,7 @@ def create_app() -> FastAPI:
     # Usar un nombre diferente evita el warning de redefinición
     application = FastAPI(
         title="Compras Backend",
-        version="0.1.0",
+        version=APP_VERSION,
         lifespan=app_lifespan,
         docs_url=None,  # deshabilitamos para inyectar CSS personalizado
         redoc_url="/redoc",

@@ -59,7 +59,7 @@
   {% set _user = current_user or request.state.current_user %}
   {% if _user and _user.permissions is defined and _user.permissions.get('admin_sistema', (False, False))[0] %}
   <div id="update-banner" class="update-banner hidden" role="alert">
-    <span id="update-banner-msg">&#9650; Hay una actualización disponible</span>
+    <span id="update-banner-msg">&#9650; Hay una actualización disponible (versión instalada: v{{ app_version }} · commit local: <span id="update-local-sha"></span>)</span>
     <button id="btn-update-system" class="btn-update" type="button">Actualizar ahora</button>
     <button id="btn-update-dismiss" class="btn-ghost btn-update-dismiss" type="button" aria-label="Cerrar">✕</button>
   </div>
@@ -87,6 +87,8 @@
         if (!r.ok) return;
         const data = await r.json();
         if (data.available && data.script_available) {
+          const shaEl = document.getElementById('update-local-sha');
+          if (shaEl) shaEl.textContent = data.local_commit || '';
           banner.classList.remove('hidden');
         }
       } catch (_) { /* sin conexión o no admin */ }
@@ -139,7 +141,7 @@
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <small>v0.1.0</small>
+    <small>v{{ app_version }}</small>
   </footer>
   <script src="/static/js/main.js"></script>
   {% block scripts %}{% endblock %}
