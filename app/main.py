@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import (
@@ -62,11 +64,21 @@ def _patch_template_response_compat() -> None:
 _patch_template_response_compat()
 
 
+@asynccontextmanager
+async def app_lifespan(_application: FastAPI):
+    start_backup_scheduler()
+    try:
+        yield
+    finally:
+        stop_backup_scheduler()
+
+
 def create_app() -> FastAPI:
     # Usar un nombre diferente evita el warning de redefinición
     application = FastAPI(
         title="Compras Backend",
         version="0.1.0",
+        lifespan=app_lifespan,
         docs_url=None,  # deshabilitamos para inyectar CSS personalizado
         redoc_url="/redoc",
         swagger_ui_parameters={
@@ -112,14 +124,6 @@ def create_app() -> FastAPI:
         StaticFiles(directory="app/static"),
         name="static",
     )
-
-    @application.on_event("startup")
-    def _startup_backup_scheduler() -> None:
-        start_backup_scheduler()
-
-    @application.on_event("shutdown")
-    def _shutdown_backup_scheduler() -> None:
-        stop_backup_scheduler()
 
     @application.middleware("http")
     async def ui_login_middleware(request, call_next):
