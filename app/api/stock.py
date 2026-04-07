@@ -69,7 +69,12 @@ def listar_stock(
 
 
 @router.get("/{anio}/{mes}/resumen")
-def resumen_stock(anio: int, mes: int, db: Session = Depends(get_db)):
+def resumen_stock(
+    anio: int,
+    mes: int,
+    db: Session = Depends(get_db),
+    _current_user: dict = Depends(require_permission("stock", False)),
+):
     if not (1 <= mes <= 12):
         raise HTTPException(
             status_code=400,

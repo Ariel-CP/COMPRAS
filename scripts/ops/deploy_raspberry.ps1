@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Host,
+    [Alias("Host")]
+    [string]$TargetHost,
 
     [string]$User = "acepeda",
 
@@ -25,7 +26,7 @@ Require-Command ssh
 Require-Command scp
 Require-Command tar
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $stageDir = Join-Path $repoRoot ".deploy"
 $archivePath = Join-Path $stageDir "compras-deploy.tar.gz"
 
@@ -39,7 +40,7 @@ $items = @(
     "app",
     "requirements.txt",
     "requirements-dev.txt",
-    "scripts/install_raspberry.sh"
+    "scripts/ops/install_raspberry.sh"
 )
 
 if ($IncludeDatabase) {
@@ -49,22 +50,54 @@ if ($IncludeDatabase) {
 Push-Location $repoRoot
 try {
     tar -czf $archivePath @items
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fallo al generar el paquete de deploy con tar."
+    }
 }
 finally {
     Pop-Location
 }
 
-$remote = "$User@$Host"
+$remote = "$User@$TargetHost"
 
 Write-Host "Subiendo paquete a $remote ..."
 scp $archivePath "$remote`:$RemotePath/compras-deploy.tar.gz"
+if ($LASTEXITCODE -ne 0) {
+    throw "Fallo la copia del paquete por SCP."
+}
 
 Write-Host "Desplegando archivos y reiniciando servicio ..."
-ssh $remote "set -e; mkdir -p $RemotePath; tar -xzf $RemotePath/compras-deploy.tar.gz -C $RemotePath; chmod +x $RemotePath/scripts/install_raspberry.sh; sudo systemctl restart compras-api; sudo systemctl is-active compras-api; curl -s -o /dev/null -w '%{http_code}`n' http://127.0.0.1:8000/ui/login"
+$remoteDeployCmd = @'
+set -e
+mkdir -p __REMOTE_PATH__
+tar -xzf __REMOTE_PATH__/compras-deploy.tar.gz -C __REMOTE_PATH__
+chmod +x __REMOTE_PATH__/scripts/ops/install_raspberry.sh
+sudo systemctl restart compras-api
+sudo systemctl is-active compras-api
+code='000'
+for i in $(seq 1 20); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ui/login || true)
+  if [ "$code" = "200" ]; then
+    break
+  fi
+  sleep 1
+done
+echo "$code"
+[ "$code" = "200" ]
+'@
+$remoteDeployCmd = $remoteDeployCmd.Replace("__REMOTE_PATH__", $RemotePath)
+$remoteDeployCmd = $remoteDeployCmd.Replace("`r", "")
+ssh $remote $remoteDeployCmd
+if ($LASTEXITCODE -ne 0) {
+    throw "Fallo el despliegue remoto por SSH."
+}
 
 if ($RunInstaller) {
     Write-Host "Ejecutando instalador remoto ..."
-    ssh $remote "cd $RemotePath; chmod +x scripts/install_raspberry.sh; ./scripts/install_raspberry.sh"
+    ssh $remote "cd $RemotePath; chmod +x scripts/ops/install_raspberry.sh; ./scripts/ops/install_raspberry.sh"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fallo la ejecución remota del instalador."
+    }
 }
 
 Write-Host "Deploy finalizado."

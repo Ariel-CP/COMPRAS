@@ -1,0 +1,12 @@
+# Asegurar saltos de línea correctos por tipo de archivo
+* text=auto
+
+# Scripts bash → siempre LF (Linux)
+*.sh text eol=lf
+
+# PowerShell → CRLF en checkout (Windows)
+*.ps1 text eol=crlf
+
+# Binarios → no tocar saltos de línea
+*.xlsx binary
+*.sql text eol=lf
