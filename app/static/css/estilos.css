@@ -22,6 +22,9 @@ header a.inicio-verde,
 /* ── Banner de actualización ── */
 .update-banner{display:flex;align-items:center;gap:10px;background:#fff3cd;color:#856404;border-bottom:1px solid #ffc107;padding:7px 16px;font-size:14px}
 .update-banner.hidden{display:none}
+.update-banner.update-current{background:#eaf7ee;color:#1e6b2f;border-bottom-color:#76c58b}
+.update-banner.update-stale{background:#fff3cd;color:#856404;border-bottom-color:#ffc107}
+.update-banner.update-unknown{background:#eef2f7;color:#2f3b4a;border-bottom-color:#b9c4d3}
 .btn-update{background:#856404;color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600}
 .btn-update:hover{background:#6d5204}
 .btn-update-dismiss{background:none;border:none;cursor:pointer;color:#856404;font-size:16px;line-height:1;padding:0 4px;margin-left:auto}

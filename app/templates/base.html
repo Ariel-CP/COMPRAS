@@ -58,8 +58,8 @@
 
   {% set _user = current_user or request.state.current_user %}
   {% if _user and _user.permissions is defined and _user.permissions.get('admin_sistema', (False, False))[0] %}
-  <div id="update-banner" class="update-banner hidden" role="alert">
-    <span id="update-banner-msg">&#9650; Hay una actualización disponible (versión instalada: v{{ app_version }} · commit local: <span id="update-local-sha"></span>)</span>
+  <div id="update-banner" class="update-banner update-unknown" role="status" aria-live="polite">
+    <span id="update-banner-msg">Sistema: verificando estado (v{{ app_version }})...</span>
     <button id="btn-update-system" class="btn-update" type="button">Actualizar ahora</button>
     <button id="btn-update-dismiss" class="btn-ghost btn-update-dismiss" type="button" aria-label="Cerrar">✕</button>
   </div>
@@ -84,18 +84,41 @@
     async function checkStatus() {
       try {
         const r = await fetch(STATUS_URL);
-        if (!r.ok) return;
-        const data = await r.json();
-        if (data.available && data.script_available) {
-          const shaEl = document.getElementById('update-local-sha');
-          if (shaEl) shaEl.textContent = data.local_commit || '';
-          banner.classList.remove('hidden');
+        if (!r.ok) {
+          banner.classList.remove('update-current', 'update-stale');
+          banner.classList.add('update-unknown');
+          document.getElementById('update-banner-msg').textContent =
+            'Sistema: no se pudo verificar actualizaciones (HTTP ' + r.status + ').';
+          return;
         }
-      } catch (_) { /* sin conexión o no admin */ }
+        const data = await r.json();
+        const local = data.local_commit || 'N/A';
+        const remote = data.remote_commit || 'N/A';
+        const version = data.current_version || '{{ app_version }}';
+        const msgEl = document.getElementById('update-banner-msg');
+
+        banner.classList.remove('update-current', 'update-stale', 'update-unknown');
+        if (!data.git_available) {
+          banner.classList.add('update-unknown');
+          msgEl.textContent = 'Sistema v' + version + ': git no disponible para verificar actualizaciones.';
+        } else if (data.available) {
+          banner.classList.add('update-stale');
+          msgEl.textContent =
+            'Sistema desactualizado (v' + version + '). Commit local ' + local + ' -> remoto ' + remote + '.';
+        } else {
+          banner.classList.add('update-current');
+          msgEl.textContent =
+            'Sistema actualizado (v' + version + '). Commit ' + local + '.';
+        }
+      } catch (_) {
+        banner.classList.remove('update-current', 'update-stale');
+        banner.classList.add('update-unknown');
+        document.getElementById('update-banner-msg').textContent =
+          'Sistema: no se pudo verificar actualizaciones.';
+      }
     }
 
     async function doUpdate() {
-      banner.classList.add('hidden');
       overlay.classList.remove('hidden');
       overlayMsg.textContent = 'Enviando orden de actualización...';
       try {
