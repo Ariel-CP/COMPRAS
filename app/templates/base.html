@@ -55,6 +55,78 @@
       {% endif %}
     </div>
   </header>
+
+  {% set _user = current_user or request.state.current_user %}
+  {% if _user and _user.permissions is defined and _user.permissions.get('admin_sistema', (False, False))[0] %}
+  <div id="update-banner" class="update-banner hidden" role="alert">
+    <span id="update-banner-msg">&#9650; Hay una actualización disponible</span>
+    <button id="btn-update-system" class="btn-update" type="button">Actualizar ahora</button>
+    <button id="btn-update-dismiss" class="btn-ghost btn-update-dismiss" type="button" aria-label="Cerrar">✕</button>
+  </div>
+  <div id="update-overlay" class="update-overlay hidden">
+    <div class="update-overlay-box">
+      <span class="update-spinner"></span>
+      <p id="update-overlay-msg">Actualizando sistema, aguardá...</p>
+    </div>
+  </div>
+  <script>
+  (function(){
+    const POLL_INTERVAL  = 60000;   // chequea cada 60 s
+    const HEALTH_URL     = '/api/health/db';
+    const STATUS_URL     = '/api/system/update-status';
+    const UPDATE_URL     = '/api/system/update';
+    const banner         = document.getElementById('update-banner');
+    const btnUpdate      = document.getElementById('btn-update-system');
+    const btnDismiss     = document.getElementById('btn-update-dismiss');
+    const overlay        = document.getElementById('update-overlay');
+    const overlayMsg     = document.getElementById('update-overlay-msg');
+
+    async function checkStatus() {
+      try {
+        const r = await fetch(STATUS_URL);
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.available && data.script_available) {
+          banner.classList.remove('hidden');
+        }
+      } catch (_) { /* sin conexión o no admin */ }
+    }
+
+    async function doUpdate() {
+      banner.classList.add('hidden');
+      overlay.classList.remove('hidden');
+      overlayMsg.textContent = 'Enviando orden de actualización...';
+      try {
+        await fetch(UPDATE_URL, { method: 'POST' });
+      } catch (_) { /* el servicio ya puede estar reiniciando */ }
+
+      overlayMsg.textContent = 'Sistema reiniciando, aguardá…';
+      // Esperar hasta 90 s a que vuelva a responder
+      const start = Date.now();
+      while (Date.now() - start < 90000) {
+        await new Promise(res => setTimeout(res, 2500));
+        try {
+          const h = await fetch(HEALTH_URL);
+          if (h.ok) {
+            overlayMsg.textContent = '¡Sistema actualizado! Recargando...';
+            await new Promise(res => setTimeout(res, 1200));
+            location.reload();
+            return;
+          }
+        } catch (_) { /* todavía reiniciando */ }
+      }
+      overlayMsg.textContent = 'El servicio tardó demasiado en reiniciar. Recargá la página manualmente.';
+    }
+
+    btnUpdate.addEventListener('click', doUpdate);
+    btnDismiss.addEventListener('click', () => banner.classList.add('hidden'));
+
+    // Primer chequeo al cargar, luego periódico
+    checkStatus();
+    setInterval(checkStatus, POLL_INTERVAL);
+  })();
+  </script>
+  {% endif %}
     <!-- Modal container para login -->
     <div id="login-modal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" id="login-modal-backdrop"></div>

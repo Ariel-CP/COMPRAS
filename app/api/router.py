@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from .auth import router as auth_router
 from .backups import router as backups_router
 from .health import router as health_router
+from .system_api import router as system_router
 from .informes import router as informes_router
 from .mbom_api import router as mbom_router
 from .operacion_api import router as operacion_router
@@ -36,3 +37,4 @@ api_router.include_router(rubros_router)
 api_router.include_router(auth_router)
 api_router.include_router(users_router)
 api_router.include_router(roles_router)
+api_router.include_router(system_router)

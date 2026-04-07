@@ -9,6 +9,7 @@ from app.services import auth_service
 PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
     ("admin_backups", "Administracion de backups"),
     ("admin_roles", "Administracion de roles"),
+    ("admin_sistema", "Actualizacion del sistema"),
     ("admin_usuarios", "Administracion de usuarios"),
     ("informes", "Informes"),
     ("mbom", "MBOM"),
