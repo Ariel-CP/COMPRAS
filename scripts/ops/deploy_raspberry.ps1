@@ -40,7 +40,9 @@ $items = @(
     "app",
     "requirements.txt",
     "requirements-dev.txt",
-    "scripts/ops/install_raspberry.sh"
+    "VERSION",
+    "scripts/ops/install_raspberry.sh",
+    "scripts/ops/update.sh"
 )
 
 if ($IncludeDatabase) {
