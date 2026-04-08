@@ -263,6 +263,90 @@ El script:
 - reinicia `compras-api`
 - valida que `/ui/login` responda `200`
 
+## Actualización remota del sistema
+
+El sistema incluye un mecanismo de actualización remota pensado para instalaciones en Raspberry Pi, con verificación de cambios pendientes desde la UI y ejecución de actualización desde el servidor.
+
+### Cómo funciona
+
+Cuando un usuario con permiso `admin_sistema` accede a la aplicación, el sistema consulta el estado del repositorio remoto y determina si existen cambios pendientes para instalar.
+
+Comportamiento actual:
+
+- Si el sistema está actualizado, se muestra solo el mensaje de estado.
+- Si hay una actualización pendiente, se muestra el botón `Actualizar ahora`.
+- Si hay cambios pendientes, también se muestra un textbox de solo lectura con un resumen de mejoras detectadas.
+- Si no se puede consultar Git o el remoto, el sistema informa que no pudo verificar actualizaciones.
+
+### Origen de la actualización
+
+La actualización remota se realiza desde el repositorio Git configurado en la instalación.
+
+Por defecto, el script de actualización usa:
+
+- Repositorio: `https://github.com/Ariel-CP/COMPRAS.git`
+- Rama: `master`
+
+Archivo relacionado:
+
+- `scripts/ops/update.sh`
+
+### Flujo de actualización en Raspberry
+
+Cuando se ejecuta la actualización:
+
+1. Se consulta el remoto `origin` para la rama configurada.
+2. Si el proyecto ya es un repositorio Git, se ejecuta `fetch` y luego `reset` contra `origin/master`.
+3. Si no existe el repositorio Git en destino, se clona el proyecto desde GitHub.
+4. Se reinstalan dependencias Python desde `requirements.txt`.
+5. Se reinicia el servicio `compras-api`.
+6. Se valida que la aplicación vuelva a responder por HTTP.
+
+### Endpoint de estado de actualización
+
+El backend expone dos endpoints para este flujo:
+
+- `GET /api/system/update-status`
+- `POST /api/system/update`
+
+Archivos relacionados:
+
+- `app/api/system_api.py`
+- `app/services/system_service.py`
+
+El endpoint de estado informa:
+
+- Si hay actualización disponible
+- Commit local
+- Commit remoto
+- Versión actual de la aplicación
+- Si Git está disponible
+- Si el script de actualización está disponible
+- Lista resumida de mejoras pendientes
+- Cantidad total de mejoras detectadas
+
+### Resumen visual de mejoras pendientes
+
+La UI muestra un resumen más legible de los cambios pendientes cuando detecta actualizaciones remotas.
+
+Características actuales:
+
+- Toma los títulos de commits pendientes entre la versión local y la remota.
+- Intenta humanizar prefijos comunes como `fix`, `feat`, `add`, `update`, `refactor` y `docs`.
+- Elimina duplicados simples.
+- Muestra hasta 5 mejoras visibles en un textbox `readonly`.
+- Si hay más cambios, informa la cantidad total pendiente.
+
+Archivo relacionado:
+
+- `app/templates/base.html`
+
+### Permisos requeridos
+
+Para visualizar el banner de actualización y ejecutar la acción desde la interfaz, el usuario debe tener habilitado el permiso:
+
+- `admin_sistema`
+
 ## Ejecución
 
 ```powershell
@@ -325,6 +409,10 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Resaltado automático en amarillo de materiales sin costo cargado
 
 ## Avances recientes
+
+### Abril 2026
+
+- **Actualización remota desde Git**: se agregó verificación visual de cambios pendientes, botón de actualización desde la UI para usuarios con permiso `admin_sistema` y resumen de mejoras detectadas antes de aplicar la actualización.
 
 ### Diciembre 2025
 
