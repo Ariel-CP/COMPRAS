@@ -19,6 +19,46 @@ logger = logging.getLogger(__name__)
 _UPDATE_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "ops" / "update.sh"
 
 
+def _normalize_improvement_line(line: str) -> str:
+    cleaned = " ".join((line or "").strip().split())
+    if not cleaned:
+        return ""
+    return cleaned[0].upper() + cleaned[1:] if len(cleaned) > 1 else cleaned.upper()
+
+
+def _humanize_improvement_line(line: str) -> str:
+    normalized = _normalize_improvement_line(line)
+    lower = normalized.casefold()
+
+    replacements: tuple[tuple[str, str], ...] = (
+        ("fix ", "Se corrigió "),
+        ("fix:", "Se corrigió: "),
+        ("fixed ", "Se corrigió "),
+        ("add ", "Se agregó "),
+        ("add:", "Se agregó: "),
+        ("added ", "Se agregó "),
+        ("feat ", "Se incorporó "),
+        ("feat:", "Se incorporó: "),
+        ("feature ", "Se incorporó "),
+        ("feature:", "Se incorporó: "),
+        ("improve ", "Se mejoró "),
+        ("improve:", "Se mejoró: "),
+        ("improved ", "Se mejoró "),
+        ("update ", "Se actualizó "),
+        ("update:", "Se actualizó: "),
+        ("updated ", "Se actualizó "),
+        ("refactor ", "Se refactorizó "),
+        ("refactor:", "Se refactorizó: "),
+        ("docs ", "Se documentó "),
+        ("docs:", "Se documentó: "),
+    )
+    for prefix, replacement in replacements:
+        if lower.startswith(prefix):
+            return replacement + normalized[len(prefix):].strip()
+
+    return normalized
+
+
 def _run(cmd: list[str], timeout: int = 10) -> str:
     """Ejecuta un comando y retorna stdout; lanza RuntimeError si falla."""
     result = subprocess.run(
@@ -26,6 +66,7 @@ def _run(cmd: list[str], timeout: int = 10) -> str:
         capture_output=True,
         text=True,
         timeout=timeout,
+        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or f"Comando falló: {cmd}")
@@ -56,6 +97,8 @@ def get_update_status() -> dict:
             "remote_commit": "N/A",
             "git_available": False,
             "script_available": script_available,
+            "improvements": [],
+            "improvements_total": 0,
         }
 
     try:
@@ -72,11 +115,45 @@ def get_update_status() -> dict:
             "remote_commit": remote,
             "git_available": True,
             "script_available": script_available,
+            "improvements": [],
+            "improvements_total": 0,
         }
 
     available = bool(remote_full) and not remote_full.startswith(
         _run(["git", "rev-parse", "HEAD"])
     )
+
+    improvements: list[str] = []
+    if available:
+        try:
+            # Obtiene los objetos remotos y usa FETCH_HEAD como referencia temporal.
+            _run(["git", "fetch", "--quiet", "origin", "HEAD"], timeout=20)
+            raw_commits = _run(
+                [
+                    "git",
+                    "log",
+                    "--no-merges",
+                    "--pretty=format:%s",
+                    "HEAD..FETCH_HEAD",
+                    "-n",
+                    "8",
+                ],
+                timeout=10,
+            )
+            if raw_commits:
+                seen: set[str] = set()
+                improvements = []
+                for line in raw_commits.splitlines():
+                    cleaned = _normalize_improvement_line(line)
+                    if not cleaned:
+                        continue
+                    normalized_key = cleaned.casefold()
+                    if normalized_key in seen:
+                        continue
+                    seen.add(normalized_key)
+                    improvements.append(_humanize_improvement_line(cleaned))
+        except (RuntimeError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            logger.warning("No se pudo construir resumen de mejoras: %s", exc)
 
     return {
         "available": available,
@@ -85,6 +162,8 @@ def get_update_status() -> dict:
         "current_version": APP_VERSION,
         "git_available": True,
         "script_available": script_available,
+        "improvements": improvements,
+        "improvements_total": len(improvements),
     }
 
 

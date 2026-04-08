@@ -18,7 +18,7 @@ def update_status(
     """Retorna si hay una actualización disponible comparando commit local vs remoto."""
     try:
         return get_update_status()
-    except Exception as exc:
+    except (RuntimeError, OSError, ValueError) as exc:
         logger.warning("Error al consultar estado de actualización: %s", exc)
         return {
             "available": False,
@@ -26,6 +26,8 @@ def update_status(
             "remote_commit": "N/A",
             "git_available": False,
             "script_available": False,
+            "improvements": [],
+            "improvements_total": 0,
         }
 
 

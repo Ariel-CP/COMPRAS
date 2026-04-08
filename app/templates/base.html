@@ -63,6 +63,10 @@
     <button id="btn-update-system" class="btn-update" type="button">Actualizar ahora</button>
     <button id="btn-update-dismiss" class="btn-ghost btn-update-dismiss" type="button" aria-label="Cerrar">✕</button>
   </div>
+  <div id="update-improvements-wrap" class="update-improvements-wrap hidden">
+    <label id="update-improvements-label" for="update-improvements">Mejoras incluidas en la actualización pendiente</label>
+    <textarea id="update-improvements" class="update-improvements" readonly></textarea>
+  </div>
   <div id="update-overlay" class="update-overlay hidden">
     <div class="update-overlay-box">
       <span class="update-spinner"></span>
@@ -78,6 +82,9 @@
     const banner         = document.getElementById('update-banner');
     const btnUpdate      = document.getElementById('btn-update-system');
     const btnDismiss     = document.getElementById('btn-update-dismiss');
+    const improvementsWrap = document.getElementById('update-improvements-wrap');
+    const improvementsLabel = document.getElementById('update-improvements-label');
+    const improvementsBox  = document.getElementById('update-improvements');
     const overlay        = document.getElementById('update-overlay');
     const overlayMsg     = document.getElementById('update-overlay-msg');
 
@@ -95,16 +102,39 @@
         const local = data.local_commit || 'N/A';
         const remote = data.remote_commit || 'N/A';
         const version = data.current_version || '{{ app_version }}';
+        const improvements = Array.isArray(data.improvements) ? data.improvements : [];
+        const improvementsTotal = Number(data.improvements_total || improvements.length || 0);
         const msgEl = document.getElementById('update-banner-msg');
 
         banner.classList.remove('update-current', 'update-stale', 'update-unknown');
+        btnUpdate.classList.add('hidden');
+        improvementsWrap.classList.add('hidden');
+        improvementsLabel.textContent = 'Mejoras incluidas en la actualización pendiente';
+        improvementsBox.value = '';
+
         if (!data.git_available) {
           banner.classList.add('update-unknown');
           msgEl.textContent = 'Sistema v' + version + ': git no disponible para verificar actualizaciones.';
         } else if (data.available) {
           banner.classList.add('update-stale');
+          btnUpdate.classList.remove('hidden');
           msgEl.textContent =
             'Sistema desactualizado (v' + version + '). Commit local ' + local + ' -> remoto ' + remote + '.';
+
+          if (improvements.length > 0) {
+            const visibleImprovements = improvements.slice(0, 5);
+            improvementsWrap.classList.remove('hidden');
+            improvementsLabel.textContent =
+              'Hay ' + improvementsTotal + ' mejora' + (improvementsTotal === 1 ? '' : 's') + ' pendiente' + (improvementsTotal === 1 ? '' : 's');
+            improvementsBox.value = visibleImprovements.map((line, i) => (i + 1) + '. ' + line).join('\n');
+            if (improvementsTotal > visibleImprovements.length) {
+              improvementsBox.value += '\n\nSe muestran ' + visibleImprovements.length + ' de ' + improvementsTotal + ' mejoras.';
+            }
+          } else {
+            improvementsWrap.classList.remove('hidden');
+            improvementsLabel.textContent = 'Hay una actualización pendiente';
+            improvementsBox.value = 'No se pudo obtener el detalle de mejoras, pero hay una actualización pendiente.';
+          }
         } else {
           banner.classList.add('update-current');
           msgEl.textContent =
