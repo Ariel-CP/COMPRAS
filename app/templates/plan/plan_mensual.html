@@ -72,6 +72,11 @@
         Requerimientos valorizados
       </button>
     </div>
+    <div>
+      <button id="btnFaltantesCapacidad" type="button" class="btn-accion">
+        Faltantes y capacidad
+      </button>
+    </div>
   </div>
 </section>
 
@@ -139,6 +144,53 @@
     </table>
   </div>
 </section>
+
+<section class="panel" id="panelAnalisisPlan">
+  <h3>Análisis de faltantes y capacidad</h3>
+  <p class="hint" id="analisisResumen">Selecciona un período y presiona "Faltantes y capacidad".</p>
+
+  <div id="analisisAlertas" class="error-banner hidden"></div>
+
+  <div class="tabla-wrapper">
+    <h4>Faltantes de materia prima</h4>
+    <table id="tablaFaltantesPlan" class="striped">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Detalle</th>
+          <th>UM</th>
+          <th>Requerido</th>
+          <th>Stock</th>
+          <th>Faltante</th>
+          <th>Cobertura</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="7"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <h4>Capacidad fabricable por stock</h4>
+    <table id="tablaCapacidadPlan" class="striped">
+      <thead>
+        <tr>
+          <th>PT</th>
+          <th>Detalle</th>
+          <th>Plan</th>
+          <th>Máx. fabricable</th>
+          <th>Faltante PT</th>
+          <th>Cobertura plan</th>
+          <th>Componente limitante</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="7"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endblock %} {% block scripts %}
 <script>
 const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
@@ -150,6 +202,7 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     const API_IMPORT = "/api/plan-produccion-mensual/import";
     const API_PLANTILLA_XLSX = "/api/plan-produccion-mensual/plantilla.xlsx";
     const API_PLANTILLA_CSV = "/api/plan-produccion-mensual/plantilla.csv";
+    const API_ANALISIS = "/api/plan-produccion-mensual/faltantes-capacidad";
 
     const inputMes = document.getElementById("mes");
     const inputAnio = document.getElementById("anio");
@@ -171,6 +224,17 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     const btnVerGraficos = document.getElementById("btnVerGraficos");
     const btnVerRequerimientos = document.getElementById(
       "btnVerRequerimientos"
+    );
+    const btnFaltantesCapacidad = document.getElementById(
+      "btnFaltantesCapacidad"
+    );
+    const analisisResumen = document.getElementById("analisisResumen");
+    const analisisAlertas = document.getElementById("analisisAlertas");
+    const tablaFaltantesBody = document.querySelector(
+      "#tablaFaltantesPlan tbody"
+    );
+    const tablaCapacidadBody = document.querySelector(
+      "#tablaCapacidadPlan tbody"
     );
     let selectedPeriodoKey = "";
 
@@ -195,6 +259,11 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     function fmt(n) {
       const num = Number(n || 0);
       return num.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+    }
+
+    function fmtPct(n) {
+      if (n === null || n === undefined) return "-";
+      return `${fmt(n)} %`;
     }
 
     async function cargarTabla() {
@@ -386,6 +455,122 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       });
     }
 
+    function renderAlertas(alertas) {
+      const items = Array.isArray(alertas) ? alertas : [];
+      if (!items.length) {
+        analisisAlertas.classList.add("hidden");
+        analisisAlertas.innerHTML = "";
+        return;
+      }
+
+      analisisAlertas.classList.remove("hidden");
+      analisisAlertas.innerHTML = items
+        .map((msg) => `<div>• ${msg}</div>`)
+        .join("");
+    }
+
+    function renderFaltantes(items) {
+      const rows = Array.isArray(items) ? items : [];
+      tablaFaltantesBody.innerHTML = "";
+      if (!rows.length) {
+        tablaFaltantesBody.innerHTML =
+          '<tr><td colspan="7"><em>Sin faltantes calculados</em></td></tr>';
+        return;
+      }
+
+      rows.forEach((it) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${it.codigo || ""}</td>
+          <td>${it.nombre || ""}</td>
+          <td>${it.um_codigo || ""}</td>
+          <td>${fmt(it.cantidad_requerida || 0)}</td>
+          <td>${fmt(it.stock_disponible || 0)}</td>
+          <td>${fmt(it.faltante || 0)}</td>
+          <td>${fmtPct(it.cobertura_pct)}</td>
+        `;
+        tablaFaltantesBody.appendChild(tr);
+      });
+    }
+
+    function renderCapacidad(items) {
+      const rows = Array.isArray(items) ? items : [];
+      tablaCapacidadBody.innerHTML = "";
+      if (!rows.length) {
+        tablaCapacidadBody.innerHTML =
+          '<tr><td colspan="7"><em>Sin capacidad calculada</em></td></tr>';
+        return;
+      }
+
+      rows.forEach((it) => {
+        const limitante = it.componente_limitante;
+        const limitanteTxt = limitante
+          ? `${limitante.codigo} (${fmt(limitante.consumo_por_pt || 0)} ${
+              limitante.um_codigo || ""
+            }/PT)`
+          : "-";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${it.codigo || ""}</td>
+          <td>${it.nombre || ""}</td>
+          <td>${fmt(it.cantidad_planificada || 0)}</td>
+          <td>${fmt(it.max_fabricable_entero || 0)}</td>
+          <td>${fmt(it.faltante_pt || 0)}</td>
+          <td>${fmtPct(it.cobertura_plan_pct)}</td>
+          <td>${limitanteTxt}</td>
+        `;
+        tablaCapacidadBody.appendChild(tr);
+      });
+    }
+
+    async function cargarAnalisisPlan() {
+      const mes = Number(inputMes.value);
+      const anio = Number(inputAnio.value);
+      if (!mes || !anio) {
+        feedback.textContent = "Indica mes y año.";
+        return;
+      }
+
+      analisisResumen.textContent = "Calculando faltantes y capacidad...";
+      renderAlertas([]);
+      tablaFaltantesBody.innerHTML =
+        '<tr><td colspan="7"><em>Calculando...</em></td></tr>';
+      tablaCapacidadBody.innerHTML =
+        '<tr><td colspan="7"><em>Calculando...</em></td></tr>';
+
+      const persistir = CAN_WRITE ? "true" : "false";
+      const url = `${API_ANALISIS}?mes=${mes}&anio=${anio}&persistir_sugerencias=${persistir}`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        let detail = "";
+        try {
+          const data = await resp.json();
+          detail = data && data.detail ? String(data.detail) : "";
+        } catch (e) {
+          detail = "";
+        }
+        const msg = detail
+          ? `Error (${resp.status}): ${detail}`
+          : `Error (${resp.status}) al calcular análisis.`;
+        analisisResumen.textContent = msg;
+        tablaFaltantesBody.innerHTML = `<tr><td colspan="7"><em>${msg}</em></td></tr>`;
+        tablaCapacidadBody.innerHTML = `<tr><td colspan="7"><em>${msg}</em></td></tr>`;
+        return;
+      }
+
+      const data = await resp.json();
+      const resumen = data.resumen || {};
+      const sug = data.sugerencias || {};
+      analisisResumen.textContent =
+        `Cobertura global: ${fmtPct(resumen.cobertura_global_pct)} | ` +
+        `Total faltante MP: ${fmt(resumen.total_faltante || 0)} | ` +
+        `Sugerencias actualizadas: ${fmt(sug.persistidas || 0)}`;
+
+      renderFaltantes(data.faltantes || []);
+      renderCapacidad(data.capacidad || []);
+      renderAlertas(data.alertas || []);
+    }
+
     async function guardarCambios() {
       const mes = Number(inputMes.value);
       const anio = Number(inputAnio.value);
@@ -484,6 +669,7 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       const qs = mes && anio ? `?mes=${mes}&anio=${anio}` : "";
       window.location.href = `/ui/plan-requerimientos${qs}`;
     });
+    btnFaltantesCapacidad.addEventListener("click", cargarAnalisisPlan);
     btnImportar.addEventListener("click", importarArchivo);
     btnDescargarXlsx.addEventListener("click", () =>
       descargar(API_PLANTILLA_XLSX)

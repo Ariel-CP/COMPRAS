@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.api.deps_auth import require_permission
 from app.services.plan_produccion_service import (
+    calcular_faltantes_y_capacidad,
     calcular_requerimientos_valorizados,
     guardar_bulk,
     importar_desde_rows,
@@ -82,6 +83,33 @@ def requerimientos_valuados(
     _current_user: dict = Depends(require_permission("plan", False)),
 ):
     data = calcular_requerimientos_valorizados(db, mes, anio, persistir)
+    return data
+
+
+@router.get("/faltantes-capacidad", response_model=dict)
+def faltantes_capacidad(
+    mes: int = Query(..., ge=1, le=12),
+    anio: int = Query(..., ge=2000, le=2100),
+    persistir_sugerencias: bool = Query(True),
+    db: Session = Depends(get_db),
+    _current_user: dict = Depends(require_permission("plan", False)),
+):
+    permisos = _current_user.get("permissions", {}) if _current_user else {}
+    permiso_plan = permisos.get("plan", (False, False))
+    puede_escribir = bool(permiso_plan[1]) if isinstance(permiso_plan, (tuple, list)) else False
+
+    if persistir_sugerencias and not puede_escribir:
+        raise HTTPException(
+            status_code=403,
+            detail="No tenés permisos de escritura para persistir sugerencias.",
+        )
+
+    data = calcular_faltantes_y_capacidad(
+        db,
+        mes,
+        anio,
+        persistir_sugerencias,
+    )
     return data
 
 

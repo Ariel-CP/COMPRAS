@@ -365,6 +365,7 @@ def _expandir_componentes(
     producto_id: int,
     cantidad_requerida: float,
     visitados: Set[int],
+    alertas: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Explota recursivamente el MBOM activo para obtener componentes hoja.
 
@@ -375,6 +376,10 @@ def _expandir_componentes(
     """
 
     if producto_id in visitados:
+        if alertas is not None:
+            alertas.append(
+                f"Ciclo detectado en estructura MBOM para producto_id={producto_id}."
+            )
         return []
     visitados.add(producto_id)
 
@@ -395,6 +400,7 @@ def _expandir_componentes(
                    p.codigo AS codigo,
                    p.nombre AS nombre,
                    p.tipo_producto AS tipo_producto,
+                   p.activo AS activo,
                    d.unidad_medida_id AS um_id,
                    um.codigo AS um_codigo,
                    d.cantidad AS cantidad,
@@ -418,7 +424,11 @@ def _expandir_componentes(
 
         if tipo in ("WIP", "PT"):
             sub_componentes = _expandir_componentes(
-                db, comp_id, cantidad_linea, visitados
+                db,
+                comp_id,
+                cantidad_linea,
+                visitados,
+                alertas,
             )
             if sub_componentes:
                 componentes.extend(sub_componentes)
@@ -429,6 +439,7 @@ def _expandir_componentes(
                 "producto_id": comp_id,
                 "codigo": r.codigo,
                 "nombre": r.nombre,
+                "activo": bool(r.activo),
                 "unidad_medida_id": int(r.um_id),
                 "um_codigo": r.um_codigo,
                 "cantidad": cantidad_linea,
@@ -532,6 +543,9 @@ def calcular_requerimientos_valorizados(
             actual = acumulados.get(key)
             if actual:
                 actual["cantidad"] += comp["cantidad"]
+                actual["activo"] = actual["activo"] and bool(
+                    comp.get("activo", True)
+                )
             else:
                 acumulados[key] = {
                     "producto_id": comp["producto_id"],
@@ -539,6 +553,7 @@ def calcular_requerimientos_valorizados(
                     "nombre": comp["nombre"],
                     "unidad_medida_id": comp["unidad_medida_id"],
                     "um_codigo": comp["um_codigo"],
+                    "activo": bool(comp.get("activo", True)),
                     "cantidad": comp["cantidad"],
                 }
 
@@ -599,6 +614,7 @@ def calcular_requerimientos_valorizados(
             "nombre": comp["nombre"],
             "unidad_medida_id": comp["unidad_medida_id"],
             "um_codigo": comp["um_codigo"],
+            "activo": bool(comp.get("activo", True)),
             "cantidad": cantidad,
             "precio_unit_usd": precio_unit_usd,
             "precio_unit_ars": precio_unit_ars,
@@ -694,6 +710,410 @@ def calcular_requerimientos_valorizados(
         "total_usd": total_usd,
         "persistidos": persistidos,
         "alerta_fx": alerta_fx_global,
+    }
+
+
+def _obtener_stock_periodo(
+    db: Session,
+    mes: int,
+    anio: int,
+) -> Dict[int, Dict[str, Any]]:
+    rows = db.execute(
+        text(
+            """
+            SELECT producto_id, stock_disponible, fecha_corte, origen
+            FROM stock_disponible_mes
+            WHERE mes=:mes AND anio=:anio
+            """
+        ),
+        {"mes": mes, "anio": anio},
+    ).fetchall()
+
+    stock_map: Dict[int, Dict[str, Any]] = {}
+    for row in rows:
+        stock_map[int(row.producto_id)] = {
+            "stock_disponible": float(row.stock_disponible or 0),
+            "fecha_corte": (
+                row.fecha_corte.isoformat() if row.fecha_corte else None
+            ),
+            "origen": row.origen,
+        }
+    return stock_map
+
+
+def _persistir_sugerencias_compra(
+    db: Session,
+    mes: int,
+    anio: int,
+    faltantes_items: List[Dict[str, Any]],
+    alertas: List[str],
+) -> Dict[str, int]:
+    upserts = 0
+    eliminados = 0
+
+    for item in faltantes_items:
+        producto_id = int(item["producto_id"])
+        unidad_medida_id = int(item["unidad_medida_id"])
+        faltante = float(item["faltante"])
+
+        existente = db.execute(
+            text(
+                """
+                SELECT id, estado
+                FROM sugerencia_compra
+                WHERE anio=:anio AND mes=:mes
+                  AND producto_id=:producto_id
+                  AND unidad_medida_id=:unidad_medida_id
+                """
+            ),
+            {
+                "anio": anio,
+                "mes": mes,
+                "producto_id": producto_id,
+                "unidad_medida_id": unidad_medida_id,
+            },
+        ).first()
+
+        if faltante > 0:
+            params = {
+                "anio": anio,
+                "mes": mes,
+                "producto_id": producto_id,
+                "unidad_medida_id": unidad_medida_id,
+                "cantidad_necesaria": float(item["cantidad_requerida"]),
+                "stock_disponible": float(item["stock_disponible"]),
+                "cantidad_sugerida": faltante,
+                "motivo": "Generado por análisis de faltantes del plan.",
+            }
+            if existente:
+                if existente.estado == "APROBADA":
+                    alertas.append(
+                        "La sugerencia aprobada de "
+                        f"{item['codigo']} no se cambió de estado."
+                    )
+                    db.execute(
+                        text(
+                            """
+                            UPDATE sugerencia_compra
+                            SET cantidad_necesaria=:cantidad_necesaria,
+                                stock_disponible=:stock_disponible,
+                                cantidad_sugerida=:cantidad_sugerida,
+                                motivo=:motivo
+                            WHERE id=:id
+                            """
+                        ),
+                        {**params, "id": existente.id},
+                    )
+                else:
+                    db.execute(
+                        text(
+                            """
+                            UPDATE sugerencia_compra
+                            SET cantidad_necesaria=:cantidad_necesaria,
+                                stock_disponible=:stock_disponible,
+                                cantidad_sugerida=:cantidad_sugerida,
+                                estado='PENDIENTE',
+                                motivo=:motivo
+                            WHERE id=:id
+                            """
+                        ),
+                        {**params, "id": existente.id},
+                    )
+            else:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO sugerencia_compra (
+                            anio, mes, producto_id, unidad_medida_id,
+                            cantidad_necesaria, stock_disponible,
+                            cantidad_sugerida, estado, motivo
+                        ) VALUES (
+                            :anio, :mes, :producto_id, :unidad_medida_id,
+                            :cantidad_necesaria, :stock_disponible,
+                            :cantidad_sugerida, 'PENDIENTE', :motivo
+                        )
+                        """
+                    ),
+                    params,
+                )
+            upserts += 1
+            continue
+
+        if existente and existente.estado != "APROBADA":
+            db.execute(
+                text("DELETE FROM sugerencia_compra WHERE id=:id"),
+                {"id": existente.id},
+            )
+            eliminados += 1
+
+    return {"upserts": upserts, "eliminados": eliminados}
+
+
+def _calcular_capacidad_por_stock(
+    db: Session,
+    mes: int,
+    anio: int,
+    stock_map: Dict[int, Dict[str, Any]],
+    alertas: List[str],
+) -> List[Dict[str, Any]]:
+    planes = db.execute(
+        text(
+            """
+            SELECT ppm.producto_id,
+                   ppm.cantidad_planificada,
+                   p.codigo,
+                   p.nombre
+            FROM plan_produccion_mensual ppm
+            JOIN producto p ON p.id = ppm.producto_id
+            WHERE ppm.mes = :mes AND ppm.anio = :anio
+              AND p.tipo_producto = 'PT' AND p.activo = 1
+            ORDER BY p.nombre
+            """
+        ),
+        {"mes": mes, "anio": anio},
+    ).fetchall()
+
+    capacidad_items: List[Dict[str, Any]] = []
+    for row in planes:
+        producto_id = int(row.producto_id)
+        mbom = mbom_service.get_cabecera_preferida(db, producto_id, "ACTIVO")
+        if not mbom:
+            alertas.append(
+                "No hay MBOM activa vigente para "
+                f"{row.codigo}; no se puede calcular capacidad."
+            )
+            capacidad_items.append(
+                {
+                    "producto_id": producto_id,
+                    "codigo": row.codigo,
+                    "nombre": row.nombre,
+                    "cantidad_planificada": float(row.cantidad_planificada or 0),
+                    "max_fabricable": 0.0,
+                    "max_fabricable_entero": 0,
+                    "faltante_pt": float(row.cantidad_planificada or 0),
+                    "cobertura_plan_pct": 0.0,
+                    "componente_limitante": None,
+                }
+            )
+            continue
+
+        comp_unitarios = _expandir_componentes(
+            db,
+            producto_id,
+            1.0,
+            set(),
+            alertas,
+        )
+        if not comp_unitarios:
+            alertas.append(
+                "La estructura MBOM de "
+                f"{row.codigo} no tiene componentes hoja para calcular capacidad."
+            )
+            capacidad_items.append(
+                {
+                    "producto_id": producto_id,
+                    "codigo": row.codigo,
+                    "nombre": row.nombre,
+                    "cantidad_planificada": float(row.cantidad_planificada or 0),
+                    "max_fabricable": 0.0,
+                    "max_fabricable_entero": 0,
+                    "faltante_pt": float(row.cantidad_planificada or 0),
+                    "cobertura_plan_pct": 0.0,
+                    "componente_limitante": None,
+                }
+            )
+            continue
+
+        comp_por_pt: Dict[int, Dict[str, Any]] = {}
+        for comp in comp_unitarios:
+            comp_id = int(comp["producto_id"])
+            actual = comp_por_pt.get(comp_id)
+            if actual:
+                actual["cantidad_por_pt"] += float(comp["cantidad"])
+            else:
+                comp_por_pt[comp_id] = {
+                    "producto_id": comp_id,
+                    "codigo": comp["codigo"],
+                    "nombre": comp["nombre"],
+                    "um_codigo": comp["um_codigo"],
+                    "cantidad_por_pt": float(comp["cantidad"]),
+                }
+
+        max_fabricable = None
+        limitante: Optional[Dict[str, Any]] = None
+        for comp in comp_por_pt.values():
+            consumo = float(comp["cantidad_por_pt"])
+            if consumo <= 0:
+                continue
+
+            stock = float(
+                (stock_map.get(comp["producto_id"]) or {}).get(
+                    "stock_disponible",
+                    0.0,
+                )
+            )
+            fabricable_comp = stock / consumo
+            if max_fabricable is None or fabricable_comp < max_fabricable:
+                max_fabricable = fabricable_comp
+                limitante = {
+                    "producto_id": comp["producto_id"],
+                    "codigo": comp["codigo"],
+                    "nombre": comp["nombre"],
+                    "um_codigo": comp["um_codigo"],
+                    "stock_disponible": stock,
+                    "consumo_por_pt": consumo,
+                    "max_fabricable_por_componente": fabricable_comp,
+                }
+
+        max_fabricable_val = float(max_fabricable or 0.0)
+        max_fabricable_entero = int(max_fabricable_val) if max_fabricable_val > 0 else 0
+        planificado = float(row.cantidad_planificada or 0.0)
+        faltante_pt = max(0.0, planificado - max_fabricable_entero)
+        cobertura = 0.0 if planificado <= 0 else (max_fabricable_entero / planificado) * 100
+
+        capacidad_items.append(
+            {
+                "producto_id": producto_id,
+                "codigo": row.codigo,
+                "nombre": row.nombre,
+                "cantidad_planificada": planificado,
+                "max_fabricable": max_fabricable_val,
+                "max_fabricable_entero": max_fabricable_entero,
+                "faltante_pt": faltante_pt,
+                "cobertura_plan_pct": min(cobertura, 100.0),
+                "componente_limitante": limitante,
+            }
+        )
+
+    return capacidad_items
+
+
+def calcular_faltantes_y_capacidad(
+    db: Session,
+    mes: int,
+    anio: int,
+    persistir_sugerencias: bool = True,
+) -> Dict[str, Any]:
+    requerimientos = calcular_requerimientos_valorizados(
+        db,
+        mes,
+        anio,
+        persistir=persistir_sugerencias,
+    )
+    stock_map = _obtener_stock_periodo(db, mes, anio)
+    alertas: List[str] = []
+
+    faltantes_items: List[Dict[str, Any]] = []
+    total_requerido = 0.0
+    total_stock = 0.0
+    total_faltante = 0.0
+
+    faltantes_sin_stock = 0
+    for item in requerimientos.get("items", []):
+        producto_id = int(item["producto_id"])
+        cantidad_requerida = float(item.get("cantidad") or 0.0)
+        stock_info = stock_map.get(producto_id)
+        stock_disponible = (
+            float(stock_info.get("stock_disponible") or 0.0)
+            if stock_info
+            else 0.0
+        )
+
+        if stock_info is None and cantidad_requerida > 0:
+            faltantes_sin_stock += 1
+
+        faltante = max(0.0, cantidad_requerida - stock_disponible)
+        cobertura = 100.0
+        if cantidad_requerida > 0:
+            cobertura = min((stock_disponible / cantidad_requerida) * 100, 100.0)
+
+        faltantes_items.append(
+            {
+                "producto_id": producto_id,
+                "codigo": item["codigo"],
+                "nombre": item["nombre"],
+                "unidad_medida_id": int(item["unidad_medida_id"]),
+                "um_codigo": item["um_codigo"],
+                "cantidad_requerida": cantidad_requerida,
+                "stock_disponible": stock_disponible,
+                "faltante": faltante,
+                "cobertura_pct": cobertura,
+                "fecha_corte_stock": (
+                    stock_info.get("fecha_corte") if stock_info else None
+                ),
+                "origen_stock": stock_info.get("origen") if stock_info else None,
+            }
+        )
+
+        total_requerido += cantidad_requerida
+        total_stock += stock_disponible
+        total_faltante += faltante
+
+        if bool(item.get("activo", True)) is False:
+            alertas.append(
+                f"El componente {item['codigo']} está inactivo y participa en la estructura."
+            )
+
+    if faltantes_sin_stock > 0:
+        alertas.append(
+            "Se tomó stock=0 para "
+            f"{faltantes_sin_stock} componente(s) sin stock cargado en el período."
+        )
+
+    capacidad_items = _calcular_capacidad_por_stock(
+        db,
+        mes,
+        anio,
+        stock_map,
+        alertas,
+    )
+
+    persistencia = {"upserts": 0, "eliminados": 0}
+    if persistir_sugerencias:
+        persistencia = _persistir_sugerencias_compra(
+            db,
+            mes,
+            anio,
+            faltantes_items,
+            alertas,
+        )
+        db.commit()
+
+    # Remover alertas duplicadas y vacías manteniendo orden.
+    alertas_limpias: List[str] = []
+    seen = set()
+    for alerta in alertas:
+        alerta_txt = str(alerta or "").strip()
+        if not alerta_txt or alerta_txt in seen:
+            continue
+        seen.add(alerta_txt)
+        alertas_limpias.append(alerta_txt)
+
+    return {
+        "resumen": {
+            "mes": mes,
+            "anio": anio,
+            "componentes": len(faltantes_items),
+            "total_requerido": total_requerido,
+            "total_stock_disponible": total_stock,
+            "total_faltante": total_faltante,
+            "cobertura_global_pct": (
+                100.0 if total_requerido <= 0 else min((total_stock / total_requerido) * 100, 100.0)
+            ),
+            "con_alertas": len(alertas_limpias) > 0,
+        },
+        "faltantes": sorted(
+            faltantes_items,
+            key=lambda x: (x["faltante"], x["codigo"]),
+            reverse=True,
+        ),
+        "capacidad": capacidad_items,
+        "alertas": alertas_limpias,
+        "sugerencias": {
+            "persistidas": persistencia["upserts"],
+            "eliminadas": persistencia["eliminados"],
+            "persistir": persistir_sugerencias,
+        },
     }
 
 
