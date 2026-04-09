@@ -998,7 +998,7 @@ def calcular_faltantes_y_capacidad(
         db,
         mes,
         anio,
-        persistir=persistir_sugerencias,
+        persistir=False,
     )
     stock_map = _obtener_stock_periodo(db, mes, anio)
     alertas: List[str] = []
@@ -1070,14 +1070,21 @@ def calcular_faltantes_y_capacidad(
 
     persistencia = {"upserts": 0, "eliminados": 0}
     if persistir_sugerencias:
-        persistencia = _persistir_sugerencias_compra(
-            db,
-            mes,
-            anio,
-            faltantes_items,
-            alertas,
-        )
-        db.commit()
+        try:
+            persistencia = _persistir_sugerencias_compra(
+                db,
+                mes,
+                anio,
+                faltantes_items,
+                alertas,
+            )
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            alertas.append(
+                "No se pudieron persistir sugerencias de compra. "
+                f"Detalle: {exc}"
+            )
 
     # Remover alertas duplicadas y vacías manteniendo orden.
     alertas_limpias: List[str] = []
