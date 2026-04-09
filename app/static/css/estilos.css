@@ -19,17 +19,19 @@ header a.inicio-verde,
 .btn-guardar:hover {
 	background: #ca6f1e;
 }
-/* ── Banner de actualización ── */
-.update-banner{display:flex;align-items:center;gap:10px;background:#fff3cd;color:#856404;border-bottom:1px solid #ffc107;padding:7px 16px;font-size:14px}
-.update-banner.hidden{display:none}
-.update-banner.update-current{background:#eaf7ee;color:#1e6b2f;border-bottom-color:#76c58b}
-.update-banner.update-stale{background:#fff3cd;color:#856404;border-bottom-color:#ffc107}
-.update-banner.update-unknown{background:#eef2f7;color:#2f3b4a;border-bottom-color:#b9c4d3}
+/* ── Estado de actualización en menú ── */
+.update-status-btn{border:none;padding:4px 10px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:700;line-height:1.1}
+.update-status-btn.update-status-current{background:#eaf7ee;color:#1e6b2f}
+.update-status-btn.update-status-stale{background:#fff3cd;color:#856404}
+.update-status-btn.update-status-unknown{background:#eef2f7;color:#2f3b4a}
+.update-status-btn:hover{filter:brightness(.97)}
+
+.update-details{padding:8px 16px 12px;background:#fff8df;border-bottom:1px solid #ffe08a}
+.update-details.hidden{display:none}
+.update-details-actions{margin-top:8px;display:flex;justify-content:flex-end}
 .btn-update{background:#856404;color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600}
 .btn-update:hover{background:#6d5204}
-.btn-update-dismiss{background:none;border:none;cursor:pointer;color:#856404;font-size:16px;line-height:1;padding:0 4px;margin-left:auto}
-.update-improvements-wrap{padding:8px 16px 12px;background:#fff8df;border-bottom:1px solid #ffe08a}
-.update-improvements-wrap label{display:block;font-size:12px;font-weight:600;color:#6d5204;margin:0 0 6px 0}
+.update-details label{display:block;font-size:12px;font-weight:600;color:#6d5204;margin:0 0 6px 0}
 .update-improvements{width:100%;min-height:88px;resize:vertical;border:1px solid #e4cc7a;border-radius:6px;background:#fffdf5;color:#4d3d00;padding:8px 10px;font-size:12px;line-height:1.35;box-sizing:border-box}
 /* ── Overlay de progreso de actualización ── */
 .update-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}

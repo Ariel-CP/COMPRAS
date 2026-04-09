@@ -43,6 +43,18 @@
         </div>
       </span>
       {% endif %}
+      {% if perms.get('admin_sistema', (False, False))[0] %}
+      <span class="update-menu-wrap" style="vertical-align:middle;">
+        <button
+          id="btn-update-status"
+          class="update-status-btn update-status-unknown"
+          type="button"
+          aria-expanded="false"
+          aria-controls="update-details"
+          title="Ver cambios del sistema"
+        >Verificando</button>
+      </span>
+      {% endif %}
     </nav>
     {% endif %}
     <div class="header-right">
@@ -58,14 +70,12 @@
 
   {% set _user = current_user or request.state.current_user %}
   {% if _user and _user.permissions is defined and _user.permissions.get('admin_sistema', (False, False))[0] %}
-  <div id="update-banner" class="update-banner update-unknown" role="status" aria-live="polite">
-    <span id="update-banner-msg">Sistema: verificando estado (v{{ app_version }})...</span>
-    <button id="btn-update-system" class="btn-update" type="button">Actualizar ahora</button>
-    <button id="btn-update-dismiss" class="btn-ghost btn-update-dismiss" type="button" aria-label="Cerrar">✕</button>
-  </div>
-  <div id="update-improvements-wrap" class="update-improvements-wrap hidden">
-    <label id="update-improvements-label" for="update-improvements">Mejoras incluidas en la actualización pendiente</label>
+  <div id="update-details" class="update-details hidden">
+    <label id="update-improvements-label" for="update-improvements">Cambios del sistema</label>
     <textarea id="update-improvements" class="update-improvements" readonly></textarea>
+    <div class="update-details-actions">
+      <button id="btn-update-system" class="btn-update hidden" type="button">Actualizar ahora</button>
+    </div>
   </div>
   <div id="update-overlay" class="update-overlay hidden">
     <div class="update-overlay-box">
@@ -79,14 +89,19 @@
     const HEALTH_URL     = '/api/health/db';
     const STATUS_URL     = '/api/system/update-status';
     const UPDATE_URL     = '/api/system/update';
-    const banner         = document.getElementById('update-banner');
+    const btnStatus      = document.getElementById('btn-update-status');
     const btnUpdate      = document.getElementById('btn-update-system');
-    const btnDismiss     = document.getElementById('btn-update-dismiss');
-    const improvementsWrap = document.getElementById('update-improvements-wrap');
+    const details        = document.getElementById('update-details');
     const improvementsLabel = document.getElementById('update-improvements-label');
     const improvementsBox  = document.getElementById('update-improvements');
     const overlay        = document.getElementById('update-overlay');
     const overlayMsg     = document.getElementById('update-overlay-msg');
+
+    function setStatusButton(statusClass, text) {
+      btnStatus.classList.remove('update-status-current', 'update-status-stale', 'update-status-unknown');
+      btnStatus.classList.add(statusClass);
+      btnStatus.textContent = text;
+    }
 
     async function checkStatus() {
       try {
@@ -104,51 +119,53 @@
         const version = data.current_version || '{{ app_version }}';
         const improvements = Array.isArray(data.improvements) ? data.improvements : [];
         const improvementsTotal = Number(data.improvements_total || improvements.length || 0);
-        const msgEl = document.getElementById('update-banner-msg');
-
-        banner.classList.remove('update-current', 'update-stale', 'update-unknown');
         btnUpdate.classList.add('hidden');
-        improvementsWrap.classList.add('hidden');
         improvementsLabel.textContent = 'Mejoras incluidas en la actualización pendiente';
         improvementsBox.value = '';
 
         if (!data.git_available) {
-          banner.classList.add('update-unknown');
-          msgEl.textContent = 'Sistema v' + version + ': git no disponible para verificar actualizaciones.';
+          setStatusButton('update-status-unknown', 'Sin estado');
+          improvementsLabel.textContent = 'Estado del sistema';
+          improvementsBox.value =
+            'No se puede verificar actualizaciones porque git no está disponible.\n\nVersión actual: v' + version + '.';
         } else if (data.available) {
-          banner.classList.add('update-stale');
+          setStatusButton('update-status-stale', 'Pendiente');
           btnUpdate.classList.remove('hidden');
-          msgEl.textContent =
-            'Sistema desactualizado (v' + version + '). Commit local ' + local + ' -> remoto ' + remote + '.';
+          improvementsLabel.textContent = 'Cambios pendientes para actualizar';
 
           if (improvements.length > 0) {
             const visibleImprovements = improvements.slice(0, 5);
-            improvementsWrap.classList.remove('hidden');
-            improvementsLabel.textContent =
-              'Hay ' + improvementsTotal + ' mejora' + (improvementsTotal === 1 ? '' : 's') + ' pendiente' + (improvementsTotal === 1 ? '' : 's');
-            improvementsBox.value = visibleImprovements.map((line, i) => (i + 1) + '. ' + line).join('\n');
+            improvementsBox.value =
+              'Versión actual: v' + version + '\n' +
+              'Commit local: ' + local + '\n' +
+              'Commit remoto: ' + remote + '\n\n' +
+              visibleImprovements.map((line, i) => (i + 1) + '. ' + line).join('\n');
             if (improvementsTotal > visibleImprovements.length) {
               improvementsBox.value += '\n\nSe muestran ' + visibleImprovements.length + ' de ' + improvementsTotal + ' mejoras.';
             }
           } else {
-            improvementsWrap.classList.remove('hidden');
-            improvementsLabel.textContent = 'Hay una actualización pendiente';
-            improvementsBox.value = 'No se pudo obtener el detalle de mejoras, pero hay una actualización pendiente.';
+            improvementsBox.value =
+              'Versión actual: v' + version + '\n' +
+              'Commit local: ' + local + '\n' +
+              'Commit remoto: ' + remote + '\n\n' +
+              'Hay una actualización pendiente, pero no se pudo obtener el detalle de mejoras.';
           }
         } else {
-          banner.classList.add('update-current');
-          msgEl.textContent =
-            'Sistema actualizado (v' + version + '). Commit ' + local + '.';
+          setStatusButton('update-status-current', 'Actualizado');
+          improvementsLabel.textContent = 'Estado del sistema';
+          improvementsBox.value =
+            'Sistema actualizado.\n\nVersión actual: v' + version + '\nCommit: ' + local + '.';
         }
       } catch (_) {
-        banner.classList.remove('update-current', 'update-stale');
-        banner.classList.add('update-unknown');
-        document.getElementById('update-banner-msg').textContent =
-          'Sistema: no se pudo verificar actualizaciones.';
+        setStatusButton('update-status-unknown', 'Sin estado');
+        improvementsLabel.textContent = 'Estado del sistema';
+        improvementsBox.value = 'No se pudo verificar actualizaciones.';
       }
     }
 
     async function doUpdate() {
+      details.classList.add('hidden');
+      btnStatus.setAttribute('aria-expanded', 'false');
       overlay.classList.remove('hidden');
       overlayMsg.textContent = 'Enviando orden de actualización...';
       try {
@@ -173,8 +190,32 @@
       overlayMsg.textContent = 'El servicio tardó demasiado en reiniciar. Recargá la página manualmente.';
     }
 
+    btnStatus.addEventListener('click', () => {
+      details.classList.toggle('hidden');
+      btnStatus.setAttribute('aria-expanded', String(!details.classList.contains('hidden')));
+    });
+
+    document.addEventListener('click', (event) => {
+      if (details.classList.contains('hidden')) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      const clickedStatus = btnStatus.contains(target);
+      const clickedPanel = details.contains(target);
+      if (clickedStatus || clickedPanel) return;
+
+      details.classList.add('hidden');
+      btnStatus.setAttribute('aria-expanded', 'false');
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      if (details.classList.contains('hidden')) return;
+      details.classList.add('hidden');
+      btnStatus.setAttribute('aria-expanded', 'false');
+    });
+
     btnUpdate.addEventListener('click', doUpdate);
-    btnDismiss.addEventListener('click', () => banner.classList.add('hidden'));
 
     // Primer chequeo al cargar, luego periódico
     checkStatus();
