@@ -14,6 +14,43 @@ from ..schemas.stock import StockItemOut, StockImportResult
 
 REQUIRED_STOCK_HEADERS = {"producto_codigo", "stock_disponible"}
 
+# Alias de columnas reconocidos en la hoja "Carga" (pegado libre desde ERP)
+_CARGA_CODE_ALIASES: frozenset[str] = frozenset({"codigo", "producto_codigo", "code", "cod", "c\u00f3digo"})
+_CARGA_STOCK_ALIASES: frozenset[str] = frozenset({"stock", "stock_disponible", "cantidad", "qty"})
+
+
+def _parse_hoja_carga(ws) -> List[Dict[str, Any]]:
+    """Lee la hoja 'Carga' con columnas de formato libre y la normaliza.
+
+    Reconoce encabezados: codigo/producto_codigo/code  y  stock/stock_disponible/cantidad.
+    """
+    header_row = next(ws.iter_rows(min_row=1, max_row=1), [])
+    headers = [
+        str(c.value).strip().lower() if c.value is not None else ""
+        for c in header_row
+    ]
+
+    code_col = next((i for i, h in enumerate(headers) if h in _CARGA_CODE_ALIASES), None)
+    stock_col = next((i for i, h in enumerate(headers) if h in _CARGA_STOCK_ALIASES), None)
+
+    if code_col is None or stock_col is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Hoja 'Carga': se requieren columnas 'codigo' y 'stock' (o variantes).",
+        )
+
+    rows: List[Dict[str, Any]] = []
+    for r in ws.iter_rows(min_row=2):
+        codigo_val = r[code_col].value if code_col < len(r) else None
+        stock_val = r[stock_col].value if stock_col < len(r) else None
+        if codigo_val is None:
+            continue
+        rows.append({
+            "producto_codigo": str(codigo_val).strip(),
+            "stock_disponible": str(stock_val).strip() if stock_val is not None else "0",
+        })
+    return rows
+
 
 def _get_producto_id(db: Session, codigo: str) -> Optional[int]:
     q = text("SELECT id FROM producto WHERE codigo = :codigo AND activo = 1")
@@ -88,22 +125,28 @@ def importar_stock_csv_o_excel(
                     detail="Soporte Excel no disponible; enviar CSV",
                 )
             wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
-            ws = wb.active
-            headers = [
-                str(c.value).strip() if c.value is not None else ""
-                for c in next(ws.iter_rows(min_row=1, max_row=1))
-            ]
-            rows = []
-            for r in ws.iter_rows(min_row=2):
-                row = {}
-                for idx, cell in enumerate(r):
-                    key = headers[idx] if idx < len(headers) else f"col_{idx}"
-                    row[key] = (
-                        str(cell.value).strip()
-                        if cell.value is not None
-                        else None
-                    )
-                rows.append(row)
+
+            # Si el archivo contiene la hoja 'Carga' (plantilla con formato libre),
+            # se usa esa hoja con mapeo flexible de columnas.
+            if "Carga" in wb.sheetnames:
+                rows = _parse_hoja_carga(wb["Carga"])
+            else:
+                ws = wb.active
+                headers = [
+                    str(c.value).strip() if c.value is not None else ""
+                    for c in next(ws.iter_rows(min_row=1, max_row=1))
+                ]
+                rows = []
+                for r in ws.iter_rows(min_row=2):
+                    row = {}
+                    for idx, cell in enumerate(r):
+                        key = headers[idx] if idx < len(headers) else f"col_{idx}"
+                        row[key] = (
+                            str(cell.value).strip()
+                            if cell.value is not None
+                            else None
+                        )
+                    rows.append(row)
         else:
             raise HTTPException(
                 status_code=400,
