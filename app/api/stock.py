@@ -17,6 +17,24 @@ from .deps_auth import require_permission
 router = APIRouter()
 
 
+@router.get("/template-csv")
+def descargar_template_csv(
+    _current_user: dict = Depends(require_permission("stock", False)),
+):
+    contenido = (
+        "producto_codigo,stock_disponible\n"
+        "MP-0001,120\n"
+        "MP-0002,85\n"
+    )
+    return StreamingResponse(
+        io.BytesIO(contenido.encode("utf-8")),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=template_stock_mensual.csv",
+        },
+    )
+
+
 # Endpoint para descargar plantilla XLSX de stock mensual
 @router.get("/template-xlsx")
 def descargar_template_xlsx(

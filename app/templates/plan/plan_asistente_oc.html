@@ -1,0 +1,1039 @@
+{% extends "base.html" %}
+{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
+{% set CAN_WRITE_JS = can_write_js('plan') %}
+
+{% block title %}Asistente de Orden de Compra{% endblock %}
+
+{% block content %}
+<section class="panel wizard-panel">
+  <h2>Asistente de Orden de Compra</h2>
+  <p class="hint">
+    Flujo guiado para calcular materiales: presuncion -> stock MP -> stock PT -> deuda clientes -> sugerencias.
+  </p>
+
+  <div class="wizard-steps" id="wizardSteps">
+    <button type="button" class="wizard-step active" data-step="1">1. Presuncion</button>
+    <button type="button" class="wizard-step" data-step="2">2. Stock MP</button>
+    <button type="button" class="wizard-step" data-step="3">3. Stock PT</button>
+    <button type="button" class="wizard-step" data-step="4">4. Deuda clientes</button>
+    <button type="button" class="wizard-step" data-step="5">5. Calculo OC</button>
+  </div>
+</section>
+
+<section class="panel wizard-body" data-pane="1">
+  <h3>Paso 1: Cargar presuncion del periodo</h3>
+  <div class="form-grid">
+    <label for="anioPlan">Anio</label>
+    <input id="anioPlan" type="number" min="2000" max="2100" />
+
+    <label for="mesPlan">Mes</label>
+    <input id="mesPlan" type="number" min="1" max="12" />
+
+    <button id="btnCargarPresuncion" type="button" class="btn-accion">Cargar presuncion</button>
+    <span id="presuncionFeedback" class="nota"></span>
+  </div>
+
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <table class="striped" id="tablaPresuncion">
+      <thead>
+        <tr>
+          <th>Codigo</th>
+          <th>Producto</th>
+          <th>Presuncion</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="3"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel wizard-body hidden" data-pane="2">
+  <h3>Paso 2: Importar stock de MP (con fecha)</h3>
+  <p class="hint">Podés usar plantilla CSV o XLSX para importar stock de materias primas.</p>
+  <div class="form-grid">
+    <label for="anioStock">Anio stock</label>
+    <input id="anioStock" type="number" min="2000" max="2100" />
+
+    <label for="mesStock">Mes stock</label>
+    <input id="mesStock" type="number" min="1" max="12" />
+
+    <label for="fechaCorteStock">Fecha corte</label>
+    <input id="fechaCorteStock" type="date" />
+
+    <label for="archivoStockMp">Archivo CSV/XLSX stock MP</label>
+    <input id="archivoStockMp" type="file" accept=".csv,.xlsx" {{ can_write_attr('stock') }} />
+
+    <button id="btnImportarStockMp" type="button" class="btn-accion" {{ can_write_attr('stock') }}>Importar stock MP</button>
+    <button id="btnPlantillaStockMp" type="button" class="btn-accion">Plantilla stock MP (CSV)</button>
+    <button id="btnPlantillaStockMpXlsx" type="button" class="btn-accion">Plantilla stock MP (XLSX)</button>
+    <span id="stockMpFeedback" class="nota"></span>
+  </div>
+
+  <hr style="margin: 12px 0; border: none; border-top: 1px solid #d9e3ef;" />
+  <h4>Solicitado previamente (LAF, 3 meses de anticipación)</h4>
+  <p class="hint">Cargá pedidos ya emitidos para descontarlos del faltante y evitar sobrestock.</p>
+  <div class="form-grid">
+    <label for="lafCodigo">Código LAF</label>
+    <input id="lafCodigo" type="text" placeholder="CHAPA-LAF-01" />
+
+    <label for="lafProveedor">Proveedor</label>
+    <input id="lafProveedor" type="text" placeholder="Proveedor LAF" />
+
+    <label for="lafQ1">Q1</label>
+    <input id="lafQ1" type="number" step="0.0001" min="0" placeholder="0" />
+
+    <label for="lafQ2">Q2</label>
+    <input id="lafQ2" type="number" step="0.0001" min="0" placeholder="0" />
+
+    <label for="lafFechaPedido">Fecha pedido</label>
+    <input id="lafFechaPedido" type="date" />
+
+    <label for="lafFechaEntrega">Fecha entrega estimada</label>
+    <input id="lafFechaEntrega" type="date" />
+
+    <label for="lafEstado">Estado</label>
+    <select id="lafEstado">
+      <option value="PENDIENTE" selected>PENDIENTE</option>
+      <option value="PARCIAL">PARCIAL</option>
+      <option value="RECIBIDO">RECIBIDO</option>
+      <option value="CANCELADO">CANCELADO</option>
+    </select>
+
+    <label for="archivoLafSolicitado">Archivo CSV/XLSX solicitado LAF</label>
+    <input id="archivoLafSolicitado" type="file" accept=".csv,.xlsx" />
+
+    <button id="btnAgregarLaf" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Agregar solicitado LAF</button>
+    <button id="btnImportarLaf" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Importar solicitado LAF</button>
+    <button id="btnPlantillaLafCsv" type="button" class="btn-accion">Plantilla solicitado LAF (CSV)</button>
+    <button id="btnPlantillaLafXlsx" type="button" class="btn-accion">Plantilla solicitado LAF (XLSX)</button>
+    <span id="lafFeedback" class="nota"></span>
+  </div>
+
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <table class="striped" id="tablaLafSolicitado">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Proveedor</th>
+          <th>Total</th>
+          <th>Q1</th>
+          <th>Q2</th>
+          <th>Entrega estimada</th>
+          <th>Estado</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="8"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel wizard-body hidden" data-pane="3">
+  <h3>Paso 3: Cargar stock de productos terminados</h3>
+  <p class="hint">CSV/XLSX con columnas: <strong>codigo, stock_pt</strong></p>
+  <div class="form-grid">
+    <label for="archivoStockPt">Archivo CSV/XLSX stock PT</label>
+    <input id="archivoStockPt" type="file" accept=".csv,.xlsx" />
+
+    <button id="btnProcesarStockPt" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Procesar y guardar stock PT</button>
+    <button id="btnPlantillaStockPt" type="button" class="btn-accion">Plantilla stock PT (CSV)</button>
+    <button id="btnPlantillaStockPtXlsx" type="button" class="btn-accion">Plantilla stock PT (XLSX)</button>
+    <span id="stockPtFeedback" class="nota"></span>
+  </div>
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <table class="striped" id="tablaStockPt">
+      <thead>
+        <tr>
+          <th>Codigo</th>
+          <th>Stock PT</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="2"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel wizard-body hidden" data-pane="4">
+  <h3>Paso 4: Cargar deuda a clientes (pendiente fabricar)</h3>
+  <p class="hint">CSV/XLSX con columnas: <strong>codigo, deuda_clientes</strong></p>
+  <div class="form-grid">
+    <label for="archivoDeudaClientes">Archivo CSV/XLSX deuda clientes</label>
+    <input id="archivoDeudaClientes" type="file" accept=".csv,.xlsx" />
+
+    <button id="btnProcesarDeuda" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Procesar y guardar deuda clientes</button>
+    <button id="btnPlantillaDeuda" type="button" class="btn-accion">Plantilla deuda (CSV)</button>
+    <button id="btnPlantillaDeudaXlsx" type="button" class="btn-accion">Plantilla deuda (XLSX)</button>
+    <span id="deudaFeedback" class="nota"></span>
+  </div>
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <table class="striped" id="tablaDeudaClientes">
+      <thead>
+        <tr>
+          <th>Codigo</th>
+          <th>Deuda clientes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="2"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel wizard-body hidden" data-pane="5">
+  <h3>Paso 5: Calcular materiales y sugerencia de compra</h3>
+  <div class="form-grid" style="margin-bottom: 8px;">
+    <label for="persistirSugerencias" style="display:flex;align-items:center;gap:8px;">
+      <input id="persistirSugerencias" type="checkbox" {{ can_write_attr('plan') }} />
+      Persistir sugerencias de compra
+    </label>
+  </div>
+  <div class="acciones-tabla">
+    <button id="btnCalcularOc" type="button" class="btn-guardar">Calcular OC</button>
+    <button id="btnExportarOc" type="button" class="btn-accion">Exportar propuesta CSV</button>
+    <button id="btnExportarOcXlsx" type="button" class="btn-accion">Exportar propuesta XLSX</button>
+    <span id="ocFeedback" class="nota"></span>
+  </div>
+
+  <div class="kpi-grid" id="kpiOc" style="margin-top: 10px;"></div>
+
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <h4>Demanda neta de PT</h4>
+    <table class="striped" id="tablaDemandaNeta">
+      <thead>
+        <tr>
+          <th>Codigo</th>
+          <th>Presuncion</th>
+          <th>Stock PT</th>
+          <th>Deuda</th>
+          <th>Demanda neta</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="5"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <h4>Top faltantes de materia prima</h4>
+    <table class="striped" id="tablaFaltantesOc">
+      <thead>
+        <tr>
+          <th>Codigo</th>
+          <th>Detalle</th>
+          <th>UM</th>
+          <th>Requerido</th>
+          <th>Stock</th>
+          <th>Faltante</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="6"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="alertasOc" class="error-banner hidden" style="margin-top: 10px;"></div>
+
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <h4>Historial reciente de corridas</h4>
+    <table class="striped" id="tablaCorridasOc">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Periodo</th>
+          <th>Usuario</th>
+          <th>Persistio sugerencias</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="4"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel wizard-nav">
+  <button id="btnPasoPrev" type="button" class="btn-accion">Anterior</button>
+  <button id="btnPasoNext" type="button" class="btn-accion">Siguiente</button>
+</section>
+{% endblock %}
+
+{% block styles %}
+<style>
+  .wizard-panel {
+    background: linear-gradient(120deg, #f8fbff 0%, #eef6ff 55%, #fff9f0 100%);
+    border: 1px solid #d7e7ff;
+  }
+  .wizard-steps {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .wizard-step {
+    border: 1px solid #c9d9f0;
+    border-radius: 999px;
+    background: #fff;
+    color: #284460;
+    padding: 8px 10px;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .wizard-step.active {
+    background: #0b5cab;
+    color: #fff;
+    border-color: #0b5cab;
+  }
+  .wizard-step.done {
+    background: #e8f7ec;
+    border-color: #87cc98;
+    color: #216637;
+  }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .kpi-card {
+    border: 1px solid #d8e0ea;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fff;
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: #556;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .kpi-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #0b5cab;
+  }
+  @media (max-width: 860px) {
+    .wizard-steps {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
+(function () {
+  const API_RESUMEN = "/api/plan-produccion-mensual/resumen";
+  const API_IMPORT_STOCK = "/api/stock";
+  const API_STOCK_TEMPLATE_CSV = "/api/stock/template-csv";
+  const API_STOCK_TEMPLATE_XLSX = "/api/stock/template-xlsx";
+  const API_OC = "/api/plan-produccion-mensual/asistente-oc/calcular";
+  const API_OC_AJUSTES = "/api/plan-produccion-mensual/asistente-oc/ajustes";
+  const API_OC_CORRIDAS = "/api/plan-produccion-mensual/asistente-oc/corridas";
+  const API_OC_LAF = "/api/plan-produccion-mensual/asistente-oc/laf-solicitado";
+  const API_OC_LAF_IMPORT = "/api/plan-produccion-mensual/asistente-oc/import-laf-solicitado";
+  const API_OC_LAF_PLANTILLA_CSV = "/api/plan-produccion-mensual/asistente-oc/plantilla-laf-solicitado.csv";
+  const API_OC_LAF_PLANTILLA_XLSX = "/api/plan-produccion-mensual/asistente-oc/plantilla-laf-solicitado.xlsx";
+  const API_OC_STOCK_PT = "/api/plan-produccion-mensual/asistente-oc/import-stock-pt";
+  const API_OC_DEUDA = "/api/plan-produccion-mensual/asistente-oc/import-deuda-clientes";
+  const API_OC_PLANTILLA_STOCK_PT = "/api/plan-produccion-mensual/asistente-oc/plantilla-stock-pt.csv";
+  const API_OC_PLANTILLA_STOCK_PT_XLSX = "/api/plan-produccion-mensual/asistente-oc/plantilla-stock-pt.xlsx";
+  const API_OC_PLANTILLA_DEUDA = "/api/plan-produccion-mensual/asistente-oc/plantilla-deuda-clientes.csv";
+  const API_OC_PLANTILLA_DEUDA_XLSX = "/api/plan-produccion-mensual/asistente-oc/plantilla-deuda-clientes.xlsx";
+  const API_OC_EXPORT = "/api/plan-produccion-mensual/asistente-oc/export-propuesta.csv";
+  const API_OC_EXPORT_XLSX = "/api/plan-produccion-mensual/asistente-oc/export-propuesta.xlsx";
+
+  let currentStep = 1;
+  const totalSteps = 5;
+
+  let presuncionItems = [];
+  let stockPtMap = {};
+  let deudaMap = {};
+
+  const anioPlan = document.getElementById("anioPlan");
+  const mesPlan = document.getElementById("mesPlan");
+  const anioStock = document.getElementById("anioStock");
+  const mesStock = document.getElementById("mesStock");
+  const fechaCorteStock = document.getElementById("fechaCorteStock");
+
+  const btnCargarPresuncion = document.getElementById("btnCargarPresuncion");
+  const presuncionFeedback = document.getElementById("presuncionFeedback");
+  const tablaPresuncionBody = document.querySelector("#tablaPresuncion tbody");
+
+  const archivoStockMp = document.getElementById("archivoStockMp");
+  const btnImportarStockMp = document.getElementById("btnImportarStockMp");
+  const btnPlantillaStockMp = document.getElementById("btnPlantillaStockMp");
+  const btnPlantillaStockMpXlsx = document.getElementById("btnPlantillaStockMpXlsx");
+  const stockMpFeedback = document.getElementById("stockMpFeedback");
+  const lafCodigo = document.getElementById("lafCodigo");
+  const lafProveedor = document.getElementById("lafProveedor");
+  const lafQ1 = document.getElementById("lafQ1");
+  const lafQ2 = document.getElementById("lafQ2");
+  const lafFechaPedido = document.getElementById("lafFechaPedido");
+  const lafFechaEntrega = document.getElementById("lafFechaEntrega");
+  const lafEstado = document.getElementById("lafEstado");
+  const archivoLafSolicitado = document.getElementById("archivoLafSolicitado");
+  const btnAgregarLaf = document.getElementById("btnAgregarLaf");
+  const btnImportarLaf = document.getElementById("btnImportarLaf");
+  const btnPlantillaLafCsv = document.getElementById("btnPlantillaLafCsv");
+  const btnPlantillaLafXlsx = document.getElementById("btnPlantillaLafXlsx");
+  const lafFeedback = document.getElementById("lafFeedback");
+  const tablaLafSolicitadoBody = document.querySelector("#tablaLafSolicitado tbody");
+
+  const archivoStockPt = document.getElementById("archivoStockPt");
+  const btnProcesarStockPt = document.getElementById("btnProcesarStockPt");
+  const btnPlantillaStockPt = document.getElementById("btnPlantillaStockPt");
+  const btnPlantillaStockPtXlsx = document.getElementById("btnPlantillaStockPtXlsx");
+  const stockPtFeedback = document.getElementById("stockPtFeedback");
+  const tablaStockPtBody = document.querySelector("#tablaStockPt tbody");
+
+  const archivoDeudaClientes = document.getElementById("archivoDeudaClientes");
+  const btnProcesarDeuda = document.getElementById("btnProcesarDeuda");
+  const btnPlantillaDeuda = document.getElementById("btnPlantillaDeuda");
+  const btnPlantillaDeudaXlsx = document.getElementById("btnPlantillaDeudaXlsx");
+  const deudaFeedback = document.getElementById("deudaFeedback");
+  const tablaDeudaBody = document.querySelector("#tablaDeudaClientes tbody");
+
+  const btnCalcularOc = document.getElementById("btnCalcularOc");
+  const btnExportarOc = document.getElementById("btnExportarOc");
+  const btnExportarOcXlsx = document.getElementById("btnExportarOcXlsx");
+  const persistirSugerencias = document.getElementById("persistirSugerencias");
+  const ocFeedback = document.getElementById("ocFeedback");
+  const kpiOc = document.getElementById("kpiOc");
+  const tablaDemandaBody = document.querySelector("#tablaDemandaNeta tbody");
+  const tablaFaltantesBody = document.querySelector("#tablaFaltantesOc tbody");
+  const tablaCorridasBody = document.querySelector("#tablaCorridasOc tbody");
+  const alertasOc = document.getElementById("alertasOc");
+
+  const btnPasoPrev = document.getElementById("btnPasoPrev");
+  const btnPasoNext = document.getElementById("btnPasoNext");
+
+  function fmt(n) {
+    return Number(n || 0).toLocaleString("es-AR", { maximumFractionDigits: 2 });
+  }
+
+  function setStep(step) {
+    currentStep = Math.max(1, Math.min(totalSteps, step));
+    document.querySelectorAll(".wizard-body").forEach((pane) => {
+      pane.classList.toggle("hidden", Number(pane.dataset.pane) !== currentStep);
+    });
+    document.querySelectorAll(".wizard-step").forEach((s) => {
+      const stepNum = Number(s.dataset.step);
+      s.classList.toggle("active", stepNum === currentStep);
+      s.classList.toggle("done", stepNum < currentStep);
+    });
+    btnPasoPrev.disabled = currentStep === 1;
+    btnPasoNext.disabled = currentStep === totalSteps;
+  }
+
+  function parseCsvRows(text) {
+    const lines = String(text || "").split(/\r?\n/).filter((ln) => ln.trim());
+    if (!lines.length) return [];
+    const sep = lines[0].includes(";") ? ";" : ",";
+    const headers = lines[0].split(sep).map((h) => h.trim().toLowerCase());
+    const rows = [];
+    for (let i = 1; i < lines.length; i += 1) {
+      const cols = lines[i].split(sep);
+      const row = {};
+      headers.forEach((h, idx) => {
+        row[h] = String(cols[idx] || "").trim();
+      });
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  async function readFileText(file) {
+    return await file.text();
+  }
+
+  async function cargarPresuncion() {
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    if (!anio || !mes) {
+      presuncionFeedback.textContent = "Indica anio y mes.";
+      return;
+    }
+
+    presuncionFeedback.textContent = "Cargando...";
+    tablaPresuncionBody.innerHTML = '<tr><td colspan="3">Cargando...</td></tr>';
+
+    const resp = await fetch(`${API_RESUMEN}?mes=${mes}&anio=${anio}`);
+    if (!resp.ok) {
+      presuncionFeedback.textContent = `Error ${resp.status} cargando presuncion.`;
+      tablaPresuncionBody.innerHTML = '<tr><td colspan="3"><em>Sin datos</em></td></tr>';
+      return;
+    }
+
+    const data = await resp.json();
+    presuncionItems = Array.isArray(data.items) ? data.items : [];
+
+    if (!presuncionItems.length) {
+      presuncionFeedback.textContent = "No hay presuncion cargada para ese periodo.";
+      tablaPresuncionBody.innerHTML = '<tr><td colspan="3"><em>Sin datos</em></td></tr>';
+      return;
+    }
+
+    tablaPresuncionBody.innerHTML = "";
+    presuncionItems.forEach((it) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${it.codigo || ""}</td>
+        <td>${it.nombre || ""}</td>
+        <td>${fmt(it.cantidad || 0)}</td>
+      `;
+      tablaPresuncionBody.appendChild(tr);
+    });
+
+    const d = new Date(anio, mes - 1, 1);
+    d.setMonth(d.getMonth() - 1);
+    anioStock.value = d.getFullYear();
+    mesStock.value = d.getMonth() + 1;
+    fechaCorteStock.value = new Date().toISOString().slice(0, 10);
+
+    await cargarAjustesPersistidos(anio, mes);
+
+    presuncionFeedback.textContent = `Presuncion cargada: ${presuncionItems.length} productos.`;
+  }
+
+  async function importarStockMp() {
+    if (!CAN_WRITE) {
+      stockMpFeedback.textContent = "Tu usuario no tiene permiso de escritura para stock.";
+      return;
+    }
+
+    const anio = Number(anioStock.value);
+    const mes = Number(mesStock.value);
+    const fecha = fechaCorteStock.value;
+    const file = archivoStockMp.files[0];
+
+    if (!anio || !mes || !fecha || !file) {
+      stockMpFeedback.textContent = "Completa anio/mes/fecha y selecciona archivo.";
+      return;
+    }
+
+    stockMpFeedback.textContent = "Importando stock MP...";
+    const form = new FormData();
+    form.append("archivo", file);
+    form.append("fecha_corte", fecha);
+
+    const resp = await fetch(`${API_IMPORT_STOCK}/${anio}/${mes}/import`, {
+      method: "POST",
+      body: form,
+    });
+
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      stockMpFeedback.textContent = `Error ${resp.status}: ${data.detail || "importacion fallida"}`;
+      return;
+    }
+
+    stockMpFeedback.textContent = `OK. Insertados ${data.insertados || 0}, actualizados ${data.actualizados || 0}, rechazados ${data.rechazados || 0}.`;
+  }
+
+  async function cargarCsvEnMapa(fileInput, keyCol, valueCol) {
+    const file = fileInput.files[0];
+    if (!file) return {};
+
+    const text = await readFileText(file);
+    const rows = parseCsvRows(text);
+    const out = {};
+    rows.forEach((r) => {
+      const codigo = String(r[keyCol] || "").trim().toUpperCase();
+      if (!codigo) return;
+      const value = Number(String(r[valueCol] || "0").replace(",", "."));
+      out[codigo] = Number.isFinite(value) && value > 0 ? value : 0;
+    });
+    return out;
+  }
+
+  function renderSimpleMapTable(tbody, mapObj, valueLabel) {
+    tbody.innerHTML = "";
+    const keys = Object.keys(mapObj);
+    if (!keys.length) {
+      tbody.innerHTML = '<tr><td colspan="2"><em>Sin datos</em></td></tr>';
+      return;
+    }
+    keys.sort().forEach((codigo) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${codigo}</td><td>${fmt(mapObj[codigo])}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function cargarAjustesPersistidos(anio, mes) {
+    const resp = await fetch(`${API_OC_AJUSTES}?mes=${mes}&anio=${anio}`);
+    if (!resp.ok) {
+      return;
+    }
+    const data = await resp.json().catch(() => ({}));
+    const items = Array.isArray(data.items) ? data.items : [];
+
+    stockPtMap = {};
+    deudaMap = {};
+    items.forEach((it) => {
+      const codigo = String(it.codigo || "").trim().toUpperCase();
+      if (!codigo) return;
+      stockPtMap[codigo] = Number(it.stock_pt || 0);
+      deudaMap[codigo] = Number(it.deuda_clientes || 0);
+    });
+    renderSimpleMapTable(tablaStockPtBody, stockPtMap, "stock_pt");
+    renderSimpleMapTable(tablaDeudaBody, deudaMap, "deuda_clientes");
+
+    await cargarCorridas(anio, mes);
+    await cargarLafSolicitado(anio, mes);
+  }
+
+  function limpiarFormLaf() {
+    lafCodigo.value = "";
+    lafProveedor.value = "";
+    lafQ1.value = "";
+    lafQ2.value = "";
+    lafFechaPedido.value = "";
+    lafFechaEntrega.value = "";
+    lafEstado.value = "PENDIENTE";
+  }
+
+  function renderLafSolicitado(items) {
+    const list = Array.isArray(items) ? items : [];
+    tablaLafSolicitadoBody.innerHTML = "";
+    if (!list.length) {
+      tablaLafSolicitadoBody.innerHTML = '<tr><td colspan="8"><em>Sin datos</em></td></tr>';
+      return;
+    }
+
+    list.forEach((it) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${it.codigo || ""}</td>
+        <td>${it.proveedor_nombre || ""}</td>
+        <td>${fmt(it.cantidad_total || 0)}</td>
+        <td>${fmt(it.cantidad_q1 || 0)}</td>
+        <td>${fmt(it.cantidad_q2 || 0)}</td>
+        <td>${it.fecha_entrega_estimada || ""}</td>
+        <td>${it.estado || ""}</td>
+        <td>${CAN_WRITE ? `<button class="btn-accion" data-del-laf="${it.id}">Eliminar</button>` : ""}</td>
+      `;
+      tablaLafSolicitadoBody.appendChild(tr);
+    });
+  }
+
+  async function cargarLafSolicitado(anio, mes) {
+    const resp = await fetch(`${API_OC_LAF}?mes=${mes}&anio=${anio}`);
+    if (!resp.ok) {
+      tablaLafSolicitadoBody.innerHTML = '<tr><td colspan="8"><em>No se pudo cargar solicitado LAF</em></td></tr>';
+      return;
+    }
+    const data = await resp.json().catch(() => ({}));
+    renderLafSolicitado(data.items || []);
+  }
+
+  async function agregarLafSolicitado() {
+    if (!CAN_WRITE) {
+      lafFeedback.textContent = "Tu usuario no tiene permiso de escritura en plan.";
+      return;
+    }
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    if (!anio || !mes) {
+      lafFeedback.textContent = "Primero cargá período (año/mes).";
+      return;
+    }
+
+    const payload = {
+      codigo: String(lafCodigo.value || "").trim().toUpperCase(),
+      proveedor_nombre: String(lafProveedor.value || "").trim(),
+      cantidad_q1: Number(lafQ1.value || 0),
+      cantidad_q2: Number(lafQ2.value || 0),
+      fecha_pedido: lafFechaPedido.value || null,
+      fecha_entrega_estimada: lafFechaEntrega.value || null,
+      estado: lafEstado.value || "PENDIENTE",
+    };
+
+    if (!payload.codigo || !payload.proveedor_nombre) {
+      lafFeedback.textContent = "Completá código LAF y proveedor.";
+      return;
+    }
+
+    lafFeedback.textContent = "Guardando solicitado LAF...";
+    const resp = await fetch(`${API_OC_LAF}?mes=${mes}&anio=${anio}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      lafFeedback.textContent = `Error ${resp.status}: ${data.detail || "no se pudo guardar"}`;
+      return;
+    }
+
+    lafFeedback.textContent = "Solicitado LAF guardado.";
+    limpiarFormLaf();
+    await cargarLafSolicitado(anio, mes);
+  }
+
+  async function importarLafSolicitado() {
+    if (!CAN_WRITE) {
+      lafFeedback.textContent = "Tu usuario no tiene permiso de escritura en plan.";
+      return;
+    }
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    const file = archivoLafSolicitado.files[0];
+    if (!anio || !mes || !file) {
+      lafFeedback.textContent = "Indicá período y archivo para importar.";
+      return;
+    }
+
+    lafFeedback.textContent = "Importando solicitado LAF...";
+    const form = new FormData();
+    form.append("file", file);
+    const resp = await fetch(`${API_OC_LAF_IMPORT}?mes=${mes}&anio=${anio}`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      lafFeedback.textContent = `Error ${resp.status}: ${data.detail || "importación fallida"}`;
+      return;
+    }
+
+    lafFeedback.textContent = `Importación LAF completa. Insertados: ${data.insertados || 0}, rechazados: ${data.rechazados || 0}.`;
+    await cargarLafSolicitado(anio, mes);
+  }
+
+  tablaLafSolicitadoBody.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("button[data-del-laf]");
+    if (!btn || !CAN_WRITE) return;
+    const id = Number(btn.getAttribute("data-del-laf"));
+    if (!id) return;
+    if (!window.confirm("¿Eliminar este solicitado LAF?")) return;
+
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    const resp = await fetch(`${API_OC_LAF}/${id}`, { method: "DELETE" });
+    if (!resp.ok) {
+      lafFeedback.textContent = "No se pudo eliminar el registro.";
+      return;
+    }
+    lafFeedback.textContent = "Registro eliminado.";
+    await cargarLafSolicitado(anio, mes);
+  });
+
+  function formatFechaCorrida(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString("es-AR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  async function cargarCorridas(anio, mes) {
+    const params = new URLSearchParams({
+      limit: "10",
+      offset: "0",
+    });
+    if (anio) params.set("anio", String(anio));
+    if (mes) params.set("mes", String(mes));
+
+    const resp = await fetch(`${API_OC_CORRIDAS}?${params.toString()}`);
+    if (!resp.ok) {
+      tablaCorridasBody.innerHTML = '<tr><td colspan="4"><em>No se pudo cargar historial</em></td></tr>';
+      return;
+    }
+    const data = await resp.json().catch(() => ({}));
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      tablaCorridasBody.innerHTML = '<tr><td colspan="4"><em>Sin corridas registradas</em></td></tr>';
+      return;
+    }
+
+    tablaCorridasBody.innerHTML = "";
+    items.forEach((it) => {
+      const tr = document.createElement("tr");
+      const nombre = String(it.usuario_nombre || "").trim();
+      const email = String(it.usuario_email || "").trim();
+      tr.innerHTML = `
+        <td>${formatFechaCorrida(it.fecha_corrida)}</td>
+        <td>${String(it.mes || "").padStart(2, "0")}/${it.anio || ""}</td>
+        <td>${nombre || email}</td>
+        <td>${it.persistio_sugerencias ? "Si" : "No"}</td>
+      `;
+      tablaCorridasBody.appendChild(tr);
+    });
+  }
+
+  async function procesarStockPt() {
+    if (!CAN_WRITE) {
+      stockPtFeedback.textContent = "Tu usuario no tiene permiso de escritura en plan.";
+      return;
+    }
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    const file = archivoStockPt.files[0];
+    if (!anio || !mes || !file) {
+      stockPtFeedback.textContent = "Primero cargá período y archivo de stock PT.";
+      return;
+    }
+
+    stockPtFeedback.textContent = "Guardando stock PT...";
+    const form = new FormData();
+    form.append("file", file);
+
+    const resp = await fetch(`${API_OC_STOCK_PT}?mes=${mes}&anio=${anio}`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      stockPtFeedback.textContent = `Error ${resp.status}: ${data.detail || "no se pudo importar"}`;
+      return;
+    }
+
+    stockPtMap = {};
+    (data.items || []).forEach((it) => {
+      const codigo = String(it.codigo || "").trim().toUpperCase();
+      if (!codigo) return;
+      stockPtMap[codigo] = Number(it.stock_pt || 0);
+    });
+    renderSimpleMapTable(tablaStockPtBody, stockPtMap, "stock_pt");
+    stockPtFeedback.textContent = `Stock PT guardado. Upserts: ${data.upserts || 0}, rechazados: ${data.rechazados || 0}.`;
+  }
+
+  async function procesarDeudaClientes() {
+    if (!CAN_WRITE) {
+      deudaFeedback.textContent = "Tu usuario no tiene permiso de escritura en plan.";
+      return;
+    }
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    const file = archivoDeudaClientes.files[0];
+    if (!anio || !mes || !file) {
+      deudaFeedback.textContent = "Primero cargá período y archivo de deuda clientes.";
+      return;
+    }
+
+    deudaFeedback.textContent = "Guardando deuda clientes...";
+    const form = new FormData();
+    form.append("file", file);
+
+    const resp = await fetch(`${API_OC_DEUDA}?mes=${mes}&anio=${anio}`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      deudaFeedback.textContent = `Error ${resp.status}: ${data.detail || "no se pudo importar"}`;
+      return;
+    }
+
+    deudaMap = {};
+    (data.items || []).forEach((it) => {
+      const codigo = String(it.codigo || "").trim().toUpperCase();
+      if (!codigo) return;
+      deudaMap[codigo] = Number(it.deuda_clientes || 0);
+    });
+    renderSimpleMapTable(tablaDeudaBody, deudaMap, "deuda_clientes");
+    deudaFeedback.textContent = `Deuda guardada. Upserts: ${data.upserts || 0}, rechazados: ${data.rechazados || 0}.`;
+  }
+
+  function descargar(url) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function buildAjustesPt() {
+    const ajustes = [];
+    presuncionItems.forEach((it) => {
+      const codigo = String(it.codigo || "").trim().toUpperCase();
+      ajustes.push({
+        producto_id: Number(it.producto_id),
+        codigo,
+        stock_pt: Number(stockPtMap[codigo] || 0),
+        deuda_clientes: Number(deudaMap[codigo] || 0),
+      });
+    });
+    return ajustes;
+  }
+
+  function renderKpi(resumen) {
+    const cards = [
+      ["Presuncion original", fmt(resumen.total_presuncion_original || 0)],
+      ["Stock PT", fmt(resumen.total_stock_pt || 0)],
+      ["Deuda clientes", fmt(resumen.total_deuda_clientes || 0)],
+      ["Demanda neta PT", fmt(resumen.total_demanda_neta_pt || 0)],
+      ["Solicitado previo LAF", fmt(resumen.total_solicitado_previo_laf || 0)],
+      ["Total faltante MP", fmt(resumen.total_faltante || 0)],
+      ["Cobertura global", `${fmt(resumen.cobertura_global_pct || 0)} %`],
+    ];
+    kpiOc.innerHTML = cards
+      .map(([label, value]) => `
+        <article class="kpi-card">
+          <div class="kpi-label">${label}</div>
+          <div class="kpi-value">${value}</div>
+        </article>
+      `)
+      .join("");
+  }
+
+  function renderDemandaNeta(items) {
+    tablaDemandaBody.innerHTML = "";
+    if (!items.length) {
+      tablaDemandaBody.innerHTML = '<tr><td colspan="5"><em>Sin datos</em></td></tr>';
+      return;
+    }
+
+    items.forEach((it) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${it.codigo || ""}</td>
+        <td>${fmt(it.cantidad_original || 0)}</td>
+        <td>${fmt(it.stock_pt || 0)}</td>
+        <td>${fmt(it.deuda_clientes || 0)}</td>
+        <td>${fmt(it.demanda_neta || 0)}</td>
+      `;
+      tablaDemandaBody.appendChild(tr);
+    });
+  }
+
+  function renderFaltantes(items) {
+    tablaFaltantesBody.innerHTML = "";
+    const top = items.slice(0, 30);
+    if (!top.length) {
+      tablaFaltantesBody.innerHTML = '<tr><td colspan="6"><em>Sin faltantes</em></td></tr>';
+      return;
+    }
+
+    top.forEach((it) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${it.codigo || ""}</td>
+        <td>${it.nombre || ""}</td>
+        <td>${it.um_codigo || ""}</td>
+        <td>${fmt(it.cantidad_requerida || 0)}</td>
+        <td>${fmt(it.stock_disponible || 0)}</td>
+        <td>${fmt(it.faltante || 0)}</td>
+      `;
+      tablaFaltantesBody.appendChild(tr);
+    });
+  }
+
+  function renderAlertas(items) {
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      alertasOc.classList.add("hidden");
+      alertasOc.innerHTML = "";
+      return;
+    }
+    alertasOc.classList.remove("hidden");
+    alertasOc.innerHTML = list.map((a) => `<div>• ${a}</div>`).join("");
+  }
+
+  async function calcularOc() {
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    if (!anio || !mes) {
+      ocFeedback.textContent = "Primero cargá el periodo de presuncion.";
+      return;
+    }
+    if (!presuncionItems.length) {
+      ocFeedback.textContent = "No hay presuncion cargada.";
+      return;
+    }
+
+    ocFeedback.textContent = "Calculando...";
+    const ajustes_pt = buildAjustesPt();
+
+    const persistir = CAN_WRITE && Boolean(persistirSugerencias && persistirSugerencias.checked);
+
+    const resp = await fetch(`${API_OC}?mes=${mes}&anio=${anio}&persistir_sugerencias=${persistir ? "true" : "false"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ajustes_pt }),
+    });
+
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      ocFeedback.textContent = `Error ${resp.status}: ${data.detail || "no se pudo calcular"}`;
+      return;
+    }
+
+    renderKpi(data.resumen || {});
+    renderDemandaNeta(data.demanda_neta_pt || []);
+    renderFaltantes(data.faltantes || []);
+    renderAlertas(data.alertas || []);
+    ocFeedback.textContent = "Calculo completo.";
+    await cargarCorridas(anio, mes);
+  }
+
+  btnCargarPresuncion.addEventListener("click", cargarPresuncion);
+  btnImportarStockMp.addEventListener("click", importarStockMp);
+  btnPlantillaStockMp.addEventListener("click", () => descargar(API_STOCK_TEMPLATE_CSV));
+  btnPlantillaStockMpXlsx.addEventListener("click", () => descargar(API_STOCK_TEMPLATE_XLSX));
+  btnAgregarLaf.addEventListener("click", agregarLafSolicitado);
+  btnImportarLaf.addEventListener("click", importarLafSolicitado);
+  btnPlantillaLafCsv.addEventListener("click", () => descargar(API_OC_LAF_PLANTILLA_CSV));
+  btnPlantillaLafXlsx.addEventListener("click", () => descargar(API_OC_LAF_PLANTILLA_XLSX));
+  btnProcesarStockPt.addEventListener("click", procesarStockPt);
+  btnProcesarDeuda.addEventListener("click", procesarDeudaClientes);
+  btnPlantillaStockPt.addEventListener("click", () => descargar(API_OC_PLANTILLA_STOCK_PT));
+  btnPlantillaStockPtXlsx.addEventListener("click", () => descargar(API_OC_PLANTILLA_STOCK_PT_XLSX));
+  btnPlantillaDeuda.addEventListener("click", () => descargar(API_OC_PLANTILLA_DEUDA));
+  btnPlantillaDeudaXlsx.addEventListener("click", () => descargar(API_OC_PLANTILLA_DEUDA_XLSX));
+  btnCalcularOc.addEventListener("click", calcularOc);
+  btnExportarOc.addEventListener("click", () => {
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    if (!anio || !mes) {
+      ocFeedback.textContent = "Indicá período para exportar.";
+      return;
+    }
+    descargar(`${API_OC_EXPORT}?mes=${mes}&anio=${anio}`);
+  });
+  btnExportarOcXlsx.addEventListener("click", () => {
+    const anio = Number(anioPlan.value);
+    const mes = Number(mesPlan.value);
+    if (!anio || !mes) {
+      ocFeedback.textContent = "Indicá período para exportar.";
+      return;
+    }
+    descargar(`${API_OC_EXPORT_XLSX}?mes=${mes}&anio=${anio}`);
+  });
+
+  btnPasoPrev.addEventListener("click", () => setStep(currentStep - 1));
+  btnPasoNext.addEventListener("click", () => setStep(currentStep + 1));
+
+  document.querySelectorAll(".wizard-step").forEach((s) => {
+    s.addEventListener("click", () => setStep(Number(s.dataset.step)));
+  });
+
+  const now = new Date();
+  anioPlan.value = now.getFullYear();
+  mesPlan.value = now.getMonth() + 1;
+  lafFechaPedido.value = new Date().toISOString().slice(0, 10);
+
+  cargarAjustesPersistidos(Number(anioPlan.value), Number(mesPlan.value));
+  cargarCorridas(Number(anioPlan.value), Number(mesPlan.value));
+  cargarLafSolicitado(Number(anioPlan.value), Number(mesPlan.value));
+
+  setStep(1);
+})();
+</script>
+{% endblock %}

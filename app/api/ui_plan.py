@@ -62,3 +62,11 @@ async def ui_plan_requerimientos(request: Request):
         "plan/plan_requerimientos.html",
         {"request": request},
     )
+
+
+@router.get("/plan-asistente-oc", response_class=HTMLResponse)
+async def ui_plan_asistente_oc(request: Request):
+    return templates.TemplateResponse(
+        "plan/plan_asistente_oc.html",
+        {"request": request},
+    )

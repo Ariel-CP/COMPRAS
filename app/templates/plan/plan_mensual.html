@@ -73,6 +73,11 @@
       </button>
     </div>
     <div>
+      <button id="btnAsistenteOc" type="button" class="btn-accion">
+        Asistente OC
+      </button>
+    </div>
+    <div>
       <button id="btnFaltantesCapacidad" type="button" class="btn-accion">
         Faltantes y capacidad
       </button>
@@ -117,7 +122,7 @@
 </section>
 
 <section class="panel">
-  <h3>Listado de Productos Terminados (editable)</h3>
+  <h3>Presunción de ventas (editable)</h3>
   <div class="tabla-wrapper">
     <table id="tablaPlanes" class="striped">
       <thead>
@@ -190,6 +195,28 @@
       </tbody>
     </table>
   </div>
+
+  <div class="tabla-wrapper" style="margin-top: 12px;">
+    <h4>Asignación por prioridad (productos con mayor presunción primero)</h4>
+    <table id="tablaPrioridadesPlan" class="striped">
+      <thead>
+        <tr>
+          <th>Prioridad</th>
+          <th>PT</th>
+          <th>Presunción</th>
+          <th>Componente</th>
+          <th>Requerido</th>
+          <th>Stock antes</th>
+          <th>Asignado</th>
+          <th>Faltante</th>
+          <th>Stock después</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="9"><em>Sin datos</em></td></tr>
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %} {% block scripts %}
 <script>
@@ -225,6 +252,7 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     const btnVerRequerimientos = document.getElementById(
       "btnVerRequerimientos"
     );
+    const btnAsistenteOc = document.getElementById("btnAsistenteOc");
     const btnFaltantesCapacidad = document.getElementById(
       "btnFaltantesCapacidad"
     );
@@ -235,6 +263,9 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     );
     const tablaCapacidadBody = document.querySelector(
       "#tablaCapacidadPlan tbody"
+    );
+    const tablaPrioridadesBody = document.querySelector(
+      "#tablaPrioridadesPlan tbody"
     );
     let selectedPeriodoKey = "";
 
@@ -523,6 +554,47 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       });
     }
 
+    function renderPrioridades(items) {
+      const rows = Array.isArray(items) ? items : [];
+      tablaPrioridadesBody.innerHTML = "";
+      if (!rows.length) {
+        tablaPrioridadesBody.innerHTML =
+          '<tr><td colspan="9"><em>Sin detalle de asignación priorizada</em></td></tr>';
+        return;
+      }
+
+      rows.forEach((pt) => {
+        const componentes = Array.isArray(pt.componentes) ? pt.componentes : [];
+        if (!componentes.length) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${pt.prioridad ?? ""}</td>
+            <td>${pt.producto_plan_codigo || ""} - ${pt.producto_plan_nombre || ""}</td>
+            <td>${fmt(pt.cantidad_presunta || 0)}</td>
+            <td colspan="6"><em>Sin componentes para asignar</em></td>
+          `;
+          tablaPrioridadesBody.appendChild(tr);
+          return;
+        }
+
+        componentes.forEach((comp, idx) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${idx === 0 ? pt.prioridad ?? "" : ""}</td>
+            <td>${idx === 0 ? `${pt.producto_plan_codigo || ""} - ${pt.producto_plan_nombre || ""}` : ""}</td>
+            <td>${idx === 0 ? fmt(pt.cantidad_presunta || 0) : ""}</td>
+            <td>${comp.componente_codigo || ""} - ${comp.componente_nombre || ""}</td>
+            <td>${fmt(comp.requerido || 0)}</td>
+            <td>${fmt(comp.stock_antes || 0)}</td>
+            <td>${fmt(comp.stock_asignado || 0)}</td>
+            <td>${fmt(comp.faltante || 0)}</td>
+            <td>${fmt(comp.stock_despues || 0)}</td>
+          `;
+          tablaPrioridadesBody.appendChild(tr);
+        });
+      });
+    }
+
     async function cargarAnalisisPlan() {
       const mes = Number(inputMes.value);
       const anio = Number(inputAnio.value);
@@ -537,6 +609,8 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
         '<tr><td colspan="7"><em>Calculando...</em></td></tr>';
       tablaCapacidadBody.innerHTML =
         '<tr><td colspan="7"><em>Calculando...</em></td></tr>';
+      tablaPrioridadesBody.innerHTML =
+        '<tr><td colspan="9"><em>Calculando...</em></td></tr>';
 
       const persistir = CAN_WRITE ? "true" : "false";
       const url = `${API_ANALISIS}?mes=${mes}&anio=${anio}&persistir_sugerencias=${persistir}`;
@@ -555,19 +629,25 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
         analisisResumen.textContent = msg;
         tablaFaltantesBody.innerHTML = `<tr><td colspan="7"><em>${msg}</em></td></tr>`;
         tablaCapacidadBody.innerHTML = `<tr><td colspan="7"><em>${msg}</em></td></tr>`;
+        tablaPrioridadesBody.innerHTML = `<tr><td colspan="9"><em>${msg}</em></td></tr>`;
         return;
       }
 
       const data = await resp.json();
       const resumen = data.resumen || {};
       const sug = data.sugerencias || {};
+      const mesStock = Number(resumen.mes_stock_base || 0);
+      const anioStock = Number(resumen.anio_stock_base || 0);
+      const periodoStockTxt = mesStock && anioStock ? `${mesStock}/${anioStock}` : "-";
       analisisResumen.textContent =
+        `Stock base: ${periodoStockTxt} | ` +
         `Cobertura global: ${fmtPct(resumen.cobertura_global_pct)} | ` +
         `Total faltante MP: ${fmt(resumen.total_faltante || 0)} | ` +
         `Sugerencias actualizadas: ${fmt(sug.persistidas || 0)}`;
 
       renderFaltantes(data.faltantes || []);
       renderCapacidad(data.capacidad || []);
+      renderPrioridades(data.prioridades || []);
       renderAlertas(data.alertas || []);
     }
 
@@ -668,6 +748,12 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       const anio = inputAnio.value || "";
       const qs = mes && anio ? `?mes=${mes}&anio=${anio}` : "";
       window.location.href = `/ui/plan-requerimientos${qs}`;
+    });
+    btnAsistenteOc.addEventListener("click", () => {
+      const mes = inputMes.value || "";
+      const anio = inputAnio.value || "";
+      const qs = mes && anio ? `?mes=${mes}&anio=${anio}` : "";
+      window.location.href = `/ui/plan-asistente-oc${qs}`;
     });
     btnFaltantesCapacidad.addEventListener("click", cargarAnalisisPlan);
     btnImportar.addEventListener("click", importarArchivo);

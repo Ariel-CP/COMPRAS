@@ -17,6 +17,7 @@
     <nav>
       <a href="/ui" class="inicio-verde">Inicio</a>
       {% if perms.get('plan', (False, False))[0] %}<a href="/ui/plan">Plan</a>{% endif %}
+      {% if perms.get('plan', (False, False))[0] %}<a href="/ui/plan-asistente-oc">Asistente OC</a>{% endif %}
       {% if perms.get('stock', (False, False))[0] %}<a href="/ui/stock">Stock</a>{% endif %}
       {% if perms.get('productos', (False, False))[0] %}<a href="/ui/productos">Artículos</a>{% endif %}
       {% if perms.get('mbom', (False, False))[0] %}<a href="/ui/mbom">Estructura</a>{% endif %}
