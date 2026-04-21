@@ -102,9 +102,9 @@ def get_update_status() -> dict:
         }
 
     try:
-        # ls-remote no necesita fetch; solo una llamada HTTP a GitHub
-        raw = _run(["git", "ls-remote", "origin", "HEAD"], timeout=8)
-        remote_full = raw.split()[0] if raw else ""
+        # Fetch para obtener FETCH_HEAD actualizado con los últimos commits remotos.
+        _run(["git", "fetch", "--quiet", "origin", "HEAD"], timeout=20)
+        remote_full = _run(["git", "rev-parse", "FETCH_HEAD"])
         remote = remote_full[:7] if remote_full else "N/A"
     except (RuntimeError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.warning("No se pudo consultar remote: %s", exc)
@@ -119,15 +119,17 @@ def get_update_status() -> dict:
             "improvements_total": 0,
         }
 
-    available = bool(remote_full) and not remote_full.startswith(
-        _run(["git", "rev-parse", "HEAD"])
-    )
+    # Cuenta cuántos commits del remoto NO están en local (local está "detrás").
+    # Si local tiene commits sin push (está adelante), behind_count = 0 → no hay update.
+    try:
+        behind_count = int(_run(["git", "rev-list", "HEAD..FETCH_HEAD", "--count"]))
+        available = behind_count > 0
+    except (RuntimeError, ValueError, subprocess.TimeoutExpired):
+        available = False
 
     improvements: list[str] = []
     if available:
         try:
-            # Obtiene los objetos remotos y usa FETCH_HEAD como referencia temporal.
-            _run(["git", "fetch", "--quiet", "origin", "HEAD"], timeout=20)
             raw_commits = _run(
                 [
                     "git",
