@@ -98,7 +98,9 @@ button{margin-right:8px}
 .item-icon{width:16px;flex:0 0 16px;text-align:center;color:#6f42c1;font-weight:700}
 .wizard-oc-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;color:#ffd24d;vertical-align:middle;flex:0 0 16px}
 .wizard-oc-icon svg{width:16px;height:16px;display:block;fill:currentColor}
-.btn-accion .wizard-oc-icon{color:#ffe082}
+.btn-accion .wizard-oc-icon{color:#ffe082;width:13px;height:13px;flex:0 0 13px}
+.btn-accion .wizard-oc-icon svg{width:13px;height:13px}
+.btn-accion:has(.wizard-oc-icon){display:inline-flex;align-items:center;gap:4px}
 .wizard-oc-heading{display:flex;align-items:center;gap:8px}
 /* Centrado de la tabla productos */
 table.productos-table th, table.productos-table td,
