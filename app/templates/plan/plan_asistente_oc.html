@@ -2,11 +2,18 @@
 {% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
 {% set CAN_WRITE_JS = can_write_js('plan') %}
 
-{% block title %}Asistente de Orden de Compra{% endblock %}
+{% block title %}Wizard de Orden de Compra{% endblock %}
 
 {% block content %}
 <section class="panel wizard-panel">
-  <h2>Asistente de Orden de Compra</h2>
+  <h2 class="wizard-oc-heading">
+    <span class="wizard-oc-icon" aria-hidden="true">
+      <svg viewBox="0 0 16 16" focusable="false">
+        <path d="M3.2 11.7 7.8 7.1l1.1 1.1-4.6 4.6H3.2Zm5-5L9.7 5.2l.9.9-1.5 1.5-.9-.9Zm1.9-1.9 1.8-1.8 1.1 1.1-1.8 1.8-1.1-1.1ZM11.9 7l.7-1.9.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7ZM4.6 3.1l.5-1.3.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5ZM7 1.8l.3-.8.3.8.8.3-.8.3-.3.8-.3-.8-.8-.3.8-.3Z" />
+      </svg>
+    </span>
+    <span>Wizard de Orden de Compra</span>
+  </h2>
   <p class="hint">
     Flujo guiado para calcular materiales: presuncion -> stock MP -> stock PT -> deuda clientes -> sugerencias.
   </p>

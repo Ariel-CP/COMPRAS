@@ -42,6 +42,7 @@ header a.inicio-verde,
 body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;padding:0}
 header{background:#0b5cab;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:16px}
 header nav a{color:#fff;margin-right:12px;text-decoration:none}
+header nav a.wizard-oc-link{display:inline-flex;align-items:center;gap:6px}
 header .db-status{margin-left:auto;font-size:12px}
 header .db-status .ok{color:#bdfcc9}
 header .db-status .err{color:#ffd2d2}
@@ -95,6 +96,10 @@ button{margin-right:8px}
 .dropdown-toggle { z-index: 10000; }
 .hidden{display:none}
 .item-icon{width:16px;flex:0 0 16px;text-align:center;color:#6f42c1;font-weight:700}
+.wizard-oc-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;color:#ffd24d;vertical-align:middle;flex:0 0 16px}
+.wizard-oc-icon svg{width:16px;height:16px;display:block;fill:currentColor}
+.btn-accion .wizard-oc-icon{color:#ffe082}
+.wizard-oc-heading{display:flex;align-items:center;gap:8px}
 /* Centrado de la tabla productos */
 table.productos-table th, table.productos-table td,
 table.striped th, table.striped td,

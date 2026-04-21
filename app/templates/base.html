@@ -17,7 +17,16 @@
     <nav>
       <a href="/ui" class="inicio-verde">Inicio</a>
       {% if perms.get('plan', (False, False))[0] %}<a href="/ui/plan">Plan</a>{% endif %}
-      {% if perms.get('plan', (False, False))[0] %}<a href="/ui/plan-asistente-oc">Asistente OC</a>{% endif %}
+      {% if perms.get('plan', (False, False))[0] %}
+      <a href="/ui/plan-asistente-oc" class="wizard-oc-link">
+        <span class="wizard-oc-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" focusable="false">
+            <path d="M3.2 11.7 7.8 7.1l1.1 1.1-4.6 4.6H3.2Zm5-5L9.7 5.2l.9.9-1.5 1.5-.9-.9Zm1.9-1.9 1.8-1.8 1.1 1.1-1.8 1.8-1.1-1.1ZM11.9 7l.7-1.9.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7ZM4.6 3.1l.5-1.3.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5ZM7 1.8l.3-.8.3.8.8.3-.8.3-.3.8-.3-.8-.8-.3.8-.3Z" />
+          </svg>
+        </span>
+        <span>Wizard OC</span>
+      </a>
+      {% endif %}
       {% if perms.get('stock', (False, False))[0] %}<a href="/ui/stock">Stock</a>{% endif %}
       {% if perms.get('productos', (False, False))[0] %}<a href="/ui/productos">Artículos</a>{% endif %}
       {% if perms.get('mbom', (False, False))[0] %}<a href="/ui/mbom">Estructura</a>{% endif %}
