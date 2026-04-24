@@ -17,6 +17,7 @@
   <p class="hint">
     Flujo guiado para calcular materiales: presuncion -> stock MP -> stock PT -> deuda clientes -> sugerencias.
   </p>
+  <button type="button" id="btnVerProcedimiento" class="btn-procedimiento">¿Cómo funciona? →</button>
 
   <div class="wizard-steps" id="wizardSteps">
     <button type="button" class="wizard-step active" data-step="1">1. Presuncion</button>
@@ -271,6 +272,113 @@
   <button id="btnPasoPrev" type="button" class="btn-accion">Anterior</button>
   <button id="btnPasoNext" type="button" class="btn-accion">Siguiente</button>
 </section>
+
+<!-- Modal: procedimiento detallado del wizard -->
+<div id="modalProcedimiento" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalProcedimientoTitulo">
+  <div class="modal-panel">
+    <button type="button" id="btnCerrarProcedimiento" class="modal-close" aria-label="Cerrar">&times;</button>
+    <h2 id="modalProcedimientoTitulo">Procedimiento del Wizard de Orden de Compra</h2>
+    <p class="modal-desc">
+      El <strong>Wizard de OC</strong> es un asistente guiado de 5 pasos que calcula la sugerencia de compra de materias primas
+      para un período mensual. Integra la presunción de ventas, el stock disponible de MP y de productos terminados,
+      y los compromisos de entrega a clientes para determinar exactamente qué materiales hace falta comprar.
+    </p>
+    <p class="modal-tip">
+      💡 Los pasos 1 a 4 cargan datos; el paso 5 ejecuta el cálculo. Podés avanzar y volver libremente entre pasos.
+    </p>
+
+    <div class="modal-procedimiento-step">
+      <h3>Paso 1 — Presunción del período</h3>
+      <p>
+        Ingresá el <strong>año y mes</strong> para el que querés generar la OC y hacé click en
+        <em>Cargar presunción</em>. El sistema trae desde el plan de producción mensual las cantidades
+        de productos terminados (PT) previstas para ese período.
+      </p>
+      <p>
+        Estas cantidades son el punto de partida de todo el cálculo. Si no hay presunción cargada
+        para el período elegido, el wizard no podrá generar sugerencias.
+      </p>
+      <ul>
+        <li>Si el período no tiene datos, primero cargá el plan de producción en el módulo <em>Plan → Plan mensual</em>.</li>
+        <li>Al cargar la presunción el sistema pre-completa automáticamente el mes anterior como período de stock MP.</li>
+      </ul>
+    </div>
+
+    <div class="modal-procedimiento-step">
+      <h3>Paso 2 — Stock de Materia Prima (MP) y solicitado LAF</h3>
+      <p>
+        Importá el archivo de stock de materias primas exportado desde el ERP <strong>Flexxus</strong>
+        (formato CSV o XLSX). Indicá también el mes/año al que corresponde ese stock y la fecha de corte.
+      </p>
+      <p>
+        El <strong>solicitado LAF</strong> representa pedidos ya emitidos a proveedores de largo plazo de
+        abastecimiento (materiales con 3 meses de anticipación). Al registrarlos acá se descuentan del
+        faltante calculado, evitando generar órdenes de compra duplicadas.
+      </p>
+      <ul>
+        <li>Descargá la plantilla CSV o XLSX con el botón correspondiente para ver el formato esperado.</li>
+        <li>Podés importar el LAF solicitado desde un archivo o ingresarlo manualmente fila por fila.</li>
+        <li>Los estados posibles del LAF son: PENDIENTE, PARCIAL, RECIBIDO, CANCELADO.</li>
+      </ul>
+    </div>
+
+    <div class="modal-procedimiento-step">
+      <h3>Paso 3 — Stock de Productos Terminados (PT)</h3>
+      <p>
+        Importá el stock actual de PT (CSV o XLSX con columnas <code>codigo</code> y <code>stock_pt</code>).
+        Este stock <strong>reduce la demanda neta</strong>: si ya hay PT en depósito, se necesita fabricar
+        menos, y por lo tanto se requiere menos materia prima.
+      </p>
+      <p>
+        Fórmula parcial: <code>Demanda neta = Presunción − Stock PT</code>
+      </p>
+      <ul>
+        <li>Si no tenés stock PT, dejá este paso sin archivo; el sistema usará 0 para todos los productos.</li>
+        <li>Los valores se persisten en la base de datos y se recuperan automáticamente la próxima vez que cargues el mismo período.</li>
+      </ul>
+    </div>
+
+    <div class="modal-procedimiento-step">
+      <h3>Paso 4 — Deuda a clientes (pendiente de fabricar)</h3>
+      <p>
+        Importá los compromisos de entrega pendientes (pedidos ya confirmados que aún no se fabricaron),
+        en CSV o XLSX con columnas <code>codigo</code> y <code>deuda_clientes</code>.
+        Estos compromisos <strong>suman a la demanda neta</strong>: hay que fabricar más para cumplirlos.
+      </p>
+      <p>
+        Fórmula completa: <code>Demanda neta = Presunción − Stock PT + Deuda clientes</code>
+      </p>
+      <ul>
+        <li>Si no hay deuda pendiente, podés omitir este paso.</li>
+        <li>Al igual que el stock PT, los valores se persisten por período.</li>
+      </ul>
+    </div>
+
+    <div class="modal-procedimiento-step">
+      <h3>Paso 5 — Cálculo de la Orden de Compra</h3>
+      <p>
+        Hacé click en <em>Calcular OC</em>. El sistema ejecuta los siguientes pasos internamente:
+      </p>
+      <ol>
+        <li><strong>Demanda neta de PT</strong>: aplica la fórmula del paso 4 a cada producto.</li>
+        <li><strong>Explosión de MBOM</strong>: descompone cada PT en sus componentes de MP usando
+        la lista de materiales (Bill of Materials).</li>
+        <li><strong>Requerimiento de MP</strong>: acumula la cantidad necesaria de cada materia prima
+        para cubrir la demanda neta total.</li>
+        <li><strong>Faltante</strong>: al requerimiento le resta el stock disponible de MP y lo ya
+        solicitado al proveedor LAF. El resultado es la sugerencia de compra.</li>
+      </ol>
+      <p>
+        El checkbox <em>Persistir sugerencias de compra</em> guarda el resultado en la tabla
+        <code>sugerencia_compra</code> de la base de datos para su posterior consulta en el módulo de compras.
+      </p>
+      <p class="modal-tip">
+        💡 Podés exportar la propuesta a CSV o XLSX para compartirla o cargarla en Flexxus.
+        Cada ejecución queda registrada en el historial de corridas con fecha, usuario y si se persistió.
+      </p>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block styles %}
@@ -326,9 +434,115 @@
     font-weight: 700;
     color: #0b5cab;
   }
+  .btn-procedimiento {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 6px 14px;
+    border: 1.5px solid #0b5cab;
+    border-radius: 999px;
+    background: transparent;
+    color: #0b5cab;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .btn-procedimiento:hover {
+    background: #0b5cab;
+    color: #fff;
+  }
+  /* Modal overlay */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 30, 60, 0.55);
+    z-index: 1000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px 24px;
+    overflow-y: auto;
+  }
+  .modal-overlay.hidden {
+    display: none;
+  }
+  .modal-panel {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.25);
+    max-width: 760px;
+    width: 100%;
+    padding: 28px 32px 32px;
+    position: relative;
+  }
+  .modal-panel h2 {
+    margin: 0 0 10px;
+    font-size: 20px;
+    color: #0b5cab;
+  }
+  .modal-desc {
+    font-size: 14px;
+    color: #334;
+    margin-bottom: 8px;
+  }
+  .modal-tip {
+    background: #fffbe6;
+    border-left: 4px solid #f5c518;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #554a00;
+    margin-bottom: 16px;
+  }
+  .modal-close {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #556;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .modal-close:hover { color: #c00; }
+  .modal-procedimiento-step {
+    border: 1px solid #d7e7ff;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    background: #f8fbff;
+  }
+  .modal-procedimiento-step h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    color: #0b5cab;
+  }
+  .modal-procedimiento-step p,
+  .modal-procedimiento-step li {
+    font-size: 13px;
+    color: #334;
+    line-height: 1.55;
+  }
+  .modal-procedimiento-step ul,
+  .modal-procedimiento-step ol {
+    padding-left: 20px;
+    margin: 6px 0 0;
+  }
+  .modal-procedimiento-step code {
+    background: #eef3ff;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12px;
+    color: #1a3d6e;
+  }
   @media (max-width: 860px) {
     .wizard-steps {
       grid-template-columns: 1fr;
+    }
+    .modal-panel {
+      padding: 20px 16px 24px;
     }
   }
 </style>
@@ -338,6 +552,24 @@
 <script>
 const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
 (function () {
+  // --- Modal procedimiento ---
+  const btnVerProcedimiento  = document.getElementById("btnVerProcedimiento");
+  const modalProcedimiento   = document.getElementById("modalProcedimiento");
+  const btnCerrarProced      = document.getElementById("btnCerrarProcedimiento");
+
+  function abrirProcedimiento()  { modalProcedimiento.classList.remove("hidden"); btnCerrarProced.focus(); }
+  function cerrarProcedimiento() { modalProcedimiento.classList.add("hidden"); }
+
+  btnVerProcedimiento.addEventListener("click", abrirProcedimiento);
+  btnCerrarProced.addEventListener("click", cerrarProcedimiento);
+  modalProcedimiento.addEventListener("click", (ev) => {
+    if (ev.target === modalProcedimiento) cerrarProcedimiento();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !modalProcedimiento.classList.contains("hidden")) cerrarProcedimiento();
+  });
+  // --- Fin modal procedimiento ---
+
   const API_RESUMEN = "/api/plan-produccion-mensual/resumen";
   const API_IMPORT_STOCK = "/api/stock";
   const API_STOCK_TEMPLATE_CSV = "/api/stock/template-csv";
