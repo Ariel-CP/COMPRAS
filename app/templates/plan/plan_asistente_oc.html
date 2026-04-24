@@ -47,7 +47,7 @@
         <tr>
           <th>Codigo</th>
           <th>Producto</th>
-          <th>Presuncion</th>
+          <th>Presuncion <span style="font-weight:400;font-size:11px;color:#0b5cab;">(editable)</span></th>
         </tr>
       </thead>
       <tbody>
@@ -655,6 +655,16 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
   const btnPasoPrev = document.getElementById("btnPasoPrev");
   const btnPasoNext = document.getElementById("btnPasoNext");
 
+  // Edición inline de presuncion cargada
+  document.querySelector("#tablaPresuncion tbody").addEventListener("input", (ev) => {
+    const input = ev.target.closest("input.input-presuncion");
+    if (!input) return;
+    const idx = Number(input.dataset.idx);
+    if (!presuncionItems[idx]) return;
+    const val = Number(input.value);
+    presuncionItems[idx].cantidad = Number.isFinite(val) && val >= 0 ? val : 0;
+  });
+
   function fmt(n) {
     return Number(n || 0).toLocaleString("es-AR", { maximumFractionDigits: 2 });
   }
@@ -722,12 +732,12 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     }
 
     tablaPresuncionBody.innerHTML = "";
-    presuncionItems.forEach((it) => {
+    presuncionItems.forEach((it, idx) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${it.codigo || ""}</td>
         <td>${it.nombre || ""}</td>
-        <td>${fmt(it.cantidad || 0)}</td>
+        <td><input type="number" class="input-presuncion" data-idx="${idx}" value="${Number(it.cantidad || 0)}" min="0" step="0.0001" style="width:90px;text-align:right;border:1px solid #c9d9f0;border-radius:4px;padding:2px 6px;" /></td>
       `;
       tablaPresuncionBody.appendChild(tr);
     });

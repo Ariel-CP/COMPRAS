@@ -26,6 +26,7 @@ from app.services.plan_produccion_service import (
     guardar_deuda_clientes_periodo,
     guardar_bulk,
     crear_laf_solicitado_periodo,
+    eliminar_periodo_plan,
     eliminar_laf_solicitado_periodo,
     guardar_stock_pt_periodo,
     importar_laf_solicitado_periodo,
@@ -34,6 +35,7 @@ from app.services.plan_produccion_service import (
     listar_corridas_asistente_oc,
     listar_periodos_cargados,
     listar_planes,
+    mover_periodo_plan,
     obtener_ajustes_pt_periodo,
     registrar_corrida_asistente_oc,
     resumen_planes,
@@ -118,6 +120,54 @@ def periodos_cargados(
 ):
     items = listar_periodos_cargados(db)
     return {"items": items, "total": len(items)}
+
+
+@router.post("/periodos/mover", response_model=dict)
+def mover_periodo(
+    desde_mes: int = Query(..., ge=1, le=12),
+    desde_anio: int = Query(..., ge=2000, le=2100),
+    hasta_mes: int = Query(..., ge=1, le=12),
+    hasta_anio: int = Query(..., ge=2000, le=2100),
+    db: Session = Depends(get_db),
+    _current_user: dict = Depends(require_permission("plan", True)),
+):
+    try:
+        result = mover_periodo_plan(
+            db,
+            desde_mes=desde_mes,
+            desde_anio=desde_anio,
+            hasta_mes=hasta_mes,
+            hasta_anio=hasta_anio,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo mover el período de plan",
+        ) from exc
+    return result
+
+
+@router.delete("/periodos", response_model=dict)
+def eliminar_periodo(
+    mes: int = Query(..., ge=1, le=12),
+    anio: int = Query(..., ge=2000, le=2100),
+    db: Session = Depends(get_db),
+    _current_user: dict = Depends(require_permission("plan", True)),
+):
+    try:
+        result = eliminar_periodo_plan(db, mes=mes, anio=anio)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo eliminar el período de plan",
+        ) from exc
+    return result
 
 
 @router.get("/resumen", response_model=dict)
@@ -779,6 +829,8 @@ def guardar_en_lote(
 @router.post("/import", response_model=dict)
 async def importar_archivo(
     file: UploadFile = File(...),
+    mes: int | None = Query(default=None, ge=1, le=12),
+    anio: int | None = Query(default=None, ge=2000, le=2100),
     db: Session = Depends(get_db),
     _current_user: dict = Depends(require_permission("plan", True)),
 ):
@@ -820,7 +872,19 @@ async def importar_archivo(
                 }
             )
 
-    procesadas = importar_desde_rows(db, rows)
+    # Permite forzar período cuando el archivo fue cargado con mes/año incorrectos.
+    if (mes is None) != (anio is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Para forzar período de carga, indica mes y año juntos.",
+        )
+
+    procesadas = importar_desde_rows(
+        db,
+        rows,
+        mes_override=mes,
+        anio_override=anio,
+    )
     return {"procesadas": procesadas}
 
 

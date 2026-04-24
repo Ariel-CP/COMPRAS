@@ -52,6 +52,16 @@
           <span class="item-icon">UP</span><span>Seleccionar Excel/CSV</span>
           <input id="inputArchivo" type="file" accept=".xlsx,.csv" hidden {{ can_write_attr('plan') }} />
         </label>
+        <div class="dropdown-item" style="display:block; cursor:default;">
+          <div style="font-size:12px; color:#334; margin-bottom:6px;"><strong>Período de carga (opcional)</strong></div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+            <input id="importMes" type="number" min="1" max="12" placeholder="Mes" />
+            <input id="importAnio" type="number" min="2000" max="2100" placeholder="Año" />
+          </div>
+          <div style="font-size:11px; color:#5b6b80; margin-top:6px;">
+            Si se completa, fuerza el período para todas las filas importadas.
+          </div>
+        </div>
         <button id="btnImportar" type="button" class="dropdown-item" {{ can_write_attr('plan') }}>
           <span class="item-icon">⇪</span><span>Subir e importar</span>
         </button>
@@ -100,6 +110,7 @@
           <th>Mes</th>
           <th>Registros</th>
           <th>Total</th>
+          <th>Acción</th>
         </tr>
       </thead>
       <tbody>
@@ -110,15 +121,16 @@
             <td>{{ p.mes }}</td>
             <td>{{ p.registros }}</td>
             <td>{{ p.total_cantidad }}</td>
+            <td>-</td>
           </tr>
           {% endfor %}
         {% else %}
-          <tr><td colspan="4"><em>No hay períodos cargados</em></td></tr>
+          <tr><td colspan="5"><em>No hay períodos cargados</em></td></tr>
         {% endif %}
       </tbody>
       <tfoot>
         <tr>
-          <th colspan="3">Total períodos</th>
+          <th colspan="4">Total períodos</th>
           <th id="totalPeriodos">0</th>
         </tr>
       </tfoot>
@@ -230,6 +242,8 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     const API_LISTAR = "/api/plan-produccion-mensual/";
     const API_PERIODOS = "/api/plan-produccion-mensual/periodos";
     const API_RESUMEN = "/api/plan-produccion-mensual/resumen";
+    const API_MOVER_PERIODO = "/api/plan-produccion-mensual/periodos/mover";
+    const API_ELIMINAR_PERIODO = "/api/plan-produccion-mensual/periodos";
     const API_BULK = "/api/plan-produccion-mensual/bulk";
     const API_IMPORT = "/api/plan-produccion-mensual/import";
     const API_PLANTILLA_XLSX = "/api/plan-produccion-mensual/plantilla.xlsx";
@@ -248,6 +262,8 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
     const totalPeriodosEl = document.getElementById("totalPeriodos");
     const btnImportar = document.getElementById("btnImportar");
     const inputArchivo = document.getElementById("inputArchivo");
+    const importMes = document.getElementById("importMes");
+    const importAnio = document.getElementById("importAnio");
     const importFeedback = document.getElementById("importFeedback");
     const btnDescargarXlsx = document.getElementById("btnDescargarXlsx");
     const btnDescargarCsv = document.getElementById("btnDescargarCsv");
@@ -355,7 +371,7 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
         const msg = detail
           ? `Error (${resp.status}): ${detail}`
           : `Error (${resp.status}) consultando períodos cargados`;
-        periodosBody.innerHTML = `<tr><td colspan="4"><em>${msg}</em></td></tr>`;
+        periodosBody.innerHTML = `<tr><td colspan="5"><em>${msg}</em></td></tr>`;
         return;
       }
       const data = await resp.json();
@@ -368,7 +384,7 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       periodosBody.innerHTML = "";
       if (!items.length) {
         periodosBody.innerHTML =
-          '<tr><td colspan="4"><em>No hay períodos cargados</em></td></tr>';
+          '<tr><td colspan="5"><em>No hay períodos cargados</em></td></tr>';
         return;
       }
 
@@ -383,6 +399,9 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
           <td>${it.mes ?? ""}</td>
           <td>${fmt(it.registros || 0)}</td>
           <td>${fmt(it.total_cantidad || 0)}</td>
+          <td>
+            ${CAN_WRITE ? '<button type="button" class="btn-accion btn-mover-periodo">Cambiar período</button> <button type="button" class="btn-accion btn-eliminar-periodo" style="background:#c0392b;border-color:#c0392b;">Eliminar</button>' : '-'}
+          </td>
         `;
 
         tr.addEventListener("click", async () => {
@@ -406,6 +425,116 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
             tablaPlanes.scrollIntoView({ behavior: "smooth", block: "start" });
           }
         });
+
+        if (CAN_WRITE) {
+          const btnMover = tr.querySelector(".btn-mover-periodo");
+          const btnEliminar = tr.querySelector(".btn-eliminar-periodo");
+          if (btnMover) {
+            btnMover.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+
+              const desdeAnio = Number(it.anio);
+              const desdeMes = Number(it.mes);
+              const nuevoMesTxt = window.prompt(
+                `Nuevo mes para ${String(desdeMes).padStart(2, "0")}/${desdeAnio}:`,
+                String(desdeMes),
+              );
+              if (nuevoMesTxt === null) return;
+              const nuevoAnioTxt = window.prompt(
+                `Nuevo año para ${String(desdeMes).padStart(2, "0")}/${desdeAnio}:`,
+                String(desdeAnio),
+              );
+              if (nuevoAnioTxt === null) return;
+
+              const hastaMes = Number(nuevoMesTxt);
+              const hastaAnio = Number(nuevoAnioTxt);
+              if (!hastaMes || hastaMes < 1 || hastaMes > 12 || !hastaAnio) {
+                feedback.textContent = "Período destino inválido.";
+                return;
+              }
+
+              const ok = window.confirm(
+                `Mover período ${String(desdeMes).padStart(2, "0")}/${desdeAnio} a ${String(hastaMes).padStart(2, "0")}/${hastaAnio}?`,
+              );
+              if (!ok) return;
+
+              feedback.textContent = "Moviendo período...";
+              const resp = await fetch(
+                `${API_MOVER_PERIODO}?desde_mes=${desdeMes}&desde_anio=${desdeAnio}&hasta_mes=${hastaMes}&hasta_anio=${hastaAnio}`,
+                { method: "POST" },
+              );
+
+              if (!resp.ok) {
+                let detail = "";
+                try {
+                  const data = await resp.json();
+                  detail = data && data.detail ? String(data.detail) : "";
+                } catch (e) {
+                  detail = "";
+                }
+                feedback.textContent = detail
+                  ? `Error (${resp.status}): ${detail}`
+                  : `Error (${resp.status}) al mover período.`;
+                return;
+              }
+
+              const data = await resp.json().catch(() => ({}));
+              feedback.textContent = `Período movido. Registros actualizados: ${Number(data.movidos || 0)}.`;
+
+              inputMes.value = String(hastaMes);
+              inputAnio.value = String(hastaAnio);
+              selectedPeriodoKey = buildPeriodoKey(hastaAnio, hastaMes);
+
+              await cargarPeriodos();
+              await cargarTabla();
+            });
+          }
+
+          if (btnEliminar) {
+            btnEliminar.addEventListener("click", async (ev) => {
+              ev.stopPropagation();
+
+              const mes = Number(it.mes);
+              const anio = Number(it.anio);
+              const ok = window.confirm(
+                `¿Eliminar el período ${String(mes).padStart(2, "0")}/${anio}? Esta acción borra todos sus registros de plan.`,
+              );
+              if (!ok) return;
+
+              feedback.textContent = "Eliminando período...";
+              const resp = await fetch(
+                `${API_ELIMINAR_PERIODO}?mes=${mes}&anio=${anio}`,
+                { method: "DELETE" },
+              );
+
+              if (!resp.ok) {
+                let detail = "";
+                try {
+                  const data = await resp.json();
+                  detail = data && data.detail ? String(data.detail) : "";
+                } catch (e) {
+                  detail = "";
+                }
+                feedback.textContent = detail
+                  ? `Error (${resp.status}): ${detail}`
+                  : `Error (${resp.status}) al eliminar período.`;
+                return;
+              }
+
+              const data = await resp.json().catch(() => ({}));
+              feedback.textContent = `Período eliminado. Registros borrados: ${Number(data.eliminados || 0)}.`;
+
+              if (buildPeriodoKey(anio, mes) === selectedPeriodoKey) {
+                tablaBody.innerHTML = '<tr><td colspan="7"><em>No hay productos</em></td></tr>';
+                totalActualEl.textContent = fmt(0);
+                totalPrevioEl.textContent = fmt(0);
+                selectedPeriodoKey = "";
+              }
+
+              await cargarPeriodos();
+            });
+          }
+        }
 
         periodosBody.appendChild(tr);
       });
@@ -700,13 +829,33 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
         importFeedback.textContent = "Selecciona un archivo .xlsx o .csv";
         return;
       }
+
+      const mesOverride = Number(importMes.value || 0);
+      const anioOverride = Number(importAnio.value || 0);
+      const hasMes = Boolean(mesOverride);
+      const hasAnio = Boolean(anioOverride);
+      if (hasMes !== hasAnio) {
+        importFeedback.textContent = "Para forzar período, completa mes y año.";
+        return;
+      }
+
       importFeedback.textContent = "Importando...";
       const formData = new FormData();
       formData.append("file", inputArchivo.files[0]);
-      const resp = await fetch(API_IMPORT, { method: "POST", body: formData });
+      let importUrl = API_IMPORT;
+      if (hasMes && hasAnio) {
+        importUrl = `${API_IMPORT}?mes=${mesOverride}&anio=${anioOverride}`;
+      }
+      const resp = await fetch(importUrl, { method: "POST", body: formData });
       if (resp.ok) {
         const data = await resp.json();
         importFeedback.textContent = `Importadas ${data.procesadas} filas.`;
+        if (hasMes && hasAnio) {
+          inputMes.value = String(mesOverride);
+          inputAnio.value = String(anioOverride);
+          selectedPeriodoKey = buildPeriodoKey(anioOverride, mesOverride);
+          syncPeriodoSeleccionado();
+        }
         cargarTabla();
         cargarPeriodos();
       } else {

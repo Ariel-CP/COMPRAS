@@ -715,6 +715,118 @@ def listar_periodos_cargados(db: Session) -> List[dict]:
     return result
 
 
+def mover_periodo_plan(
+    db: Session,
+    desde_mes: int,
+    desde_anio: int,
+    hasta_mes: int,
+    hasta_anio: int,
+) -> Dict[str, int]:
+    """Mueve todos los registros de un período de plan hacia otro período.
+
+    Regla de seguridad: si existen productos repetidos entre origen y destino,
+    se rechaza para evitar violar la unicidad (anio, mes, producto_id).
+    """
+    if desde_mes == hasta_mes and desde_anio == hasta_anio:
+        raise ValueError("El período origen y destino no pueden ser iguales")
+
+    origen_count_val = db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM plan_produccion_mensual
+            WHERE mes = :desde_mes AND anio = :desde_anio
+            """
+        ),
+        {"desde_mes": desde_mes, "desde_anio": desde_anio},
+    ).scalar()
+    origen_count = int(origen_count_val or 0)
+    if origen_count == 0:
+        raise ValueError("El período origen no tiene registros cargados")
+
+    conflicto_val = db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM plan_produccion_mensual src
+            JOIN plan_produccion_mensual dst
+              ON dst.producto_id = src.producto_id
+             AND dst.mes = :hasta_mes
+             AND dst.anio = :hasta_anio
+            WHERE src.mes = :desde_mes
+              AND src.anio = :desde_anio
+            """
+        ),
+        {
+            "desde_mes": desde_mes,
+            "desde_anio": desde_anio,
+            "hasta_mes": hasta_mes,
+            "hasta_anio": hasta_anio,
+        },
+    ).scalar()
+    conflicto_count = int(conflicto_val or 0)
+    if conflicto_count > 0:
+        raise ValueError(
+            "El período destino ya tiene productos cargados que entrarían en conflicto"
+        )
+
+    res = db.execute(
+        text(
+            """
+            UPDATE plan_produccion_mensual
+            SET mes = :hasta_mes,
+                anio = :hasta_anio
+            WHERE mes = :desde_mes
+              AND anio = :desde_anio
+            """
+        ),
+        {
+            "desde_mes": desde_mes,
+            "desde_anio": desde_anio,
+            "hasta_mes": hasta_mes,
+            "hasta_anio": hasta_anio,
+        },
+    )
+    db.commit()
+    actualizados = int(getattr(res, "rowcount", 0) or 0)
+    return {"movidos": actualizados, "origen_registros": origen_count}
+
+
+def eliminar_periodo_plan(
+    db: Session,
+    mes: int,
+    anio: int,
+) -> Dict[str, int]:
+    """Elimina todos los registros de un período de plan."""
+    count_val = db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM plan_produccion_mensual
+            WHERE mes = :mes AND anio = :anio
+            """
+        ),
+        {"mes": mes, "anio": anio},
+    ).scalar()
+    origen_count = int(count_val or 0)
+    if origen_count == 0:
+        raise ValueError("El período indicado no tiene registros cargados")
+
+    res = db.execute(
+        text(
+            """
+            DELETE FROM plan_produccion_mensual
+            WHERE mes = :mes
+              AND anio = :anio
+            """
+        ),
+        {"mes": mes, "anio": anio},
+    )
+    db.commit()
+    eliminados = int(getattr(res, "rowcount", 0) or 0)
+    return {"eliminados": eliminados, "origen_registros": origen_count}
+
+
 def crear_plan(db: Session, plan: PlanProduccionCreate) -> int:
     existe = db.execute(
         text(
@@ -2238,8 +2350,16 @@ def mapear_codigo_a_id(db: Session) -> dict:
     return {row.codigo.strip(): int(row.id) for row in rows}
 
 
-def importar_desde_rows(db: Session, rows: List[dict]) -> int:
-    """Importa filas con claves codigo, mes, anio, cantidad."""
+def importar_desde_rows(
+    db: Session,
+    rows: List[dict],
+    mes_override: int | None = None,
+    anio_override: int | None = None,
+) -> int:
+    """Importa filas con claves codigo, mes, anio, cantidad.
+
+    Si `mes_override` y `anio_override` se informan, se usan para todas las filas.
+    """
     codigo_map = mapear_codigo_a_id(db)
     procesadas = 0
     for row in rows:
@@ -2250,12 +2370,16 @@ def importar_desde_rows(db: Session, rows: List[dict]) -> int:
         if not pid:
             continue
         try:
-            mes_raw = row.get("mes")
-            anio_raw = row.get("anio")
-            if mes_raw is None or anio_raw is None:
-                continue
-            mes = int(mes_raw)
-            anio = int(anio_raw)
+            if mes_override is not None and anio_override is not None:
+                mes = int(mes_override)
+                anio = int(anio_override)
+            else:
+                mes_raw = row.get("mes")
+                anio_raw = row.get("anio")
+                if mes_raw is None or anio_raw is None:
+                    continue
+                mes = int(mes_raw)
+                anio = int(anio_raw)
             cantidad = float(row.get("cantidad", 0))
         except (TypeError, ValueError):
             continue
