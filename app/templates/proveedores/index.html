@@ -1,0 +1,694 @@
+{% extends 'base.html' %}
+{% block title %}Proveedores{% endblock %}
+{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
+{% set CAN_WRITE_JS = can_write_js('proveedores') %}
+
+{% block content %}
+<section class="productos-wrapper">
+  <h2>Proveedores</h2>
+
+  <div class="tabla-controles" style="justify-content: center; margin-bottom: 10px;">
+    <a class="btn-accion" href="/ui/precios">Ir a precios</a>
+    <a class="btn-accion" href="/ui/productos">Ir a articulos</a>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <div class="panel panel-alta">
+    <h3 style="margin-bottom: 16px; color: #0b5cab; border-bottom: 2px solid #0b5cab; padding-bottom: 6px;">➕ Nuevo Proveedor</h3>
+    <form id="formNuevoProveedor" onsubmit="return crearProveedor(event)">
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 20px;">
+
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="font-size:0.8em; font-weight:600; color:#0b5cab; text-transform:uppercase; letter-spacing:.04em;">Código <span style="color:red">*</span></label>
+          <input required maxlength="64" name="codigo" placeholder="Ej: 00123" {{ can_write_attr('proveedores') }}
+            style="padding:7px 10px; border:1px solid #ccc; border-radius:5px; font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px; grid-column: span 2;">
+          <label style="font-size:0.8em; font-weight:600; color:#0b5cab; text-transform:uppercase; letter-spacing:.04em;">Razón Social <span style="color:red">*</span></label>
+          <input required maxlength="160" name="nombre" placeholder="Nombre o razón social" {{ can_write_attr('proveedores') }}
+            style="padding:7px 10px; border:1px solid #ccc; border-radius:5px; font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="font-size:0.8em; font-weight:600; color:#555; text-transform:uppercase; letter-spacing:.04em;">CUIT</label>
+          <input maxlength="20" name="cuit" placeholder="Ej: 20-12345678-1" {{ can_write_attr('proveedores') }}
+            style="padding:7px 10px; border:1px solid #ccc; border-radius:5px; font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="font-size:0.8em; font-weight:600; color:#555; text-transform:uppercase; letter-spacing:.04em;">Email</label>
+          <input type="email" maxlength="128" name="email" placeholder="correo@empresa.com" {{ can_write_attr('proveedores') }}
+            style="padding:7px 10px; border:1px solid #ccc; border-radius:5px; font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="font-size:0.8em; font-weight:600; color:#555; text-transform:uppercase; letter-spacing:.04em;">Teléfono</label>
+          <input maxlength="64" name="telefono" placeholder="Ej: 011-4512-3456" {{ can_write_attr('proveedores') }}
+            style="padding:7px 10px; border:1px solid #ccc; border-radius:5px; font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="font-size:0.8em; font-weight:600; color:#555; text-transform:uppercase; letter-spacing:.04em;">Contacto</label>
+          <input maxlength="128" name="contacto_nombre" placeholder="Nombre del contacto" {{ can_write_attr('proveedores') }}
+            style="padding:7px 10px; border:1px solid #ccc; border-radius:5px; font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px; grid-column: span 2;">
+          <label style="font-size:0.8em; font-weight:600; color:#555; text-transform:uppercase; letter-spacing:.04em;">Notas</label>
+          <input maxlength="255" name="notas" placeholder="Observaciones opcionales" {{ can_write_attr('proveedores') }}
+            style="padding:7px 10px; border:1px solid #ccc; border-radius:5px; font-size:0.95em;" />
+        </div>
+
+      </div>
+
+      <div style="display:flex; align-items:center; gap:16px; margin-top:16px; padding-top:14px; border-top:1px solid #e0e0e0;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.95em; cursor:pointer;">
+          <input type="checkbox" name="activo" checked {{ can_write_attr('proveedores') }}
+            style="width:16px; height:16px; accent-color:#0b5cab;" />
+          <span style="font-weight:500;">Activo</span>
+        </label>
+        <button type="submit" class="btn-guardar" {{ can_write_attr('proveedores') }}
+          style="padding: 8px 28px; font-size:0.95em;">
+          ✓ Crear Proveedor
+        </button>
+        <button type="reset" class="btn-secundario" style="padding: 8px 16px; font-size:0.9em;">
+          Limpiar
+        </button>
+      </div>
+
+    </form>
+  </div>
+
+  <div class="panel panel-listado mt-3">
+    <div class="tabla-controles">
+      <input type="search" id="filtroQ" placeholder="Buscar por codigo, nombre o contacto" />
+      <select id="filtroActivo">
+        <option value="">Todos</option>
+        <option value="true">Activos</option>
+        <option value="false">Inactivos</option>
+      </select>
+      <button type="button" id="btnFiltrar">Filtrar</button>
+      <span id="totalProveedores" style="font-size:0.9em; color:#555; padding: 0 8px; white-space:nowrap;">0 proveedores</span>
+
+      <!-- Filas por página -->
+      <label style="font-size:0.9em; color:#555; white-space:nowrap;">
+        Mostrar
+        <select id="pageSize" style="margin:0 4px;">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+          <option value="0">Todos</option>
+        </select>
+        por página
+      </label>
+
+      <!-- Selector de columnas -->
+      <div style="position:relative; display:inline-block;">
+        <button type="button" id="btnColumnas" class="btn-accion" style="background:#6c757d;">⚙ Columnas</button>
+        <div id="panelColumnas" style="display:none; position:absolute; top:100%; left:0; z-index:500; background:#fff; border:1px solid #ccc; border-radius:6px; padding:10px 14px; min-width:180px; box-shadow:0 4px 12px rgba(0,0,0,.15);">
+          <div style="font-weight:600; margin-bottom:6px; font-size:0.85em; color:#0b5cab;">Columnas visibles</div>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="id" checked> ID</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="codigo" checked> Código</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="nombre" checked> Nombre</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="contacto"> Contacto</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="email" checked> Email</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="telefono"> Teléfono</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="cuit"> CUIT</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="localidad"> Localidad</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="provincia"> Provincia</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" class="col-toggle" data-col="activo" checked> Activo</label>
+        </div>
+      </div>
+
+      <button type="button" id="btnImportar" class="btn-accion" style="margin-left: auto;" {{ can_write_attr('proveedores') }}>📥 Importar CSV</button>
+    </div>
+
+    <div class="tabla-scroll">
+      <table id="tablaProveedores" class="productos-table table-center">
+        <thead>
+          <tr>
+            <th data-col="id">ID</th>
+            <th data-col="codigo">Codigo</th>
+            <th data-col="nombre">Nombre</th>
+            <th data-col="contacto">Contacto</th>
+            <th data-col="email">Email</th>
+            <th data-col="telefono">Telefono</th>
+            <th data-col="cuit">CUIT</th>
+            <th data-col="localidad">Localidad</th>
+            <th data-col="provincia">Provincia</th>
+            <th data-col="activo">Activo</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in proveedores %}
+          <tr
+            data-id="{{ p.id }}"
+            data-codigo="{{ p.codigo }}"
+            data-nombre="{{ p.nombre }}"
+            data-contacto_nombre="{{ p.contacto_nombre or '' }}"
+            data-email="{{ p.email or '' }}"
+            data-telefono="{{ p.telefono or '' }}"
+            data-cuit="{{ p.cuit or '' }}"
+            data-localidad="{{ p.localidad or '' }}"
+            data-provincia="{{ p.provincia or '' }}"
+            data-notas="{{ p.notas or '' }}"
+            data-activo="{{ 'true' if p.activo else 'false' }}"
+          >
+            <td data-col="id">{{ p.id }}</td>
+            <td data-col="codigo">{{ p.codigo }}</td>
+            <td data-col="nombre">{{ p.nombre }}</td>
+            <td data-col="contacto">{{ p.contacto_nombre or '' }}</td>
+            <td data-col="email">{{ p.email or '' }}</td>
+            <td data-col="telefono">{{ p.telefono or '' }}</td>
+            <td data-col="cuit">{{ p.cuit or '' }}</td>
+            <td data-col="localidad">{{ p.localidad or '' }}</td>
+            <td data-col="provincia">{{ p.provincia or '' }}</td>
+            <td data-col="activo">{{ 'Si' if p.activo else 'No' }}</td>
+            <td>
+              <button type="button" class="btn-accion btn-editar" {{ can_write_attr('proveedores') }}>Editar</button>
+              <button type="button" class="btn-secundario btn-eliminar" {{ can_write_attr('proveedores') }}>Eliminar</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Paginación -->
+    <div id="paginacion" style="display:flex; align-items:center; gap:8px; padding:10px 0; justify-content:center; flex-wrap:wrap;">
+      <button type="button" id="btnPrevPage" class="btn-accion" style="background:#6c757d;">&#8592; Anterior</button>
+      <span id="infoPagina" style="font-size:0.9em; color:#555;"></span>
+      <button type="button" id="btnNextPage" class="btn-accion" style="background:#6c757d;">Siguiente &#8594;</button>
+    </div>
+  </div>
+</section>
+
+<!-- Modal de importación CSV -->
+<div id="modalImportar" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+  <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+    <h3>Importar Proveedores desde CSV</h3>
+    <p style="font-size: 0.9em; color: #666;">Formato esperado: Código, Razón Social, C.U.I.T., E-Mail, Teléfono, Dirección, Localidad, Provincia</p>
+    
+    <div id="importStage1" style="display: block;">
+      <input type="file" id="archivoCSV" accept=".csv" required />
+      <label>
+        <input type="checkbox" id="actualizarExistentes" checked /> Actualizar proveedores existentes
+      </label>
+      <div style="margin-top: 15px; display: flex; gap: 10px;">
+        <button type="button" id="btnImportarConfirmar" class="btn-guardar">Importar</button>
+        <button type="button" id="btnCancelarImportar" class="btn-secundario">Cancelar</button>
+      </div>
+    </div>
+    
+    <div id="importStage2" style="display: none; text-align: center;">
+      <p>Procesando archivo...</p>
+      <div style="width: 100%; height: 20px; background: #eee; border-radius: 10px; overflow: hidden;">
+        <div id="progressBar" style="height: 100%; width: 0%; background: #4CAF50; transition: width 0.3s;"></div>
+      </div>
+    </div>
+    
+    <div id="importStage3" style="display: none;">
+      <h4>Resultado de Importación</h4>
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 15px; font-family: monospace;">
+        <p><strong>✅ Insertados:</strong> <span id="resultInsertados">0</span></p>
+        <p><strong>🔄 Actualizados:</strong> <span id="resultActualizados">0</span></p>
+        <p><strong>❌ Rechazados:</strong> <span id="resultRechazados">0</span></p>
+      </div>
+      
+      <div id="erroresContainer" style="display: none; margin-bottom: 15px;">
+        <h5>Errores encontrados:</h5>
+        <div id="erroresLista" style="background: #fff3cd; border: 1px solid #ffc107; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto; font-size: 0.85em;">
+        </div>
+      </div>
+      
+      <button type="button" id="btnCerrarResultado" class="btn-accion">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CAN_WRITE = {{ CAN_WRITE_JS }};
+
+const tabla = document.getElementById('tablaProveedores');
+const filtroQ = document.getElementById('filtroQ');
+const filtroActivo = document.getElementById('filtroActivo');
+const btnFiltrar = document.getElementById('btnFiltrar');
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] || c;
+  });
+}
+
+function rowActionsHtml() {
+  if (!CAN_WRITE) return '';
+  return '<button type="button" class="btn-accion btn-editar">Editar</button> <button type="button" class="btn-secundario btn-eliminar">Eliminar</button>';
+}
+
+function rowToHtml(p) {
+  const activoTxt = p.activo ? 'Si' : 'No';
+  return `
+    <tr
+      data-id="${p.id}"
+      data-codigo="${escapeHtml(p.codigo)}"
+      data-nombre="${escapeHtml(p.nombre)}"
+      data-contacto_nombre="${escapeHtml(p.contacto_nombre || '')}"
+      data-email="${escapeHtml(p.email || '')}"
+      data-telefono="${escapeHtml(p.telefono || '')}"
+      data-cuit="${escapeHtml(p.cuit || '')}"
+      data-localidad="${escapeHtml(p.localidad || '')}"
+      data-provincia="${escapeHtml(p.provincia || '')}"
+      data-notas="${escapeHtml(p.notas || '')}"
+      data-activo="${p.activo ? 'true' : 'false'}"
+    >
+      <td data-col="id">${p.id}</td>
+      <td data-col="codigo">${escapeHtml(p.codigo)}</td>
+      <td data-col="nombre">${escapeHtml(p.nombre)}</td>
+      <td data-col="contacto">${escapeHtml(p.contacto_nombre || '')}</td>
+      <td data-col="email">${escapeHtml(p.email || '')}</td>
+      <td data-col="telefono">${escapeHtml(p.telefono || '')}</td>
+      <td data-col="cuit">${escapeHtml(p.cuit || '')}</td>
+      <td data-col="localidad">${escapeHtml(p.localidad || '')}</td>
+      <td data-col="provincia">${escapeHtml(p.provincia || '')}</td>
+      <td data-col="activo">${activoTxt}</td>
+      <td>${rowActionsHtml()}</td>
+    </tr>
+  `;
+}
+
+async function crearProveedor(ev) {
+  ev.preventDefault();
+  if (!CAN_WRITE) return false;
+
+  const fd = new FormData(ev.target);
+  const payload = {
+    codigo: String(fd.get('codigo') || '').trim(),
+    nombre: String(fd.get('nombre') || '').trim(),
+    cuit: String(fd.get('cuit') || '').trim() || null,
+    contacto_nombre: String(fd.get('contacto_nombre') || '').trim() || null,
+    email: String(fd.get('email') || '').trim() || null,
+    telefono: String(fd.get('telefono') || '').trim() || null,
+    notas: String(fd.get('notas') || '').trim() || null,
+    activo: Boolean(fd.get('activo')),
+  };
+
+  if (!payload.codigo || !payload.nombre) {
+    alert('Codigo y nombre son obligatorios');
+    return false;
+  }
+
+  const resp = await fetch('/api/proveedores/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    alert('Error: ' + (err.detail || resp.statusText));
+    return false;
+  }
+
+  ev.target.reset();
+  await recargarTabla();
+  return false;
+}
+
+function getCellByCol(tr, col) {
+  return tr.querySelector(`td[data-col="${col}"]`);
+}
+
+function entrarEdicion(tr) {
+  const activo = tr.dataset.activo === 'true';
+  tr.classList.add('edit-mode');
+  getCellByCol(tr, 'codigo').innerHTML = `<input maxlength="64" name="codigo" value="${escapeHtml(tr.dataset.codigo || '')}" />`;
+  getCellByCol(tr, 'nombre').innerHTML = `<input maxlength="160" name="nombre" value="${escapeHtml(tr.dataset.nombre || '')}" />`;
+  getCellByCol(tr, 'contacto').innerHTML = `<input maxlength="128" name="contacto_nombre" value="${escapeHtml(tr.dataset.contacto_nombre || '')}" />`;
+  getCellByCol(tr, 'email').innerHTML = `<input maxlength="128" name="email" value="${escapeHtml(tr.dataset.email || '')}" />`;
+  getCellByCol(tr, 'telefono').innerHTML = `<input maxlength="64" name="telefono" value="${escapeHtml(tr.dataset.telefono || '')}" />`;
+  getCellByCol(tr, 'cuit').innerHTML = `<input maxlength="20" name="cuit" value="${escapeHtml(tr.dataset.cuit || '')}" />`;
+  getCellByCol(tr, 'localidad').innerHTML = `<input maxlength="128" name="localidad" value="${escapeHtml(tr.dataset.localidad || '')}" />`;
+  getCellByCol(tr, 'provincia').innerHTML = `<input maxlength="128" name="provincia" value="${escapeHtml(tr.dataset.provincia || '')}" />`;
+  getCellByCol(tr, 'activo').innerHTML = `<label><input type="checkbox" name="activo" ${activo ? 'checked' : ''} /> Activo</label>`;
+  tr.querySelector('td:last-child').innerHTML = '<button type="button" class="btn-accion btn-guardar">Guardar</button> <button type="button" class="btn-secundario btn-cancelar">Cancelar</button>';
+}
+
+function salirEdicion(tr) {
+  tr.classList.remove('edit-mode');
+  getCellByCol(tr, 'codigo').textContent = tr.dataset.codigo || '';
+  getCellByCol(tr, 'nombre').textContent = tr.dataset.nombre || '';
+  getCellByCol(tr, 'contacto').textContent = tr.dataset.contacto_nombre || '';
+  getCellByCol(tr, 'email').textContent = tr.dataset.email || '';
+  getCellByCol(tr, 'telefono').textContent = tr.dataset.telefono || '';
+  getCellByCol(tr, 'cuit').textContent = tr.dataset.cuit || '';
+  getCellByCol(tr, 'localidad').textContent = tr.dataset.localidad || '';
+  getCellByCol(tr, 'provincia').textContent = tr.dataset.provincia || '';
+  getCellByCol(tr, 'activo').textContent = tr.dataset.activo === 'true' ? 'Si' : 'No';
+  tr.querySelector('td:last-child').innerHTML = rowActionsHtml();
+}
+
+async function guardarFila(tr) {
+  const id = tr.dataset.id;
+  const payload = {
+    codigo: String(tr.querySelector('input[name="codigo"]').value || '').trim(),
+    nombre: String(tr.querySelector('input[name="nombre"]').value || '').trim(),
+    contacto_nombre: String(tr.querySelector('input[name="contacto_nombre"]').value || '').trim() || null,
+    email: String(tr.querySelector('input[name="email"]').value || '').trim() || null,
+    telefono: String(tr.querySelector('input[name="telefono"]').value || '').trim() || null,
+    cuit: String(tr.querySelector('input[name="cuit"]')?.value || '').trim() || null,
+    localidad: String(tr.querySelector('input[name="localidad"]')?.value || '').trim() || null,
+    provincia: String(tr.querySelector('input[name="provincia"]')?.value || '').trim() || null,
+    activo: Boolean(tr.querySelector('input[name="activo"]').checked),
+  };
+
+  if (!payload.codigo || !payload.nombre) {
+    alert('Codigo y nombre son obligatorios');
+    return;
+  }
+
+  const resp = await fetch(`/api/proveedores/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    alert('Error: ' + (err.detail || resp.statusText));
+    return;
+  }
+
+  const data = await resp.json();
+  tr.dataset.codigo = data.codigo || '';
+  tr.dataset.nombre = data.nombre || '';
+  tr.dataset.contacto_nombre = data.contacto_nombre || '';
+  tr.dataset.email = data.email || '';
+  tr.dataset.telefono = data.telefono || '';
+  tr.dataset.cuit = data.cuit || '';
+  tr.dataset.localidad = data.localidad || '';
+  tr.dataset.provincia = data.provincia || '';
+  tr.dataset.notas = data.notas || '';
+  tr.dataset.activo = data.activo ? 'true' : 'false';
+  salirEdicion(tr);
+}
+
+async function eliminarFila(tr) {
+  const id = tr.dataset.id;
+  const nombre = tr.dataset.nombre || id;
+  if (!confirm(`¿Eliminar proveedor ${nombre}?`)) return;
+
+  const resp = await fetch(`/api/proveedores/${id}`, { method: 'DELETE' });
+  if (!resp.ok && resp.status !== 204) {
+    const err = await resp.json().catch(() => ({}));
+    alert('Error: ' + (err.detail || resp.statusText));
+    return;
+  }
+  tr.remove();
+}
+
+tabla.addEventListener('click', async (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLElement)) return;
+  const tr = target.closest('tr');
+  if (!tr || !CAN_WRITE) return;
+
+  if (target.classList.contains('btn-editar')) {
+    entrarEdicion(tr);
+    return;
+  }
+  if (target.classList.contains('btn-cancelar')) {
+    salirEdicion(tr);
+    return;
+  }
+  if (target.classList.contains('btn-guardar')) {
+    await guardarFila(tr);
+    return;
+  }
+  if (target.classList.contains('btn-eliminar')) {
+    await eliminarFila(tr);
+  }
+});
+
+// ===== Paginación cliente =====
+let _todosProveedores = [];
+let _paginaActual = 1;
+
+const pageSizeSelect = document.getElementById('pageSize');
+const btnPrev = document.getElementById('btnPrevPage');
+const btnNext = document.getElementById('btnNextPage');
+const infoPagina = document.getElementById('infoPagina');
+
+function getPageSize() {
+  const v = parseInt(pageSizeSelect.value, 10);
+  return v === 0 ? Infinity : v; // 0 = Todos
+}
+
+function actualizarContador(n) {
+  const el = document.getElementById('totalProveedores');
+  el.textContent = n === 1 ? '1 proveedor' : `${n} proveedores`;
+}
+
+function renderPagina() {
+  const total = _todosProveedores.length;
+  const size = getPageSize();
+  const totalPags = size === Infinity ? 1 : Math.max(1, Math.ceil(total / size));
+  if (_paginaActual > totalPags) _paginaActual = totalPags;
+
+  const desde = size === Infinity ? 0 : (_paginaActual - 1) * size;
+  const hasta = size === Infinity ? total : Math.min(desde + size, total);
+  const pagina = _todosProveedores.slice(desde, hasta);
+
+  const tbody = tabla.querySelector('tbody');
+  tbody.innerHTML = pagina.map(rowToHtml).join('');
+  aplicarColumnas();
+
+  // Controles
+  const paginacion = document.getElementById('paginacion');
+  if (size === Infinity || totalPags <= 1) {
+    paginacion.style.display = 'none';
+  } else {
+    paginacion.style.display = 'flex';
+    infoPagina.textContent = `Página ${_paginaActual} de ${totalPags}  (${desde + 1}–${hasta} de ${total})`;
+    btnPrev.disabled = _paginaActual <= 1;
+    btnNext.disabled = _paginaActual >= totalPags;
+  }
+}
+
+btnPrev.addEventListener('click', () => { _paginaActual--; renderPagina(); });
+btnNext.addEventListener('click', () => { _paginaActual++; renderPagina(); });
+pageSizeSelect.addEventListener('change', () => { _paginaActual = 1; guardarPreferencias(); renderPagina(); });
+
+async function recargarTabla() {
+  const params = new URLSearchParams();
+  const q = String(filtroQ.value || '').trim();
+  const activo = String(filtroActivo.value || '').trim();
+  if (q) params.append('q', q);
+  if (activo) params.append('activo', activo);
+  params.append('limit', '2000');
+
+  const resp = await fetch('/api/proveedores/?' + params.toString());
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    alert('Error: ' + (err.detail || resp.statusText));
+    return;
+  }
+
+  _todosProveedores = await resp.json();
+  _paginaActual = 1;
+  actualizarContador(_todosProveedores.length);
+  renderPagina();
+}
+
+btnFiltrar.addEventListener('click', recargarTabla);
+filtroQ.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    recargarTabla();
+  }
+});
+
+// ===== Selector de columnas =====
+const btnColumnas = document.getElementById('btnColumnas');
+const panelColumnas = document.getElementById('panelColumnas');
+
+const LS_COLS = 'proveedores_cols';
+const LS_PAGE = 'proveedores_pagesize';
+
+function guardarPreferencias() {
+  const cols = {};
+  document.querySelectorAll('.col-toggle').forEach(chk => {
+    cols[chk.dataset.col] = chk.checked;
+  });
+  localStorage.setItem(LS_COLS, JSON.stringify(cols));
+  localStorage.setItem(LS_PAGE, pageSizeSelect.value);
+}
+
+function cargarPreferencias() {
+  // Columnas
+  const savedCols = localStorage.getItem(LS_COLS);
+  if (savedCols) {
+    try {
+      const cols = JSON.parse(savedCols);
+      document.querySelectorAll('.col-toggle').forEach(chk => {
+        if (cols.hasOwnProperty(chk.dataset.col)) {
+          chk.checked = cols[chk.dataset.col];
+        }
+      });
+    } catch(e) {}
+  }
+  // Tamaño de página
+  const savedPage = localStorage.getItem(LS_PAGE);
+  if (savedPage) {
+    const opt = pageSizeSelect.querySelector(`option[value="${savedPage}"]`);
+    if (opt) pageSizeSelect.value = savedPage;
+  }
+}
+
+btnColumnas.addEventListener('click', (e) => {
+  e.stopPropagation();
+  panelColumnas.style.display = panelColumnas.style.display === 'none' ? 'block' : 'none';
+});
+
+document.addEventListener('click', (e) => {
+  if (!panelColumnas.contains(e.target) && e.target !== btnColumnas) {
+    panelColumnas.style.display = 'none';
+  }
+});
+
+function aplicarColumnas() {
+  document.querySelectorAll('.col-toggle').forEach(chk => {
+    const col = chk.dataset.col;
+    const visible = chk.checked;
+    const th = tabla.querySelector(`thead th[data-col="${col}"]`);
+    if (th) th.style.display = visible ? '' : 'none';
+    tabla.querySelectorAll(`td[data-col="${col}"]`).forEach(td => {
+      td.style.display = visible ? '' : 'none';
+    });
+  });
+}
+
+document.querySelectorAll('.col-toggle').forEach(chk => {
+  chk.addEventListener('change', () => {
+    aplicarColumnas();
+    guardarPreferencias();
+  });
+});
+
+// Inicializar con datos del servidor (carga inicial)
+_todosProveedores = [
+  {% for p in proveedores %}
+  {
+    id: {{ p.id }},
+    codigo: {{ p.codigo | tojson }},
+    nombre: {{ p.nombre | tojson }},
+    contacto_nombre: {{ (p.contacto_nombre or '') | tojson }},
+    email: {{ (p.email or '') | tojson }},
+    telefono: {{ (p.telefono or '') | tojson }},
+    cuit: {{ (p.cuit or '') | tojson }},
+    localidad: {{ (p.localidad or '') | tojson }},
+    provincia: {{ (p.provincia or '') | tojson }},
+    notas: {{ (p.notas or '') | tojson }},
+    activo: {{ 'true' if p.activo else 'false' }},
+  },
+  {% endfor %}
+];
+cargarPreferencias();
+actualizarContador(_todosProveedores.length);
+renderPagina();
+
+// ===== Importación CSV =====
+const modalImportar = document.getElementById('modalImportar');
+const btnImportar = document.getElementById('btnImportar');
+const btnImportarConfirmar = document.getElementById('btnImportarConfirmar');
+const btnCancelarImportar = document.getElementById('btnCancelarImportar');
+const btnCerrarResultado = document.getElementById('btnCerrarResultado');
+const archivoCSV = document.getElementById('archivoCSV');
+const actualizarExistentes = document.getElementById('actualizarExistentes');
+const importStage1 = document.getElementById('importStage1');
+const importStage2 = document.getElementById('importStage2');
+const importStage3 = document.getElementById('importStage3');
+
+btnImportar.addEventListener('click', () => {
+  if (!CAN_WRITE) {
+    alert('No tienes permisos para importar proveedores');
+    return;
+  }
+  modalImportar.style.display = 'flex';
+  importStage1.style.display = 'block';
+  importStage2.style.display = 'none';
+  importStage3.style.display = 'none';
+  archivoCSV.value = '';
+});
+
+btnCancelarImportar.addEventListener('click', () => {
+  modalImportar.style.display = 'none';
+});
+
+btnCerrarResultado.addEventListener('click', () => {
+  modalImportar.style.display = 'none';
+  recargarTabla();
+});
+
+btnImportarConfirmar.addEventListener('click', async () => {
+  if (!archivoCSV.files.length) {
+    alert('Por favor selecciona un archivo CSV');
+    return;
+  }
+
+  const archivo = archivoCSV.files[0];
+  
+  // Mostrar stage 2 (procesando)
+  importStage1.style.display = 'none';
+  importStage2.style.display = 'block';
+  importStage3.style.display = 'none';
+  document.getElementById('progressBar').style.width = '0%';
+
+  const formData = new FormData();
+  formData.append('archivo', archivo);
+
+  try {
+    const resp = await fetch('/api/proveedores/import', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      alert('Error en importación: ' + (err.detail || resp.statusText));
+      modalImportar.style.display = 'none';
+      return;
+    }
+
+    const resultado = await resp.json();
+
+    // Mostrar stage 3 (resultados)
+    importStage2.style.display = 'none';
+    importStage3.style.display = 'block';
+
+    document.getElementById('resultInsertados').textContent = resultado.insertados || 0;
+    document.getElementById('resultActualizados').textContent = resultado.actualizados || 0;
+    document.getElementById('resultRechazados').textContent = resultado.rechazados || 0;
+
+    if (resultado.errores && resultado.errores.length > 0) {
+      const erroresContainer = document.getElementById('erroresContainer');
+      const erroresList = document.getElementById('erroresLista');
+      erroresList.innerHTML = resultado.errores
+        .map(e => `<div><strong>Fila ${e.fila} (${e.codigo}):</strong> ${escapeHtml(e.mensaje)}</div>`)
+        .join('');
+      erroresContainer.style.display = 'block';
+    }
+  } catch (ex) {
+    alert('Error: ' + ex.message);
+    modalImportar.style.display = 'none';
+  }
+});
+</script>
+{% endblock %}

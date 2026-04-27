@@ -14,11 +14,13 @@ from app.services import user_service  # noqa: E402
 ROLES_PERMISSIONS = {
     "comprador": {
         "productos": (True, False),
+        "proveedores": (True, True),
         "precios": (True, True),
         "stock": (True, False),
     },
     "analista_compras": {
         "productos": (True, False),
+        "proveedores": (True, False),
         "precios": (True, True),
         "informes": (True, True),
     },
@@ -35,11 +37,13 @@ ROLES_PERMISSIONS = {
         "productos": (True, False),
     },
     "contabilidad": {
+        "proveedores": (True, False),
         "precios": (True, True),
         "informes": (True, False),
     },
     "auditor": {
         "productos": (True, False),
+        "proveedores": (True, False),
         "precios": (True, False),
         "plan": (True, False),
         "mbom": (True, False),

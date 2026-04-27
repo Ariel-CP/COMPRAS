@@ -1,5 +1,5 @@
-from typing import Any, Dict, List, Optional, Set, Tuple, cast
 from datetime import date
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError

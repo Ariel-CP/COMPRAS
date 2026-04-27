@@ -21,6 +21,7 @@ from .api import (
     ui_mbom,
     ui_plan,
     ui_precios,
+    ui_proveedores,
     ui_productos,
     ui_stock,
     ui_tipo_cambio,
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
     application.include_router(ui_mbom.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_informes.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_precios.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_proveedores.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_tipo_cambio.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_rubros.router, prefix="/ui", dependencies=deps)
 

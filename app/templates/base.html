@@ -34,6 +34,7 @@
         <a href="/ui/informes/costos-pt">Costos PT</a>
       {% endif %}
       {% if perms.get('precios', (False, False))[0] %}<a href="/ui/precios">Precios</a>{% endif %}
+      {% if perms.get('proveedores', (False, False))[0] %}<a href="/ui/proveedores">Proveedores</a>{% endif %}
       {% if perms.get('tipo_cambio', (False, False))[0] %}<a href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
       {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] or perms.get('admin_backups', (False, False))[0] %}
       {% if show_admin %}

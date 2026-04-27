@@ -15,6 +15,7 @@ PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
     ("mbom", "MBOM"),
     ("plan", "Plan de produccion"),
     ("precios", "Precios"),
+    ("proveedores", "Proveedores"),
     ("productos", "Articulos"),
     ("rubros", "Rubros"),
     ("stock", "Stock"),
