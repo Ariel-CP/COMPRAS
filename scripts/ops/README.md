@@ -101,3 +101,39 @@ pip install -r requirements.txt
 - `sync_tipo_cambio.py` - Sincroniza tipos de cambio con BCRA
 - `deploy_raspberry.ps1` - Deploy automático en Raspberry
 - `update.sh` - Script de actualización en Raspberry
+- `post_deploy_raspberry.sh` - Post-deploy en Raspberry (migraciones + permisos admin + chequeo de integridad)
+
+---
+
+## post_deploy_raspberry.sh
+
+Script recomendado para ejecutar en Raspberry luego de actualizar código.
+
+### Qué hace
+
+1. Aplica migraciones SQL (`database/apply-migrations.sh`).
+2. Asegura permisos del rol `admin` para todos los módulos clave, incluyendo `proveedores`.
+3. Verifica integridad relacional básica en `usuario_rol` y `permiso_form`.
+4. Ejecuta `mysqlcheck` sobre tablas críticas (`usuario`, `rol`, `usuario_rol`, `permiso_form`, `proveedor`).
+
+Notas sobre migraciones:
+
+1. `apply-migrations.sh` registra cada archivo aplicado en la tabla `schema_migrations`.
+2. Si un archivo ya aplicado cambia de contenido (checksum distinto), la ejecución falla para proteger integridad.
+3. Para cambios nuevos, crear siempre una migración incremental nueva en `database/migrations/`.
+
+### Uso en Raspberry
+
+```bash
+cd /home/acepeda/COMPRAS
+chmod +x scripts/ops/post_deploy_raspberry.sh
+./scripts/ops/post_deploy_raspberry.sh
+```
+
+### Configuración de base de datos
+
+Prioridad de configuración:
+
+1. Variables de entorno (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`).
+2. `DATABASE_URL` en `.env`.
+3. Defaults del script (`127.0.0.1`, `3306`, `compras`, `matete01`, `compras_db`).

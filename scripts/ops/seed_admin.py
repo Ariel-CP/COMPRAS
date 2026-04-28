@@ -24,6 +24,7 @@ from app.services import auth_service  # noqa: E402
 
 DEFAULT_FORMS = [
     "admin_backups",
+    "proveedores",
     "productos",
     "rubros",
     "stock",

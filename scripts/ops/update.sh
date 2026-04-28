@@ -8,6 +8,7 @@
 #   REPO_URL   — URL del repositorio (default: https://github.com/Ariel-CP/COMPRAS.git)
 #   BRANCH     — Rama a desplegar (default: master)
 #   APP_DIR    — Directorio del proyecto (default: el padre del script)
+#   RUN_POST_DEPLOY — Ejecuta post deploy de BD/permisos (default: 1)
 
 set -Eeuo pipefail
 
@@ -18,6 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="${APP_DIR:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 REPO_URL="${REPO_URL:-https://github.com/Ariel-CP/COMPRAS.git}"
 BRANCH="${BRANCH:-master}"
+RUN_POST_DEPLOY="${RUN_POST_DEPLOY:-1}"
 
 log "Directorio: ${APP_DIR}"
 log "Repositorio: ${REPO_URL}  rama: ${BRANCH}"
@@ -53,11 +55,24 @@ else
 fi
 
 # ── 3. Reiniciar servicio ─────────────────────────────────────────────────────
+# ── 3. Post-deploy (migraciones + permisos + integridad) ────────────────────
+if [[ "${RUN_POST_DEPLOY}" == "1" ]]; then
+    if [[ -x "scripts/ops/post_deploy_raspberry.sh" ]]; then
+        log "Ejecutando post-deploy..."
+        scripts/ops/post_deploy_raspberry.sh
+    else
+        log "post_deploy_raspberry.sh no encontrado o sin permisos de ejecucion; se omite."
+    fi
+else
+    log "Post-deploy deshabilitado (RUN_POST_DEPLOY=${RUN_POST_DEPLOY})."
+fi
+
+# ── 4. Reiniciar servicio ─────────────────────────────────────────────────────
 log "Reiniciando compras-api..."
 sudo systemctl restart compras-api
 sudo systemctl is-active compras-api
 
-# ── 4. Health check con reintentos ───────────────────────────────────────────
+# ── 5. Health check con reintentos ───────────────────────────────────────────
 log "Verificando respuesta HTTP..."
 code="000"
 for i in $(seq 1 20); do
