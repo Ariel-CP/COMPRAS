@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}Configuración de Logo{% endblock %}
+
+{% block content %}
+<section class="panel" style="max-width:760px;">
+  <h2 style="margin-top:0;">Logo del sistema</h2>
+  <p class="hint" style="margin-top:0;">
+    El logo se muestra encima del título Compras en la cabecera. Seleccione una imagen
+    desde su equipo y guárdela.
+  </p>
+
+  <div class="logo-config-preview-wrap">
+    <div class="logo-config-slot">
+      <img id="logo-preview" alt="Vista previa del logo" class="logo-config-img hidden" />
+      <span id="logo-empty" class="hint">Sin logo configurado</span>
+    </div>
+  </div>
+
+  <form id="logo-form" class="panel-filtros" style="margin-top:12px; align-items:flex-end;">
+    <label style="display:flex; flex-direction:column; gap:6px; margin-right:0;">
+      <span>Archivo de imagen</span>
+      <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" required />
+    </label>
+    <button type="submit" class="btn-accion">Guardar logo</button>
+  </form>
+
+  <div id="logo-msg" class="hint" style="margin-top:12px;"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const API_URL = '/api/system/logo';
+  const form = document.getElementById('logo-form');
+  const input = document.getElementById('logo-file');
+  const preview = document.getElementById('logo-preview');
+  const empty = document.getElementById('logo-empty');
+  const msg = document.getElementById('logo-msg');
+
+  function setPreview(src) {
+    if (src) {
+      preview.src = src;
+      preview.classList.remove('hidden');
+      empty.classList.add('hidden');
+      return;
+    }
+    preview.removeAttribute('src');
+    preview.classList.add('hidden');
+    empty.classList.remove('hidden');
+  }
+
+  async function loadCurrentLogo() {
+    msg.textContent = '';
+    try {
+      const r = await fetch(API_URL);
+      if (!r.ok) {
+        setPreview('');
+        msg.textContent = 'No se pudo cargar el logo actual.';
+        return;
+      }
+      const data = await r.json();
+      const url = data.logo_url ? (data.logo_url + '?v=' + Date.now()) : '';
+      setPreview(url);
+    } catch (_) {
+      setPreview('');
+      msg.textContent = 'No se pudo cargar el logo actual.';
+    }
+  }
+
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    if (!file) {
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(objectUrl);
+    msg.textContent = '';
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const file = input.files && input.files[0];
+    if (!file) {
+      msg.textContent = 'Seleccione una imagen para continuar.';
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    msg.textContent = 'Guardando logo...';
+    try {
+      const r = await fetch(API_URL, { method: 'POST', body: fd });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        msg.textContent = (data && data.detail) ? data.detail : 'No se pudo guardar el logo.';
+        return;
+      }
+      msg.textContent = 'Logo actualizado correctamente.';
+      const url = data.logo_url ? (data.logo_url + '?v=' + Date.now()) : '';
+      setPreview(url);
+    } catch (_) {
+      msg.textContent = 'Error de red al guardar el logo.';
+    }
+  });
+
+  loadCurrentLogo();
+})();
+</script>
+{% endblock %}

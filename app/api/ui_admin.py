@@ -113,3 +113,20 @@ async def admin_backups(
             "backup_info": backup_info,
         },
     )
+
+
+@router.get("/admin/logo", response_class=HTMLResponse)
+async def admin_logo(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("admin_sistema", False)),
+):
+    status = db_status(db)
+    return templates.TemplateResponse(
+        "admin/logo.html",
+        {
+            "request": request,
+            "db_status": status,
+            "current_user": current_user,
+        },
+    )

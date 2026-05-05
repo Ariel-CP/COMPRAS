@@ -1,8 +1,12 @@
-import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+"""Aplica migración 013: tablas de evaluación anual de proveedor."""
+import os
+import sys
 
-from sqlalchemy import create_engine, text
-from app.core.config import get_settings
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))  # noqa: E402
+
+from sqlalchemy import create_engine, text  # noqa: E402
+
+from app.core.config import get_settings  # noqa: E402
 
 _s = get_settings()
 engine = create_engine(_s.database_url, pool_pre_ping=True)
@@ -13,7 +17,11 @@ with open("database/migrations/013_evaluacion_proveedor_anual.sql", encoding="ut
 # Separar en sentencias individuales ignorando líneas de comentario
 stmts = []
 for block in sql.split(";"):
-    lines = [l for l in block.splitlines() if l.strip() and not l.strip().startswith("--")]
+    lines = [
+        line
+        for line in block.splitlines()
+        if line.strip() and not line.strip().startswith("--")
+    ]
     joined = "\n".join(lines).strip()
     if joined:
         stmts.append(joined)

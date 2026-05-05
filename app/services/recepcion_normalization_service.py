@@ -7,7 +7,6 @@ manteniendo integridad referencial y registrando errores sin perder datos crudos
 
 import logging
 from datetime import datetime
-from decimal import Decimal
 from typing import Optional, Dict, List, Tuple
 
 from app.db import get_db

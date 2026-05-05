@@ -25,7 +25,7 @@ with engine.connect() as conn:
             print(f'\n[FALTA] Tabla {tabla} NO existe')
             
     # Mostrar todas las tablas
-    print(f'\n\nTodas las tablas en BD:')
+    print('\n\nTodas las tablas en BD:')
     all_tables = inspector.get_table_names()
     for t in sorted(all_tables):
         print(f'  - {t}')

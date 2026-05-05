@@ -28,7 +28,7 @@ def test_importacion():
         print("\n🔄 Importando proveedores...")
         resultado = importar_proveedores_desde_csv(db, contenido)
         
-        print(f"\n✅ Importación completada")
+        print("\n✅ Importación completada")
         print(f"   Status: {resultado.get('status', 'N/A')}")
         print(f"   Insertados: {resultado.get('insertados', 0)}")
         print(f"   Actualizados: {resultado.get('actualizados', 0)}")

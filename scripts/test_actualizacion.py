@@ -25,7 +25,7 @@ def test_actualizacion():
         print("🔄 Re-importando proveedores (con cambios)...")
         resultado = importar_proveedores_desde_csv(db, contenido)
         
-        print(f"\n✅ Importación completada")
+        print("\n✅ Importación completada")
         print(f"   Insertados: {resultado.get('insertados', 0)}")
         print(f"   Actualizados: {resultado.get('actualizados', 0)}")
         print(f"   Rechazados: {resultado.get('rechazados', 0)}")
@@ -33,7 +33,7 @@ def test_actualizacion():
         # Verificar datos
         from sqlalchemy import text
         rows = db.execute(text("SELECT codigo, nombre, email FROM proveedor WHERE codigo LIKE 'TEST%' ORDER BY codigo")).fetchall()
-        print(f"\n📊 Proveedores en BD:")
+        print("\n📊 Proveedores en BD:")
         for row in rows:
             print(f"   {row[0]}: {row[1]} ({row[2]})")
         

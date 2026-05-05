@@ -6,7 +6,6 @@ Test de actualización: verificar que cambiar Activo en CSV actualiza la BD corr
 import sys
 sys.path.insert(0, '.')
 
-from pathlib import Path
 from app.db import SessionLocal
 from app.services.proveedor_import_service import importar_proveedores_desde_csv
 from sqlalchemy import text
@@ -38,7 +37,7 @@ UPDATE_3;TERCERA EMP;20-11111111-1;tercera@test.com;True
             SELECT codigo, nombre, activo FROM proveedor 
             WHERE codigo LIKE 'UPDATE_%' ORDER BY codigo
         """)).fetchall()
-        print(f"\n   Estado inicial en BD:")
+        print("\n   Estado inicial en BD:")
         for codigo, nombre, activo in rows1:
             estado = "✅ ACTIVO" if activo else "❌ INACTIVO"
             print(f"      {codigo}: {estado}")
@@ -58,7 +57,7 @@ UPDATE_3;TERCERA EMP ACTUALIZADA;20-11111111-1;tercera@test.com;No
             SELECT codigo, nombre, activo FROM proveedor 
             WHERE codigo LIKE 'UPDATE_%' ORDER BY codigo
         """)).fetchall()
-        print(f"\n   Estado final en BD:")
+        print("\n   Estado final en BD:")
         print(f"\n{'Código':<15} {'Estado':<25} {'Esperado':<25} {'Resultado':<10}")
         print("-" * 75)
         

@@ -55,8 +55,8 @@ def api_crear_evaluacion(
             raise HTTPException(
                 status_code=409,
                 detail="Ya existe una evaluación para ese proveedor/año/período.",
-            )
-        raise HTTPException(status_code=500, detail=msg)
+            ) from exc
+        raise HTTPException(status_code=500, detail=msg) from exc
 
 
 @router.get("/", response_model=list[EvaluacionListItem])
@@ -169,7 +169,7 @@ def api_importar_historial(
         resultado = importar_historial_desde_access(db)
     except Exception as exc:
         logger.error("Error importando historial avaprov: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return resultado
 
 
@@ -189,12 +189,13 @@ async def api_importar_csv(
 
     Idempotente: si ya existe evaluación para proveedor+año, la salta.
     """
-    if not archivo.filename.lower().endswith(".csv"):
+    nombre = archivo.filename or ""
+    if not nombre.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Solo se aceptan archivos .csv")
     try:
         contenido = await archivo.read()
         resultado = importar_desde_csv(db, contenido, usuario_id=current_user.id)
     except Exception as exc:
         logger.error("Error importando CSV: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return resultado

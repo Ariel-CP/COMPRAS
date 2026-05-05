@@ -8,33 +8,36 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from sqlalchemy import text, create_engine
-from app.core.config import get_settings
+from sqlalchemy import create_engine, text  # noqa: E402
+
+from app.core.config import get_settings  # noqa: E402
+
 
 def aplicar_migracion():
     """Aplica migración SQL para agregar campos a tabla proveedor"""
-    
+
     settings = get_settings()
     engine = create_engine(settings.database_url)
-    
+
     sql_file = project_root / "database" / "agregar_campos_proveedor.sql"
-    sql_script = sql_file.read_text(encoding='utf-8')
-    
+    sql_script = sql_file.read_text(encoding="utf-8")
+
     # Remover comentarios de bloque /* ... */
     import re
-    sql_script = re.sub(r'/\*.*?\*/', '', sql_script, flags=re.DOTALL)
-    
+
+    sql_script = re.sub(r"/\*.*?\*/", "", sql_script, flags=re.DOTALL)
+
     # Remover comentarios de línea --
     lines = []
-    for line in sql_script.split('\n'):
-        if '--' in line:
-            line = line[:line.index('--')]
+    for line in sql_script.split("\n"):
+        if "--" in line:
+            line = line[: line.index("--")]
         lines.append(line)
-    sql_script = '\n'.join(lines)
-    
+    sql_script = "\n".join(lines)
+
     # Dividir por sentencias (por ;)
-    sentencias = [s.strip() for s in sql_script.split(';') if s.strip()]
-    
+    sentencias = [s.strip() for s in sql_script.split(";") if s.strip()]
+
     with engine.connect() as conn:
         for sentencia in sentencias:
             try:
@@ -49,6 +52,7 @@ def aplicar_migracion():
                     print(f"❌ Error: {e}")
                     conn.rollback()
                     raise
+
 
 if __name__ == "__main__":
     print("Aplicando migración de campos proveedor...")

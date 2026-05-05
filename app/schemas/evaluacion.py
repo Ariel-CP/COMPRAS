@@ -1,8 +1,7 @@
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import date
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class CriterioDetalleIn(BaseModel):

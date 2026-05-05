@@ -6,9 +6,9 @@ Permite recalcular histórico sin reimportar datos crudos.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 
 from app.db import get_db
 

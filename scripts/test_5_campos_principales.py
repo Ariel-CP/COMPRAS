@@ -36,13 +36,13 @@ def main():
         print("\n🔄 Importando archivo CSV con 5 campos principales...")
         resultado = importar_proveedores_desde_csv(db, contenido)
         
-        print(f"\n✅ Importación completada")
+        print("\n✅ Importación completada")
         print(f"   Insertados: {resultado.get('insertados', 0)}")
         print(f"   Actualizados: {resultado.get('actualizados', 0)}")
         print(f"   Rechazados: {resultado.get('rechazados', 0)}")
         
         if resultado.get('errores'):
-            print(f"\n⚠️ Errores encontrados:")
+            print("\n⚠️ Errores encontrados:")
             for err in resultado['errores']:
                 print(f"   Fila {err.get('fila')} ({err.get('codigo')}): {err.get('mensaje')}")
         

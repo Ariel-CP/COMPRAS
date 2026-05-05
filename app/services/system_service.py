@@ -11,12 +11,19 @@ import os
 import subprocess
 from pathlib import Path
 
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from app.core.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
 # Ruta al script de actualización (relativa a la raíz del repo)
 _UPDATE_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "ops" / "update.sh"
+_LOGO_DIR = Path(__file__).resolve().parents[1] / "static" / "uploads"
+_LOGO_PARAM_KEY = "ui_logo_path"
+_MAX_LOGO_BYTES = 2 * 1024 * 1024
+_ALLOWED_LOGO_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
 
 
 def _normalize_improvement_line(line: str) -> str:
@@ -196,3 +203,59 @@ def trigger_update() -> dict:
 
     logger.info("Script de actualización lanzado: %s", _UPDATE_SCRIPT)
     return {"status": "updating", "message": "Actualización iniciada. El servicio va a reiniciar."}
+
+
+def get_ui_logo(db: Session) -> dict:
+    row = db.execute(
+        text("SELECT valor FROM parametro_sistema WHERE clave = :key LIMIT 1"),
+        {"key": _LOGO_PARAM_KEY},
+    ).fetchone()
+    logo_url = row[0] if row and row[0] else None
+    return {"logo_url": logo_url}
+
+
+def save_ui_logo(
+    db: Session,
+    *,
+    file_bytes: bytes,
+    original_filename: str,
+    content_type: str | None,
+) -> dict:
+    if not file_bytes:
+        raise ValueError("El archivo está vacío")
+    if len(file_bytes) > _MAX_LOGO_BYTES:
+        raise ValueError("El logo supera el tamaño máximo permitido (2 MB)")
+
+    suffix = Path(original_filename or "").suffix.lower()
+    if suffix not in _ALLOWED_LOGO_SUFFIXES:
+        raise ValueError("Formato no permitido. Use PNG, JPG, JPEG, WEBP o SVG")
+
+    normalized_content_type = (content_type or "").lower()
+    if normalized_content_type and not normalized_content_type.startswith("image/"):
+        raise ValueError("El archivo seleccionado no es una imagen válida")
+
+    _LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    for existing in _LOGO_DIR.glob("logo_custom.*"):
+        existing.unlink(missing_ok=True)
+
+    final_name = f"logo_custom{suffix}"
+    final_path = _LOGO_DIR / final_name
+    final_path.write_bytes(file_bytes)
+
+    logo_url = f"/static/uploads/{final_name}"
+    db.execute(
+        text(
+            """
+            INSERT INTO parametro_sistema (clave, valor, descripcion)
+            VALUES (:key, :value, :description)
+            ON DUPLICATE KEY UPDATE valor = VALUES(valor), descripcion = VALUES(descripcion)
+            """
+        ),
+        {
+            "key": _LOGO_PARAM_KEY,
+            "value": logo_url,
+            "description": "Logo visible en cabecera de la aplicación",
+        },
+    )
+    db.commit()
+    return {"logo_url": logo_url}

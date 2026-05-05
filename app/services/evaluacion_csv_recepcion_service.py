@@ -9,13 +9,17 @@ Lógica:
     constantes por proveedor+año (calculados por Power BI), se toma el último valor.
   - Idempotente: si ya existe la evaluación (proveedor_id + anno + periodo=0), se salta.
 """
+
 from __future__ import annotations
 
 import io
 import logging
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -27,12 +31,14 @@ logger = logging.getLogger(__name__)
 # Utilidades
 # ---------------------------------------------------------------------------
 
+
 def _safe_decimal(v: Any) -> Optional[Decimal]:
     if v is None:
         return None
     # pandas puede dejar NaN
     try:
         import math
+
         if math.isnan(float(v)):
             return None
     except (TypeError, ValueError):
@@ -77,6 +83,7 @@ def _mapear_clasificacion(v: Any) -> Optional[str]:
 # Lectura y deduplicación del CSV
 # ---------------------------------------------------------------------------
 
+
 def _leer_csv(contenido: bytes) -> "pd.DataFrame":
     """
     Lee el CSV con separador ; y decimal ,
@@ -104,7 +111,9 @@ def _deduplicar(df: "pd.DataFrame") -> "pd.DataFrame":
     Agrupa por Codigo Proveedor + Año y toma la última fila de cada grupo.
     Los puntajes anuales son constantes dentro del grupo, pero Controlo puede variar.
     """
-    col_codigo = _buscar_col(df, "Codigo Proveedor", "CodigoProveedor", "codigo_proveedor")
+    col_codigo = _buscar_col(
+        df, "Codigo Proveedor", "CodigoProveedor", "codigo_proveedor"
+    )
     col_anno = _buscar_col(df, "Año", "Anno", "Year", "Anio")
 
     if col_codigo is None or col_anno is None:
@@ -130,6 +139,7 @@ def _buscar_col(df: "pd.DataFrame", *candidatos: str) -> Optional[str]:
 # Lookup de proveedores
 # ---------------------------------------------------------------------------
 
+
 def _build_codigo_map(db: Session) -> dict[str, int]:
     rows = db.execute(text("SELECT id, codigo FROM proveedor")).fetchall()
     return {str(r.codigo).strip(): r.id for r in rows if r.codigo}
@@ -139,22 +149,27 @@ def _build_codigo_map(db: Session) -> dict[str, int]:
 # Inserción idempotente
 # ---------------------------------------------------------------------------
 
+
 def _insertar_evaluacion(db: Session, datos: dict) -> tuple[bool, str]:
     """Inserta 1 evaluación. Retorna (ok, mensaje)."""
-    existe = db.execute(text("""
+    existe = db.execute(
+        text("""
         SELECT id FROM evaluacion_proveedor_anual
         WHERE proveedor_id = :pid AND anno = :anno AND periodo = :periodo
-    """), {
-        "pid":    datos["proveedor_id"],
-        "anno":   datos["anno"],
-        "periodo": datos["periodo"],
-    }).fetchone()
+    """),
+        {
+            "pid": datos["proveedor_id"],
+            "anno": datos["anno"],
+            "periodo": datos["periodo"],
+        },
+    ).fetchone()
 
     if existe:
         return False, "duplicado"
 
     try:
-        db.execute(text("""
+        db.execute(
+            text("""
             INSERT INTO evaluacion_proveedor_anual (
                 proveedor_id, anno, periodo, tipo_evaluacion,
                 puntaje_calidad, puntaje_servicio, puntaje_embalaje, puntaje_total,
@@ -164,20 +179,27 @@ def _insertar_evaluacion(db: Session, datos: dict) -> tuple[bool, str]:
                 :puntaje_calidad, :puntaje_servicio, :puntaje_embalaje, :puntaje_total,
                 :resultado, :evaluador_nombre, :usuario_id
             )
-        """), datos)
+        """),
+            datos,
+        )
 
         # Actualizar estado_calificacion en proveedor
         if datos.get("resultado"):
-            db.execute(text("""
+            db.execute(
+                text("""
                 UPDATE proveedor SET estado_calificacion = :res WHERE id = :pid
-            """), {"res": datos["resultado"], "pid": datos["proveedor_id"]})
+            """),
+                {"res": datos["resultado"], "pid": datos["proveedor_id"]},
+            )
 
         return True, "ok"
 
     except Exception as exc:
         logger.warning(
             "Error insertando evaluación proveedor_id=%s anno=%s: %s",
-            datos.get("proveedor_id"), datos.get("anno"), exc,
+            datos.get("proveedor_id"),
+            datos.get("anno"),
+            exc,
         )
         return False, str(exc)
 
@@ -186,7 +208,10 @@ def _insertar_evaluacion(db: Session, datos: dict) -> tuple[bool, str]:
 # Función principal
 # ---------------------------------------------------------------------------
 
-def importar_desde_csv(db: Session, contenido: bytes, usuario_id: Optional[int] = None) -> dict:
+
+def importar_desde_csv(
+    db: Session, contenido: bytes, usuario_id: Optional[int] = None
+) -> dict:
     """
     Procesa el CSV exportado de Power BI e importa una evaluación anual por proveedor.
 
@@ -202,14 +227,14 @@ def importar_desde_csv(db: Session, contenido: bytes, usuario_id: Optional[int] 
     inicio = datetime.now()
 
     stats: dict = {
-        "filas_csv":          0,
+        "filas_csv": 0,
         "proveedores_unicos": 0,
-        "importadas":         0,
-        "duplicadas":         0,
-        "sin_proveedor":      0,
-        "errores":            0,
-        "errores_detalle":    [],
-        "duracion_segundos":  0.0,
+        "importadas": 0,
+        "duplicadas": 0,
+        "sin_proveedor": 0,
+        "errores": 0,
+        "errores_detalle": [],
+        "duracion_segundos": 0.0,
     }
 
     # 1) Leer CSV
@@ -231,16 +256,24 @@ def importar_desde_csv(db: Session, contenido: bytes, usuario_id: Optional[int] 
         return stats
 
     stats["proveedores_unicos"] = len(df)
-    logger.info("CSV: %d filas, %d combinaciones proveedor+año", stats["filas_csv"], len(df))
+    logger.info(
+        "CSV: %d filas, %d combinaciones proveedor+año", stats["filas_csv"], len(df)
+    )
 
     # 3) Detectar nombres de columnas relevantes
-    col_codigo   = _buscar_col(df, "Codigo Proveedor", "CodigoProveedor")
-    col_anno     = _buscar_col(df, "Año", "Anno", "Year", "Anio")
-    col_calidad  = _buscar_col(df, "PuntajeCalidadPonderado", "Puntaje Calidad Ponderado")
-    col_entrega  = _buscar_col(df, "PuntajeEntregaPonderado", "Puntaje Entrega Ponderado")
-    col_cert     = _buscar_col(df, "PuntajeCertificadoPonderado", "Puntaje Certificado Ponderado")
-    col_total    = _buscar_col(df, "PuntajeTotalProveedor", "Puntaje Total Proveedor")
-    col_clasif   = _buscar_col(df, "ClasificacionProveedor", "Clasificacion Proveedor")
+    col_codigo = _buscar_col(df, "Codigo Proveedor", "CodigoProveedor")
+    col_anno = _buscar_col(df, "Año", "Anno", "Year", "Anio")
+    col_calidad = _buscar_col(
+        df, "PuntajeCalidadPonderado", "Puntaje Calidad Ponderado"
+    )
+    col_entrega = _buscar_col(
+        df, "PuntajeEntregaPonderado", "Puntaje Entrega Ponderado"
+    )
+    col_cert = _buscar_col(
+        df, "PuntajeCertificadoPonderado", "Puntaje Certificado Ponderado"
+    )
+    col_total = _buscar_col(df, "PuntajeTotalProveedor", "Puntaje Total Proveedor")
+    col_clasif = _buscar_col(df, "ClasificacionProveedor", "Clasificacion Proveedor")
     col_controlo = _buscar_col(df, "Controlo", "controlo")
 
     # 4) Mapa de códigos de proveedor
@@ -249,7 +282,7 @@ def importar_desde_csv(db: Session, contenido: bytes, usuario_id: Optional[int] 
     # 5) Procesar cada fila deduplicada
     for _, row in df.iterrows():
         codigo = _safe_str(row.get(col_codigo)) if col_codigo else None
-        anno   = _safe_int(row.get(col_anno)) if col_anno else None
+        anno = _safe_int(row.get(col_anno)) if col_anno else None
 
         if not codigo or not anno:
             stats["sin_proveedor"] += 1
@@ -261,14 +294,19 @@ def importar_desde_csv(db: Session, contenido: bytes, usuario_id: Optional[int] 
             logger.debug("Proveedor codigo=%s no encontrado en BD", codigo)
             continue
 
-        p_cal  = _safe_decimal(row.get(col_calidad)  if col_calidad  else None)
-        p_ser  = _safe_decimal(row.get(col_entrega)  if col_entrega  else None)
-        p_emb  = _safe_decimal(row.get(col_cert)     if col_cert     else None)
-        p_tot  = _safe_decimal(row.get(col_total)    if col_total    else None)
+        p_cal = _safe_decimal(row.get(col_calidad) if col_calidad else None)
+        p_ser = _safe_decimal(row.get(col_entrega) if col_entrega else None)
+        p_emb = _safe_decimal(row.get(col_cert) if col_cert else None)
+        p_tot = _safe_decimal(row.get(col_total) if col_total else None)
         clasif = _mapear_clasificacion(row.get(col_clasif) if col_clasif else None)
 
         # Si puntaje_total no está en CSV, calcularlo
-        if p_tot is None and p_cal is not None and p_ser is not None and p_emb is not None:
+        if (
+            p_tot is None
+            and p_cal is not None
+            and p_ser is not None
+            and p_emb is not None
+        ):
             p_tot = p_cal + p_ser + p_emb
 
         # Si clasificación no viene, aplicar regla ISO
@@ -283,17 +321,17 @@ def importar_desde_csv(db: Session, contenido: bytes, usuario_id: Optional[int] 
         evaluador = _safe_str(row.get(col_controlo) if col_controlo else None)
 
         datos = {
-            "proveedor_id":     proveedor_id,
-            "anno":             anno,
-            "periodo":          0,
-            "tipo_evaluacion":  "ANUAL",
-            "puntaje_calidad":  float(p_cal) if p_cal is not None else None,
+            "proveedor_id": proveedor_id,
+            "anno": anno,
+            "periodo": 0,
+            "tipo_evaluacion": "ANUAL",
+            "puntaje_calidad": float(p_cal) if p_cal is not None else None,
             "puntaje_servicio": float(p_ser) if p_ser is not None else None,
             "puntaje_embalaje": float(p_emb) if p_emb is not None else None,
-            "puntaje_total":    float(p_tot) if p_tot is not None else None,
-            "resultado":        clasif,
+            "puntaje_total": float(p_tot) if p_tot is not None else None,
+            "resultado": clasif,
             "evaluador_nombre": evaluador,
-            "usuario_id":       usuario_id,
+            "usuario_id": usuario_id,
         }
 
         ok, msg = _insertar_evaluacion(db, datos)
@@ -319,6 +357,9 @@ def importar_desde_csv(db: Session, contenido: bytes, usuario_id: Optional[int] 
     stats["duracion_segundos"] = round((datetime.now() - inicio).total_seconds(), 2)
     logger.info(
         "CSV import finalizado: importadas=%d duplicadas=%d sin_proveedor=%d errores=%d",
-        stats["importadas"], stats["duplicadas"], stats["sin_proveedor"], stats["errores"],
+        stats["importadas"],
+        stats["duplicadas"],
+        stats["sin_proveedor"],
+        stats["errores"],
     )
     return stats

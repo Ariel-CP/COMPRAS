@@ -41,8 +41,13 @@ header a.inicio-verde,
 @keyframes spin{to{transform:rotate(360deg)}}
 body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;padding:0}
 header{background:#0b5cab;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:16px}
+header .brand-wrap{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;min-width:170px}
+header .brand-wrap h1{margin:0;line-height:1.1;font-size:1.5rem}
+header .brand-logo-slot{width:170px;height:56px;display:flex;align-items:center;justify-content:flex-start;overflow:hidden}
+header .brand-logo-img{width:100%;height:100%;object-fit:contain;object-position:left center;display:block}
 header nav a{color:#fff;margin-right:12px;text-decoration:none}
 header nav a.wizard-oc-link{display:inline-flex;align-items:center;gap:6px}
+header .header-right .menu-user{font-size:12px;line-height:1.1;opacity:.95}
 header .db-status{margin-left:auto;font-size:12px}
 header .db-status .ok{color:#bdfcc9}
 header .db-status .err{color:#ffd2d2}
@@ -175,3 +180,8 @@ table.productos-table { width:100%; }
 .modal-card{box-shadow:0 6px 30px rgba(11,92,171,0.18);background:linear-gradient(180deg,#fff 0%, #f7fbff 100%);border-radius:12px;padding:20px;border:1px solid #e6eefb}
 .modal-card .login-brand{margin-bottom:6px}
 #login-modal-close{position:absolute;right:6px;top:6px}
+
+/* Configuración de logo */
+.logo-config-preview-wrap{background:#f8fbff;border:1px dashed #b7d0f4;border-radius:8px;padding:14px}
+.logo-config-slot{width:100%;max-width:260px;height:86px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #d0d7de;border-radius:8px;overflow:hidden}
+.logo-config-img{max-width:100%;max-height:100%;object-fit:contain;display:block}

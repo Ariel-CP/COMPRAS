@@ -10,7 +10,11 @@
 </head>
 <body>
   <header>
-    <h1>Compras</h1>
+    <div class="brand-wrap">
+      <div class="brand-logo-slot">
+        <img id="header-logo" class="brand-logo-img hidden" alt="Logo de la empresa" />
+      </div>
+    </div>
     {% set _user = current_user or request.state.current_user %}
     {% if _user %}
     {% set perms = _user.permissions if _user.permissions is defined else {} %}
@@ -37,7 +41,7 @@
       {% if perms.get('proveedores', (False, False))[0] %}<a href="/ui/proveedores">Proveedores</a>{% endif %}
       {% if perms.get('proveedores', (False, False))[0] %}<a href="/ui/evaluaciones">Evaluaciones</a>{% endif %}
       {% if perms.get('tipo_cambio', (False, False))[0] %}<a href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
-      {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] or perms.get('admin_backups', (False, False))[0] %}
+      {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] or perms.get('admin_backups', (False, False))[0] or perms.get('admin_sistema', (False, False))[0] %}
       {% if show_admin %}
       <span class="import-dropdown" style="vertical-align:middle;">
         <button class="btn-accion dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Configuración ▾</button>
@@ -51,6 +55,9 @@
           {% if perms.get('admin_roles', (False, False))[0] %}
             <a class="dropdown-item" href="/ui/admin/permisos">Permisos</a>
             <a class="dropdown-item" href="/ui/admin/roles">Roles</a>
+          {% endif %}
+          {% if perms.get('admin_sistema', (False, False))[0] %}
+            <a class="dropdown-item" href="/ui/admin/logo">Logo</a>
           {% endif %}
         </div>
       </span>
@@ -235,6 +242,27 @@
   })();
   </script>
   {% endif %}
+  <script>
+  (function(){
+    const logoImg = document.getElementById('header-logo');
+    if (!logoImg) return;
+
+    async function loadHeaderLogo() {
+      try {
+        const r = await fetch('/api/system/logo');
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!data.logo_url) return;
+        logoImg.src = data.logo_url + '?v=' + Date.now();
+        logoImg.classList.remove('hidden');
+      } catch (_) {
+        // Si falla la consulta, se mantiene el header sin logo.
+      }
+    }
+
+    loadHeaderLogo();
+  })();
+  </script>
     <!-- Modal container para login -->
     <div id="login-modal" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" id="login-modal-backdrop"></div>

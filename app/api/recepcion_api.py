@@ -5,19 +5,14 @@ Fase 5: Explotación de datos - lecturas analíticas separadas de operaciones.
 """
 
 import logging
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File
-from pydantic import ValidationError
+from fastapi import APIRouter, HTTPException, Query, Depends
 
 from app.api.deps_auth import get_current_user
 from app.db import get_db
 from app.schemas.recepcion import (
-    RecepcionCabeceraCreate,
-    RecepcionCabeceraUpdate,
-    RecepcionCabeceraOut,
-    RecepcionCabeceraDetalle,
     RecepcionImportResult,
     RecepcionNormalizacionResult,
     EvaluacionCalculoResult,

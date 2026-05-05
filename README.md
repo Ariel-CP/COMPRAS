@@ -14,30 +14,51 @@ Proyecto orientado a la gestión de estructuras de producto (MBOM), planificaci�
 
 ```
 app/
-  main.py              # Punto de entrada FastAPI
+  main.py              # Punto de entrada FastAPI + middleware de auth
   db.py                # Conexión y dependencia de sesión
   api/                 # Routers (endpoints REST y vistas UI)
+    auth.py            # Login / logout / me
     mbom_api.py        # Endpoints MBOM (estructura, costos, revisión)
-    productos.py       # CRUD básico productos
-    unidades.py        # Listado unidades de medida
-    plan.py            # Plan producción mensual (stub inicial)
-    stock.py           # Importación/visualización de stock (stub)
-    ... ui_*           # Vistas HTML
+    productos.py       # CRUD productos
+    proveedores.py     # CRUD proveedores
+    evaluacion_api.py  # Evaluación de proveedores
+    recepcion_api.py   # Recepciones de materiales
+    plan.py            # Plan producción mensual
+    stock.py           # Stock disponible
+    precios.py         # Historial de precios
+    tipo_cambio.py     # Tipo de cambio
+    rubros.py          # Catálogo de rubros
+    informes.py        # Informes y costos
+    backups.py         # Gestión de backups
+    system_api.py      # Estado y actualización remota
+    roles.py / users.py # Administración de usuarios y roles
+    ui_*.py            # Vistas HTML (una por módulo)
   services/            # Lógica de negocio
-    mbom_service.py    # Operaciones MBOM cabecera/detalle
-    mbom_costos.py     # Cálculo de costos discriminados (materiales + procesos)
-    operacion_service.py        # CRUD operaciones (catálogo)
-    mbom_operacion_service.py   # Gestión rutas de operaciones
-    producto_service.py
-    unidad_service.py
-    plan_service.py
-    stock_import_service.py (futuro origen ERP externo)
-  schemas/             # Modelos Pydantic (serialización)
-  templates/           # HTML Jinja2 (ej: mbom/estructura.html)
-  static/              # CSS/JS estáticos (si se agregan)
+    mbom_service.py / mbom_costos.py / mbom_operacion_service.py
+    proveedor_service.py / proveedor_import_service.py
+    evaluacion_service.py / evaluacion_csv_recepcion_service.py
+    recepcion_sync_service.py / recepcion_access_import_service.py
+    recepcion_normalization_service.py / recepcion_metrics_service.py
+    plan_service.py / plan_produccion_service.py
+    stock_service.py / stock_import_service.py
+    precio_service.py
+    tipo_cambio_service.py / tipo_cambio_sync_service.py / fx_provider.py
+    auth_service.py / user_service.py
+    backup_service.py / backup_scheduler.py
+    system_service.py
+    informe_costos_service.py
+    operacion_service.py / ruta_operacion_base_service.py
+    rubro_service.py / unidad_service.py / producto_service.py
+  schemas/             # Modelos Pydantic (serialización / validación)
+  templates/           # HTML Jinja2 (una carpeta por módulo)
+  static/              # CSS / JS estáticos
 database/
   schema.sql           # Definición completa del schema
-import/                # Archivos fuente de importaciones (CSV/Excel futuros)
+  migrations/          # Migraciones SQL numeradas (001–013)
+scripts/
+  ops/                 # Scripts operativos (migraciones, deploy, update)
+  dev/                 # Scripts de desarrollo y prueba
+import/                # Plantillas CSV para importaciones
 ```
 
 ## Principales Tablas (según `schema.sql`)
@@ -408,7 +429,49 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 - Mensajes persistentes y seleccionables para operaciones y costos
 - Resaltado automático en amarillo de materiales sin costo cargado
 
+✅ **Módulo de Proveedores**
+
+- ABM completo de proveedores con estado activo/inactivo
+- Campos: razón social, CUIT, email, teléfono, rubro, condición pago, dirección, notas
+- Importación masiva desde CSV (`proveedor_import_service.py`) con validaciones de CUIT, email y teléfono
+- Evaluación de proveedores por año (`evaluacion_proveedor_anual`) con puntaje ponderado
+- Vista UI: `/ui/proveedores`
+
+✅ **Módulo de Recepciones**
+
+- Registro de recepciones de materiales con estado, cantidad recibida y observaciones
+- Importación desde base de datos Access (`recepcion_access_import_service.py`) y CSV Power BI (`evaluacion_csv_recepcion_service.py`)
+- Normalización de datos (`recepcion_normalization_service.py`) y sincronización periódica (`recepcion_sync_service.py`)
+- Métricas de recepción por proveedor/período (`recepcion_metrics_service.py`)
+- Log de sincronización (`sincronizacion_log`) para auditoría
+
+✅ **Módulo de Evaluación de Proveedores**
+
+- Evaluación anual con criterios ponderados
+- Importación de datos desde fuentes externas (Access/CSV)
+- Vista UI: `/ui/evaluaciones`
+
+✅ **Tipo de Cambio**
+
+- Historial de tipos de cambio con vigencia
+- Sincronización automática configurable (`tipo_cambio_sync_service.py`)
+- Proveedor externo de tasas (`fx_provider.py`)
+- Vista UI: `/ui/tipo-cambio`
+
+✅ **Módulo de Rubros**
+
+- Catálogo de rubros/categorías para productos y proveedores
+- Vista UI: `/ui/rubros`
+
 ## Avances recientes
+
+### Mayo 2026
+
+- **Calidad de código**: limpieza completa con `ruff` (43 errores corregidos, 30 automáticos y 13 manuales) y `black` para normalización de formato.
+- **Type hints / Mypy**: tipos de retorno corregidos en `proveedor_import_service.py` (`_validate_email`, `_validate_telefono`, `_validate_cuit`). Supresión correcta de errores de `pyodbc` (no tipado) y `pandas` (import diferido con `TYPE_CHECKING`).
+- **Scripts de migración**: `apply_012.py` y `apply_013.py` con docstrings de módulo y `# noqa: E402` en imports post-`sys.path`.
+- **cSpell**: archivo `.cspell.json` con vocabulario del dominio en español (`codigo`, `cuit`, `telefono`, `proveedor`, `recepcion`, etc.) para evitar falsos positivos del corrector ortográfico.
+- **Tests**: suite existente (`tests/`) mantiene 2 passed sin regresiones.
 
 ### Abril 2026
 
@@ -440,14 +503,12 @@ Acceso UI: `http://localhost:8000/ui/mbom`
 
 ## Próximos Pasos
 
-- Implementar importación de datos externos (`/api/mbom/{producto_id}/importar-flexxus`).
-- Vincular materiales a operaciones específicas (`mbom_detalle.operacion_secuencia`).
-- Explotación MBOM + plan mensual para requerimientos materiales.
-- Generación automática de sugerencias de compra.
-- Endpoints de reportes IA y summaries comparativos.
+- Explotación MBOM + plan mensual para requerimientos de materiales automáticos.
+- Generación de sugerencias de compra desde requerimientos vs stock.
+- Endpoints de reportes IA y summaries comparativos de costos.
 - Manejo de alternativas (`mbom_alternativa`) y efectividad (`mbom_detalle_efectividad`).
 - Historial de costos de operaciones (similar a `costo_producto`).
-- Tests unitarios de servicios clave (cálculo costos, activación/clonado, validación cantidades).
+- Ampliar cobertura de tests unitarios (cálculo de costos, activación/clonado, validación de cantidades, importaciones).
 
 ## Git / Versionado
 
@@ -478,8 +539,8 @@ Documentar cambios relevantes en este README y mantener sincronizados los script
 
 ---
 
-**Última actualización:** 8 de diciembre de 2025  
-**Versión:** 0.3.0 - Plan de Producción Mensual editable, importación/exportación masiva y análisis de variación
+**Última actualización:** 5 de mayo de 2026  
+**Versión:** 0.2.0 — Módulos de proveedores, recepciones, evaluación, tipo de cambio, backups y actualización remota
 
 ## Cambios recientes (13 de febrero de 2026)
 
