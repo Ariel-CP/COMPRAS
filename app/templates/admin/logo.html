@@ -60,7 +60,10 @@
         return;
       }
       const data = await r.json();
-      const url = data.logo_url ? (data.logo_url + '?v=' + Date.now()) : '';
+      const safeLogo = data.logo_url && String(data.logo_url).startsWith('/static/')
+        ? data.logo_url
+        : '';
+      const url = safeLogo ? (safeLogo + '?v=' + Date.now()) : '';
       setPreview(url);
     } catch (_) {
       setPreview('');

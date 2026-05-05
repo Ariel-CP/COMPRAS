@@ -252,7 +252,7 @@
         const r = await fetch('/api/system/logo');
         if (!r.ok) return;
         const data = await r.json();
-        if (!data.logo_url) return;
+        if (!data.logo_url || !String(data.logo_url).startsWith('/static/')) return;
         logoImg.src = data.logo_url + '?v=' + Date.now();
         logoImg.classList.remove('hidden');
       } catch (_) {

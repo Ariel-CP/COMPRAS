@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Ruta al script de actualización (relativa a la raíz del repo)
 _UPDATE_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "ops" / "update.sh"
+_UPDATE_LOG = Path(__file__).resolve().parents[2] / "logs" / "update.log"
 _LOGO_DIR = Path(__file__).resolve().parents[1] / "static" / "uploads"
 _LOGO_PARAM_KEY = "ui_logo_path"
 _MAX_LOGO_BYTES = 2 * 1024 * 1024
@@ -190,19 +191,27 @@ def trigger_update() -> dict:
     if not _UPDATE_SCRIPT.exists():
         raise FileNotFoundError(f"Script no encontrado: {_UPDATE_SCRIPT}")
 
+    _UPDATE_LOG.parent.mkdir(parents=True, exist_ok=True)
+
     try:
+        with _UPDATE_LOG.open("a", encoding="utf-8") as log_file:
+            log_file.write("\n===== update start =====\n")
         subprocess.Popen(
             ["bash", str(_UPDATE_SCRIPT)],
             start_new_session=True,          # desacopla del proceso padre
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=_UPDATE_LOG.open("a", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
             env={**os.environ},
         )
     except OSError as exc:
         raise RuntimeError(f"No se pudo lanzar el script de actualización: {exc}") from exc
 
     logger.info("Script de actualización lanzado: %s", _UPDATE_SCRIPT)
-    return {"status": "updating", "message": "Actualización iniciada. El servicio va a reiniciar."}
+    return {
+        "status": "updating",
+        "message": "Actualización iniciada. El servicio va a reiniciar.",
+        "log_path": str(_UPDATE_LOG),
+    }
 
 
 def get_ui_logo(db: Session) -> dict:
@@ -211,6 +220,14 @@ def get_ui_logo(db: Session) -> dict:
         {"key": _LOGO_PARAM_KEY},
     ).fetchone()
     logo_url = row[0] if row and row[0] else None
+    if logo_url:
+        normalized = str(logo_url).strip()
+        if normalized.startswith("/static/uploads/"):
+            rel_path = normalized.removeprefix("/static/")
+            file_path = Path(__file__).resolve().parents[1] / rel_path
+            logo_url = normalized if file_path.exists() else None
+        else:
+            logo_url = None
     return {"logo_url": logo_url}
 
 

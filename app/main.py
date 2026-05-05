@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import RedirectResponse
 
 from .core.version import APP_VERSION
 from fastapi.middleware.cors import CORSMiddleware
@@ -182,10 +183,12 @@ def create_app() -> FastAPI:
 
         return await call_next(request)
 
+    @application.get("/favicon.ico", include_in_schema=False)
+    def favicon_ico_redirect():
+        return RedirectResponse(url="/static/favicon.svg", status_code=307)
+
     @application.get("/")
     def root():
-        from fastapi.responses import RedirectResponse
-
         return RedirectResponse(url="/ui/login", status_code=302)
 
     @application.get("/health")
