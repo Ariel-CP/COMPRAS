@@ -147,7 +147,17 @@ for migration in "${migrations[@]}"; do
     fi
 
     log "Aplicando: $MIGRATION_NAME..."
-    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$migration" || fail "Falló migración: $MIGRATION_NAME"
+    migration_output="$(mktemp)"
+    if ! mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$migration" >"$migration_output" 2>&1; then
+        if grep -Eq "Duplicate column name|Duplicate key name|already exists|Table '.*' already exists|Duplicate entry" "$migration_output"; then
+            log "↷ Se detectó objeto ya existente en $MIGRATION_NAME; se marca como aplicada."
+        else
+            cat "$migration_output" >&2
+            rm -f "$migration_output"
+            fail "Falló migración: $MIGRATION_NAME"
+        fi
+    fi
+    rm -f "$migration_output"
 
     mysql_exec "
         INSERT INTO schema_migrations (filename, checksum)
