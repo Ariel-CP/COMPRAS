@@ -8,7 +8,70 @@ shopt -s nullglob
 log() { echo "[migrations] $*"; }
 fail() { echo "[migrations][error] $*" >&2; exit 1; }
 
-# Detectar credenciales desde variables de entorno o usar defaults
+# Detectar credenciales desde variables de entorno o usar defaults.
+# Si no están seteadas, intenta derivarlas desde DATABASE_URL en .env.
+DB_HOST="${DB_HOST:-}"
+DB_PORT="${DB_PORT:-}"
+DB_USER="${DB_USER:-}"
+DB_PASS="${DB_PASS:-}"
+DB_NAME="${DB_NAME:-}"
+
+load_db_from_dotenv() {
+    local repo_root env_file
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    env_file="${repo_root}/.env"
+
+    if [[ ! -f "$env_file" ]]; then
+        return
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        return
+    fi
+
+    eval "$(python3 - "$env_file" <<'PY'
+import shlex
+import sys
+from urllib.parse import urlparse
+
+env_file = sys.argv[1]
+database_url = ""
+with open(env_file, "r", encoding="utf-8") as fh:
+    for line in fh:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        if key.strip() == "DATABASE_URL":
+            database_url = value.strip().strip('"').strip("'")
+            break
+
+if not database_url:
+    raise SystemExit(0)
+
+parsed = urlparse(database_url)
+host = parsed.hostname or "127.0.0.1"
+port = str(parsed.port or 3306)
+user = parsed.username or "compras"
+password = parsed.password or ""
+name = (parsed.path or "/compras_db").lstrip("/") or "compras_db"
+
+print(f"DOTENV_DB_HOST={shlex.quote(host)}")
+print(f"DOTENV_DB_PORT={shlex.quote(port)}")
+print(f"DOTENV_DB_USER={shlex.quote(user)}")
+print(f"DOTENV_DB_PASS={shlex.quote(password)}")
+print(f"DOTENV_DB_NAME={shlex.quote(name)}")
+PY
+)"
+
+    DB_HOST="${DB_HOST:-${DOTENV_DB_HOST:-}}"
+    DB_PORT="${DB_PORT:-${DOTENV_DB_PORT:-}}"
+    DB_USER="${DB_USER:-${DOTENV_DB_USER:-}}"
+    DB_PASS="${DB_PASS:-${DOTENV_DB_PASS:-}}"
+    DB_NAME="${DB_NAME:-${DOTENV_DB_NAME:-}}"
+}
+
+load_db_from_dotenv
+
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-compras}"
