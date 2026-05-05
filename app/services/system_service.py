@@ -224,7 +224,7 @@ def get_ui_logo(db: Session) -> dict:
         normalized = str(logo_url).strip()
         if normalized.startswith("/static/uploads/"):
             rel_path = normalized.removeprefix("/static/")
-            file_path = Path(__file__).resolve().parents[1] / rel_path
+            file_path = Path(__file__).resolve().parents[1] / "static" / rel_path
             logo_url = normalized if file_path.exists() else None
         else:
             logo_url = None
