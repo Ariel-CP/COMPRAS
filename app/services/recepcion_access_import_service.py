@@ -12,8 +12,6 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pyodbc  # type: ignore[import-untyped]
-
 from app.db import get_db
 
 logger = logging.getLogger(__name__)
@@ -80,6 +78,13 @@ def leer_tabla_access(
         raise FileNotFoundError(f"Archivo Access no encontrado: {ruta_accdb}")
 
     logger.info(f"Leyendo {tabla_nombre} desde {ruta_accdb}")
+
+    try:
+        import pyodbc  # type: ignore[import-untyped]
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "No se puede importar desde Access: falta la dependencia 'pyodbc'"
+        ) from exc
 
     # Conexión a Access (OLEDB para .accdb en Windows)
     connection_string = (
