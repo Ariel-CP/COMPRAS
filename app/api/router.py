@@ -12,6 +12,8 @@ from .plan_produccion import router as plan_produccion_router
 from .precios import router as precios_router
 from .proveedores import router as proveedores_router
 from .productos import router as productos_router
+from .evaluacion_api import router as evaluacion_router
+from .recepcion_api import router as recepcion_router
 from .roles import router as roles_router
 from .rubros import router as rubros_router
 from .stock import router as stock_router
@@ -33,6 +35,8 @@ api_router.include_router(plan_produccion_router)
 api_router.include_router(operacion_router)
 api_router.include_router(precios_router, prefix="/precios", tags=["precios"])
 api_router.include_router(proveedores_router)
+api_router.include_router(evaluacion_router)
+api_router.include_router(recepcion_router, tags=["recepcion"])
 api_router.include_router(tipo_cambio_router, prefix="/tipo-cambio", tags=["tipo-cambio"])
 
 api_router.include_router(rubros_router)

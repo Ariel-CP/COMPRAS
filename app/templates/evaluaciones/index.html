@@ -1,0 +1,442 @@
+{% extends 'base.html' %}
+{% block title %}Evaluación de Proveedores — ISO PG-4.06.02{% endblock %}
+
+{% block content %}
+<section class="productos-wrapper">
+  <h2>Evaluación de Proveedores <small style="font-size:0.6em;color:#888;">(PG-4.06.02)</small></h2>
+
+  <div class="tabla-controles" style="justify-content:flex-start;gap:10px;margin-bottom:12px;">
+    <a class="btn-accion" href="/ui/proveedores">Ir a Proveedores</a>
+    <button type="button" class="btn-accion" id="btnImportar"
+            onclick="importarHistorial()"
+            style="background:#6c757d;"
+            title="Importa el historial completo desde el archivo Access de Gestión de Evaluación de Proveedores">
+      ⬇ Importar desde Access
+    </button>
+    <label class="btn-accion" id="lblImportarCSV"
+           style="background:#5a7d9a;cursor:pointer;padding:6px 14px;border-radius:4px;"
+           title="Importar CSV exportado de Power BI (CONTROL DE RECEPCION)">
+      📂 Importar CSV
+      <input type="file" id="inputCSV" accept=".csv" style="display:none;"
+             onchange="importarCSV(this)" />
+    </label>
+    <span id="msgImportar" style="font-size:0.9em;color:#555;"></span>
+  </div>
+
+  <!-- ===== PANEL NUEVA EVALUACIÓN ===== -->
+  <div class="panel panel-alta">
+    <h3 style="margin-bottom:14px;color:#0b5cab;border-bottom:2px solid #0b5cab;padding-bottom:6px;">
+      ➕ Nueva Evaluación
+    </h3>
+    <form id="formEvaluacion" onsubmit="return guardarEvaluacion(event)">
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 20px;">
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl required">Proveedor</label>
+          <select id="selProveedor" name="proveedor_id" required
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;">
+            <option value="">— seleccionar —</option>
+            {% for p in proveedores %}
+            <option value="{{ p.id }}">{{ p.codigo }} — {{ p.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl required">Año</label>
+          <input type="number" name="anno" min="2000" max="2099" required
+            value="{{ anno_actual }}"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Período</label>
+          <select name="periodo"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;">
+            <option value="0">Anual</option>
+            <option value="1">1er Cuatrimestre</option>
+            <option value="2">2do Cuatrimestre</option>
+            <option value="3">3er Cuatrimestre</option>
+          </select>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Tipo</label>
+          <select name="tipo_evaluacion"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;">
+            <option value="ANUAL">Anual</option>
+            <option value="CUATRIMESTRAL">Cuatrimestral</option>
+          </select>
+        </div>
+
+        <!-- Puntajes parciales -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Calidad (0–100)</label>
+          <input type="number" name="puntaje_calidad" min="0" max="100" step="0.01"
+            placeholder="Ej: 29.20"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Servicio (0–100)</label>
+          <input type="number" name="puntaje_servicio" min="0" max="100" step="0.01"
+            placeholder="Ej: 52.66"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Embalaje (0–100)</label>
+          <input type="number" name="puntaje_embalaje" min="0" max="100" step="0.01"
+            placeholder="Ej: 10.00"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Evaluador</label>
+          <input type="text" name="evaluador_nombre" maxlength="128"
+            placeholder="Apellido, Nombre"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Sector evaluador</label>
+          <input type="text" name="sector_evaluador" maxlength="100"
+            placeholder="Ej: Calidad, Compras"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Fecha evaluación</label>
+          <input type="date" name="fecha_evaluacion"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="campo-lbl">Próxima evaluación</label>
+          <input type="date" name="proxima_evaluacion"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 2;">
+          <label class="campo-lbl">Observaciones</label>
+          <textarea name="observaciones" rows="2" maxlength="1000"
+            style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;resize:vertical;"></textarea>
+        </div>
+
+      </div>
+
+      <!-- Vista previa del resultado -->
+      <div id="previaResultado" style="display:none;margin-top:14px;padding:10px 16px;border-radius:6px;font-weight:600;font-size:1em;text-align:center;"></div>
+
+      <div style="display:flex;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid #e0e0e0;">
+        <button type="submit" class="btn-guardar" style="padding:8px 28px;">✓ Guardar Evaluación</button>
+        <button type="reset" class="btn-secundario" style="padding:8px 16px;" onclick="ocultarPrevia()">Limpiar</button>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- ===== PANEL LISTADO ===== -->
+  <div class="panel panel-listado mt-3">
+    <div class="tabla-controles">
+      <select id="filtroAnno">
+        <option value="">Todos los años</option>
+        {% for y in annos %}
+        <option value="{{ y }}" {% if y == anno_actual %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+      <select id="filtroResultado">
+        <option value="">Todos los resultados</option>
+        <option value="APROBADO">Aprobado</option>
+        <option value="APROB_CONDICIONAL">Aprob. Condicional</option>
+        <option value="NO_APTO">No Apto</option>
+      </select>
+      <input type="search" id="filtroProveedor" placeholder="Filtrar por proveedor…" />
+      <button type="button" class="btn-accion" onclick="cargarEvaluaciones()">Filtrar</button>
+      <button type="button" class="btn-accion" onclick="exportarCSV()"
+              style="background:#28a745;"
+              title="Descarga las evaluaciones visibles como CSV">
+        ⬇ Exportar CSV
+      </button>
+      <span id="totalEval" style="font-size:0.9em;color:#555;white-space:nowrap;">0 evaluaciones</span>
+    </div>
+
+    <div class="tabla-scroll">
+      <table class="productos-table" id="tablaEvaluaciones">
+        <thead>
+          <tr>
+            <th>Proveedor</th>
+            <th>Año</th>
+            <th>Período</th>
+            <th>Tipo</th>
+            <th>Calidad</th>
+            <th>Servicio</th>
+            <th>Embalaje</th>
+            <th>Total</th>
+            <th>Resultado</th>
+            <th>Evaluador</th>
+            <th>Sector</th>
+            <th>Fecha Eval.</th>
+            <th>Próx. Eval.</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="cuerpoTabla">
+          <tr><td colspan="14" style="text-align:center;color:#999;padding:20px;">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</section>
+
+<style>
+  .campo-lbl {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #0b5cab;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .campo-lbl.required::after { content: " *"; color: red; }
+  .badge-aprobado        { background:#d4edda; color:#155724; padding:3px 10px; border-radius:12px; font-weight:600; white-space:nowrap; }
+  .badge-condicional     { background:#fff3cd; color:#856404; padding:3px 10px; border-radius:12px; font-weight:600; white-space:nowrap; }
+  .badge-no-apto         { background:#f8d7da; color:#721c24; padding:3px 10px; border-radius:12px; font-weight:600; white-space:nowrap; }
+  .badge-sin-eval        { background:#e2e3e5; color:#383d41; padding:3px 10px; border-radius:12px; white-space:nowrap; }
+  .mt-3 { margin-top: 20px; }
+</style>
+
+<script>
+  const PERIODO_LABELS = { 0:'Anual', 1:'1er Cuatri', 2:'2do Cuatri', 3:'3er Cuatri' };
+
+  function badgeResultado(r) {
+    if (!r) return '<span class="badge-sin-eval">Sin evaluar</span>';
+    if (r === 'APROBADO')          return '<span class="badge-aprobado">Aprobado</span>';
+    if (r === 'APROB_CONDICIONAL') return '<span class="badge-condicional">Aprob. Condicional</span>';
+    if (r === 'NO_APTO')           return '<span class="badge-no-apto">No Apto</span>';
+    return r;
+  }
+
+  function calcularPrevia() {
+    const cal  = parseFloat(document.querySelector('[name=puntaje_calidad]').value)  || 0;
+    const ser  = parseFloat(document.querySelector('[name=puntaje_servicio]').value) || 0;
+    const emb  = parseFloat(document.querySelector('[name=puntaje_embalaje]').value) || 0;
+    const hasAny = document.querySelector('[name=puntaje_calidad]').value ||
+                   document.querySelector('[name=puntaje_servicio]').value ||
+                   document.querySelector('[name=puntaje_embalaje]').value;
+    if (!hasAny) { ocultarPrevia(); return; }
+
+    const total = cal + ser + emb;
+    let txt, bg, color;
+    if (total >= 70) { txt='APROBADO'; bg='#d4edda'; color='#155724'; }
+    else if (total >= 55) { txt='APROB. CONDICIONAL'; bg='#fff3cd'; color='#856404'; }
+    else { txt='NO APTO'; bg='#f8d7da'; color='#721c24'; }
+
+    const div = document.getElementById('previaResultado');
+    div.style.display = 'block';
+    div.style.background = bg;
+    div.style.color = color;
+    div.textContent = `Total: ${total.toFixed(2)} → ${txt}`;
+  }
+
+  function ocultarPrevia() {
+    document.getElementById('previaResultado').style.display = 'none';
+  }
+
+  // Calcular previa al cambiar puntajes
+  ['puntaje_calidad','puntaje_servicio','puntaje_embalaje'].forEach(n => {
+    document.querySelector(`[name=${n}]`).addEventListener('input', calcularPrevia);
+  });
+
+  async function guardarEvaluacion(e) {
+    e.preventDefault();
+    const form = e.target;
+    const fd = new FormData(form);
+
+    const payload = {
+      proveedor_id:     parseInt(fd.get('proveedor_id')),
+      anno:             parseInt(fd.get('anno')),
+      periodo:          parseInt(fd.get('periodo')),
+      tipo_evaluacion:  fd.get('tipo_evaluacion'),
+      puntaje_calidad:  fd.get('puntaje_calidad')  ? parseFloat(fd.get('puntaje_calidad'))  : null,
+      puntaje_servicio: fd.get('puntaje_servicio') ? parseFloat(fd.get('puntaje_servicio')) : null,
+      puntaje_embalaje: fd.get('puntaje_embalaje') ? parseFloat(fd.get('puntaje_embalaje')) : null,
+      evaluador_nombre: fd.get('evaluador_nombre') || null,
+      sector_evaluador: fd.get('sector_evaluador') || null,
+      fecha_evaluacion: fd.get('fecha_evaluacion') || null,
+      proxima_evaluacion: fd.get('proxima_evaluacion') || null,
+      observaciones:    fd.get('observaciones') || null,
+      criterios: [],
+    };
+
+    try {
+      const r = await fetch('/api/evaluaciones/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const err = await r.json();
+        alert('Error: ' + (err.detail || r.status));
+        return false;
+      }
+      form.reset();
+      ocultarPrevia();
+      await cargarEvaluaciones();
+    } catch (ex) {
+      alert('Error de red: ' + ex);
+    }
+    return false;
+  }
+
+  async function cargarEvaluaciones() {
+    const anno    = document.getElementById('filtroAnno').value;
+    const res     = document.getElementById('filtroResultado').value;
+    const filtroP = document.getElementById('filtroProveedor').value.toLowerCase();
+
+    const params = new URLSearchParams({ limit: 500 });
+    if (anno) params.set('anno', anno);
+    if (res)  params.set('resultado', res);
+
+    try {
+      const r = await fetch('/api/evaluaciones/?' + params);
+      let data = await r.json();
+
+      if (filtroP) {
+        data = data.filter(e =>
+          (e.proveedor_nombre || '').toLowerCase().includes(filtroP) ||
+          (e.proveedor_codigo || '').toLowerCase().includes(filtroP)
+        );
+      }
+
+      document.getElementById('totalEval').textContent = data.length + ' evaluaciones';
+
+      const tbody = document.getElementById('cuerpoTabla');
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#999;padding:20px;">Sin resultados</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.map(e => `
+        <tr data-id="${e.id}">
+          <td><strong>${e.proveedor_codigo || ''}</strong> ${e.proveedor_nombre || ''}</td>
+          <td style="text-align:center;">${e.anno}</td>
+          <td style="text-align:center;">${PERIODO_LABELS[e.periodo] ?? e.periodo}</td>
+          <td style="text-align:center;">${e.tipo_evaluacion}</td>
+          <td style="text-align:right;">${e.puntaje_calidad != null  ? e.puntaje_calidad.toFixed(2)  : '—'}</td>
+          <td style="text-align:right;">${e.puntaje_servicio != null ? e.puntaje_servicio.toFixed(2) : '—'}</td>
+          <td style="text-align:right;">${e.puntaje_embalaje != null ? e.puntaje_embalaje.toFixed(2) : '—'}</td>
+          <td style="text-align:right;font-weight:600;">${e.puntaje_total != null ? e.puntaje_total.toFixed(2) : '—'}</td>
+          <td style="text-align:center;">${badgeResultado(e.resultado)}</td>
+          <td>${e.evaluador_nombre || '—'}</td>
+          <td>${e.sector_evaluador || '—'}</td>
+          <td style="text-align:center;">${e.fecha_evaluacion || '—'}</td>
+          <td style="text-align:center;">${e.proxima_evaluacion || '—'}</td>
+          <td style="text-align:center;">
+            <button class="btn-accion" style="padding:3px 10px;font-size:0.85em;" onclick="eliminarEvaluacion(${e.id})">🗑</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch (ex) {
+      console.error(ex);
+    }
+  }
+
+  async function eliminarEvaluacion(id) {
+    if (!confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer.')) return;
+    const r = await fetch('/api/evaluaciones/' + id, { method: 'DELETE' });
+    if (r.ok || r.status === 204) {
+      await cargarEvaluaciones();
+    } else {
+      alert('Error al eliminar');
+    }
+  }
+
+  async function importarHistorial() {
+    const btn = document.getElementById('btnImportar');
+    const msg = document.getElementById('msgImportar');
+    btn.disabled = true;
+    msg.textContent = '⏳ Importando desde Access…';
+    msg.style.color = '#555';
+
+    try {
+      const r = await fetch('/api/evaluaciones/importar-historial', { method: 'POST' });
+      const data = await r.json();
+
+      if (!r.ok) {
+        msg.textContent = '❌ Error: ' + (data.detail || r.status);
+        msg.style.color = '#721c24';
+        return;
+      }
+
+      const { importadas, duplicadas, sin_proveedor, errores, filas_leidas, duracion_segundos } = data;
+      msg.textContent =
+        `✅ ${importadas} importadas · ${duplicadas} ya existían · ${sin_proveedor} sin proveedor · ` +
+        `${errores} errores · ${filas_leidas} filas leídas (${duracion_segundos}s)`;
+      msg.style.color = importadas > 0 ? '#155724' : '#856404';
+
+      if (importadas > 0) {
+        await cargarEvaluaciones();
+      }
+    } catch (ex) {
+      msg.textContent = '❌ Error de red: ' + ex;
+      msg.style.color = '#721c24';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function importarCSV(input) {
+    const archivo = input.files[0];
+    if (!archivo) return;
+    const msg = document.getElementById('msgImportar');
+    const lbl = document.getElementById('lblImportarCSV');
+    lbl.style.pointerEvents = 'none';
+    msg.textContent = `⏳ Importando "${archivo.name}"…`;
+    msg.style.color = '#555';
+
+    const fd = new FormData();
+    fd.append('archivo', archivo);
+
+    try {
+      const r = await fetch('/api/evaluaciones/importar-csv', { method: 'POST', body: fd });
+      const data = await r.json();
+
+      if (!r.ok) {
+        msg.textContent = '❌ Error: ' + (data.detail || r.status);
+        msg.style.color = '#721c24';
+        return;
+      }
+
+      const { importadas, duplicadas, sin_proveedor, errores,
+              filas_csv, proveedores_unicos, duracion_segundos } = data;
+      msg.textContent =
+        `✅ ${importadas} importadas · ${duplicadas} ya existían · ` +
+        `${sin_proveedor} sin proveedor · ${errores} errores · ` +
+        `${filas_csv} filas / ${proveedores_unicos} proveedores únicos (${duracion_segundos}s)`;
+      msg.style.color = importadas > 0 ? '#155724' : '#856404';
+
+      if (importadas > 0) await cargarEvaluaciones();
+    } catch (ex) {
+      msg.textContent = '❌ Error de red: ' + ex;
+      msg.style.color = '#721c24';
+    } finally {
+      lbl.style.pointerEvents = '';
+      input.value = '';   // Permite re-seleccionar el mismo archivo
+    }
+  }
+
+  function exportarCSV() {
+    const anno = document.getElementById('filtroAnno').value;
+    const res  = document.getElementById('filtroResultado').value;
+    const params = new URLSearchParams();
+    if (anno) params.set('anno', anno);
+    if (res)  params.set('resultado', res);
+    window.location.href = '/api/evaluaciones/exportar?' + params;
+  }
+
+  // Cargar al iniciar
+  cargarEvaluaciones();
+</script>
+{% endblock %}

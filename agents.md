@@ -1,151 +1,66 @@
-# Agente del workspace: Sistema de Compras y Planificación
+# AGENTS.md
 
-@workspace
+## Propósito
 
-## Rol del agente
+Workspace de compras y planificación con FastAPI + MariaDB/MySQL. La fuente de verdad del modelo de datos es [database/schema.sql](database/schema.sql). El agente debe priorizar cambios pequeños, verificables y alineados con la estructura real del repo.
 
-Eres un asistente técnico para el proyecto **“compras”**, orientado a:
+## Arranque Rápido
 
-- Diseñar y desarrollar un backend en **Python + FastAPI**.
-- Trabajar con una base de datos **MariaDB/MySQL** cuyo esquema está en `database/schema.sql`.
-- Implementar funcionalidades de:
-  - Plan de producción mensual.
-  - Cálculo de requerimientos de materiales a partir de MBOM.
-  - Gestión de stock mensual importado desde ERP (Flexxus).
-  - Historial de precios de compra y análisis de compras.
-  - Integración con IA (OpenAI) para análisis y reportes.
+- Usar el entorno virtual del repo: `.venv\Scripts\python.exe` en Windows.
+- Comandos disponibles en tasks de VS Code:
+  - `Run API (uvicorn)`
+  - `Lint (ruff)`
+  - `Format (black)`
+  - `Test (pytest)`
+- Hay muy pocos tests automatizados en [tests/test_ui_auth_redirect.py](tests/test_ui_auth_redirect.py); cuando no exista un test focalizado, validar con `ruff`, arranque de API o revisión localizada del flujo tocado.
 
-Respondes en **español**, usando ejemplos de código claros y comentados.
+## Arquitectura Real
 
----
+- Entrada FastAPI: [app/main.py](app/main.py)
+- Router API agregado: [app/api/router.py](app/api/router.py)
+- Acceso a BD y sesiones: [app/db.py](app/db.py)
+- Lógica de negocio: `app/services/`
+- Endpoints JSON: `app/api/`
+- Vistas HTML y routers UI: `app/templates/` y `app/api/ui_*.py`
+- SQL y migraciones: `database/` y `database/migrations/`
+- Scripts operativos y de desarrollo: ver [scripts/README.md](scripts/README.md)
 
-## Contexto del proyecto actual
+El repo ya incluye módulos además de MBOM y compras: auth, usuarios, roles, backups, recepciones, evaluaciones, informes, tipo de cambio y administración.
 
-- Carpeta raíz del proyecto: `compras/`.
-- Carpetas y archivos existentes:
-  - `.vscode/settings.json` → configuración de VS Code para el proyecto.
-  - `database/schema.sql` → definición completa del esquema de la base de datos `compras_db`.
-- El backend se implementará con:
-  - **Python 3.x**
-  - **FastAPI** como framework web.
-  - **MariaDB/MySQL** como base de datos principal.
+## Reglas Operativas
 
-Cuando necesites entender tablas, relaciones o restricciones, **lee y respeta siempre** el contenido de `database/schema.sql`.
+- Leer [database/schema.sql](database/schema.sql) antes de asumir tablas, enums, checks o relaciones.
+- Mantener el flujo `endpoint -> service -> database`; no poner lógica de negocio sustancial en routers.
+- Preferir consultas parametrizadas y transacciones explícitas cuando varias escrituras dependan entre sí.
+- Si el cambio toca UI, preservar el patrón actual: Jinja2 + fetch API + clases globales de [app/static/css/estilos.css](app/static/css/estilos.css).
+- Las rutas `/ui/*` están protegidas por middleware salvo login/logout y home; revisar [app/main.py](app/main.py) antes de cambiar navegación o auth.
+- El proyecto parchea compatibilidad de `TemplateResponse`; no reemplazar ese patrón sin revisar [app/main.py](app/main.py).
+- Scripts nuevos deben respetar la separación `scripts/ops` vs `scripts/dev` descrita en [scripts/README.md](scripts/README.md).
 
----
+## Convenciones del Repo
 
-## Objetivos principales del agente
+- `snake_case` para funciones y variables, `PascalCase` para clases.
+- Type hints y `logging` siempre que el código nuevo lo justifique.
+- Pydantic para request/response en `app/schemas/`.
+- Mantener comentarios breves y solo cuando aclaren una regla no obvia.
+- No hardcodear credenciales ni rutas sensibles; usar configuración y variables de entorno existentes.
 
-Cuando el usuario pida ayuda, debes:
+## Pitfalls Verificados
 
-1. **Proponer planes de desarrollo** usando `/plan` antes de generar mucho código, especialmente cuando se trate de nuevas funcionalidades o refactorizaciones grandes.
-2. **Generar código de backend FastAPI** siguiendo buenas prácticas:
-   - Organización por capas: `api/`, `services/`, `models/`, `database/`.
-   - Uso de modelos Pydantic para request/response.
-   - Manejo explícito de errores y respuestas HTTP.
-3. **Trabajar alineado con el modelo de datos actual**:
-   - Utilizar las tablas existentes: `producto`, `unidad_medida`, `mbom_*`, `costo_producto`, `plan_produccion_mensual`, `stock_disponible_mes`, `requerimiento_material_mensual`, `precio_compra_hist`, `sugerencia_compra`, `parametro_sistema`, `reporte_ia`, etc.
-   - Respetar claves primarias, foráneas, checks y enums ya definidos.
-4. **Ayudar a integrar datos del ERP Flexxus**:
-   - Diseñar lógica para importar CSV/Excel de stock y precios.
-   - Mapear códigos de Flexxus a `producto.codigo` y demás campos locales.
-5. **Ayudar con la integración de IA de OpenAI**:
-   - Sugerir estructuras de servicios para análisis de datos.
-   - Preparar resúmenes de datos adecuados para enviar a la API de OpenAI.
+- En Windows conviene fijar el intérprete del workspace a `.venv\Scripts\python.exe`.
+- `database/schema.sql` está en UTF-16/Unicode; si una herramienta falla al leerlo, usar una lectura con encoding explícito.
+- En sincronización de BD hay antecedentes de falsos positivos: tratar dumps vacíos o stderr como fallos reales, no como éxito.
 
----
+## Documentación a Enlazar
 
-## Buenas prácticas de programación que debes aplicar y reforzar
+- Visión general y setup: [README.md](README.md)
+- Modelo de costos MBOM: [docs/costos_discriminados.md](docs/costos_discriminados.md)
+- Validación del flujo de evaluación/recepción: [docs/VALIDACION_EVALUACION_PROVEEDORES.md](docs/VALIDACION_EVALUACION_PROVEEDORES.md)
+- Organización de scripts: [scripts/README.md](scripts/README.md)
 
-Al generar o revisar código, siempre:
+## Cómo Responder en Este Repo
 
-- **Estructura del proyecto**
-  - Proponer y respetar una estructura tipo:
-    - `app/main.py` → punto de entrada FastAPI.
-    - `app/db.py` → conexión a la base de datos.
-    - `app/api/` → routers/endpoints FastAPI.
-    - `app/services/` → lógica de negocio.
-    - `app/models/` → acceso a datos / modelos internos.
-    - `database/` → `schema.sql` y migraciones SQL.
-- **Estilo de código**
-  - Usar `snake_case` en funciones y variables.
-  - Usar `PascalCase` para clases.
-  - Agregar **type hints** en funciones y métodos siempre que sea posible.
-  - Mantener funciones cortas y con responsabilidad clara.
-- **FastAPI**
-  - Definir modelos Pydantic para request/response.
-  - Utilizar `APIRouter` para modularizar endpoints.
-  - Devolver `Response`/`JSONResponse` con códigos HTTP apropiados.
-  - Documentar parámetros y respuestas con docstrings o anotaciones.
-- **Base de datos**
-  - Nunca cambiar la estructura de la base sin considerar `schema.sql` y migraciones.
-  - Usar consultas parametrizadas (evitar concatenar strings manualmente).
-  - Manejar transacciones cuando haya operaciones múltiples relacionadas.
-  - Manejar y registrar errores de conexión o SQL de forma controlada.
-- **Configuración y secretos**
-  - No hardcodear usuarios/contraseñas/keys en el código.
-  - Usar archivos de configuración (`config.json`, `.env`) o variables de entorno.
-- **Logs y errores**
-  - Sugerir el uso de `logging` estándar de Python.
-  - No exponer trazas de error internas al usuario final en respuestas HTTP.
-- **Test y mantenibilidad**
-  - Favorecer funciones y servicios testeables (poca lógica pegada al endpoint).
-  - Evitar dependencias fuertes y acoplamientos innecesarios.
-  - Sugerir tests unitarios o de integración cuando tenga sentido.
-
----
-
-## Cómo debes usar `/plan` en este workspace
-
-- Cuando el usuario pida **nuevos módulos, endpoints o cambios importantes**, primero:
-  - Usa `/plan` para:
-    - Analizar impacto en la base de datos (consultando `database/schema.sql`).
-    - Proponer estructura de archivos y cambios en las carpetas `api/`, `services/`, `models/`.
-    - Describir pasos de migración si hace falta modificar el esquema.
-- El plan debe incluir:
-  - Qué tablas/columnas se usan o se agregan.
-  - Qué endpoints nuevos se crearán (método HTTP + ruta).
-  - Qué servicios y funciones de negocio se necesitan.
-  - Qué validaciones y controles aplicar.
-
-Después del plan, recién ahí generar el código.
-
----
-
-## Tareas típicas que debes facilitar
-
-- Explicarle al usuario cómo:
-  - Crear y organizar archivos de FastAPI en función de la estructura `compras`.
-  - Leer y utilizar correctamente `database/schema.sql`.
-  - Implementar:
-    - Carga del plan de producción mensual.
-    - Importación de stock y precios desde Flexxus.
-    - Cálculo de requerimientos y generación de `sugerencia_compra`.
-    - Llamadas a la API de OpenAI para análisis y reportes.
-- Proveer ejemplos de:
-  - Endpoints FastAPI.
-  - Servicios que consultan MariaDB y aplican reglas de negocio.
-  - Scripts o funciones para importar CSV/Excel de Flexxus.
-- Responder siempre con código funcional y coherente con el entorno descrito.
-
----
-
-## Estilo de comunicación
-
-- Responde en **español** (puedes usar términos técnicos en inglés cuando sea natural).
-- Sé claro, didáctico y concreto.
-- Cuando generes código, añade comentarios breves que expliquen lo esencial.
-- Si hay varias formas de hacer algo, favorece:
-  - La solución más **simple, legible y robusta**.
-  - Evitar sobre-ingeniería.
-
----
-
-## Guía UI/Frontend (vistas /ui)
-
-- **Stack**: FastAPI sirve plantillas Jinja2 para rutas /ui; JavaScript vanilla usa `fetch` contra endpoints JSON en /api; no hay frameworks JS.
-- **Estilos base**: Usa las clases globales de `app/static/css/estilos.css`: header azul (#0b5cab), paneles `.panel`/`.panel-alta`/`.panel-listado`, tablas con `.tabla-scroll` y `.productos-table` (cabecera sticky, celdas centradas), botones `.btn-accion` (azul) y `.btn-guardar` (naranja), grillas `.grid` y barra de controles `.tabla-controles`.
-- **Patrón de formularios**: Alta inline en panel superior; captura de datos con `FormData`, conversión a JSON y envío a /api mediante `fetch` con `Content-Type: application/json`. Tras éxito, refrescar o actualizar DOM. Validar unicidad/errores mostrando `alert` o mensajes claros.
-- **Tablas editables**: Filas con atributos `data-*` para mantener estado; botones Editar/Eliminar; modo edición inline cambia celdas a inputs/selects y guarda con `PUT` a /api; eliminación pide confirmación antes de `DELETE`.
-- **Flujo de datos**: Vistas /ui cargan catálogos (rubros, unidades, tipos) desde servicios y los pasan al template; JS usa esos datos para renders locales (ej. selects) y para enviar IDs a la API. Paginación/filtros: usar parámetros query en /api (`limit`, `offset`, filtros por nombre/tipo/activo) y actualizar la tabla vía DOM.
-- **Referencias prácticas**: Para pantallas completas con filtro + paginado revisar [app/templates/productos/index.html](app/templates/productos/index.html); para CRUD simple centrado revisar [app/templates/rubros/list.html](app/templates/rubros/list.html). Se recomienda reutilizar clases y estructura de esos ejemplos para mantener consistencia visual.
+- Responder en español.
+- Para cambios grandes, proponer primero un plan corto con tablas afectadas, endpoints, services y validaciones.
+- Si hay documentación existente para el tema, enlazarla en vez de duplicarla.
+- Si el pedido parece apoyarse en CSV/Access/Power BI, revisar primero servicios y docs de recepción/evaluación antes de inventar un flujo nuevo.

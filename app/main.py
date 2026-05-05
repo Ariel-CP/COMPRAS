@@ -16,6 +16,7 @@ from app.api.deps_auth import get_current_user
 from .api import (
     ui_admin,
     ui_auth,
+    ui_evaluaciones,
     ui_home,
     ui_informes,
     ui_mbom,
@@ -30,6 +31,10 @@ from .api.router import api_router
 from .services.backup_scheduler import (
     start_backup_scheduler,
     stop_backup_scheduler,
+)
+from .services.recepcion_scheduler import (
+    start_recepcion_scheduler,
+    stop_recepcion_scheduler,
 )
 
 
@@ -72,9 +77,11 @@ _patch_template_response_compat()
 @asynccontextmanager
 async def app_lifespan(_application: FastAPI):
     start_backup_scheduler()
+    start_recepcion_scheduler()
     try:
         yield
     finally:
+        stop_recepcion_scheduler()
         stop_backup_scheduler()
 
 
@@ -114,6 +121,7 @@ def create_app() -> FastAPI:
     deps = [Depends(get_current_user)]
     application.include_router(ui_admin.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_sessions.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_evaluaciones.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_plan.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_stock.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_productos.router, prefix="/ui", dependencies=deps)
