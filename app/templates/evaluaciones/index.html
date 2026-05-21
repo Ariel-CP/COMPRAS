@@ -7,6 +7,7 @@
 
   <div class="tabla-controles" style="justify-content:flex-start;gap:10px;margin-bottom:12px;">
     <a class="btn-accion" href="/ui/proveedores">Ir a Proveedores</a>
+    <a class="btn-accion" href="/ui/evaluaciones/ranking" style="background:#0b5cab;">📊 Ver Ranking</a>
     <button type="button" class="btn-accion" id="btnImportar"
             onclick="importarHistorial()"
             style="background:#6c757d;"
@@ -29,6 +30,7 @@
       ➕ Nueva Evaluación
     </h3>
     <form id="formEvaluacion" onsubmit="return guardarEvaluacion(event)">
+      <input type="hidden" id="evaluacionEditId" value="" />
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 20px;">
 
@@ -130,8 +132,9 @@
       <div id="previaResultado" style="display:none;margin-top:14px;padding:10px 16px;border-radius:6px;font-weight:600;font-size:1em;text-align:center;"></div>
 
       <div style="display:flex;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid #e0e0e0;">
-        <button type="submit" class="btn-guardar" style="padding:8px 28px;">✓ Guardar Evaluación</button>
+        <button type="submit" id="btnGuardarEvaluacion" class="btn-guardar" style="padding:8px 28px;">✓ Guardar Evaluación</button>
         <button type="reset" class="btn-secundario" style="padding:8px 16px;" onclick="ocultarPrevia()">Limpiar</button>
+        <button type="button" id="btnCancelarEdicion" class="btn-secundario" style="padding:8px 16px;display:none;" onclick="cancelarEdicion()">Cancelar edición</button>
       </div>
 
     </form>
@@ -191,6 +194,16 @@
 
 </section>
 
+<div id="modalDetalleEval" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;padding:24px;overflow:auto;">
+  <div style="max-width:920px;margin:0 auto;background:#fff;border-radius:10px;padding:16px 18px;box-shadow:0 12px 34px rgba(0,0,0,.18);">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;">
+      <h3 id="detalleTitulo" style="margin:0;color:#0b5cab;">Detalle de Evaluación</h3>
+      <button type="button" class="btn-secundario" style="padding:6px 12px;" onclick="cerrarDetalleEvaluacion()">Cerrar</button>
+    </div>
+    <div id="detalleBody" style="font-size:0.95em;color:#333;"></div>
+  </div>
+</div>
+
 <style>
   .campo-lbl {
     font-size: 0.8em;
@@ -216,6 +229,16 @@
     if (r === 'APROB_CONDICIONAL') return '<span class="badge-condicional">Aprob. Condicional</span>';
     if (r === 'NO_APTO')           return '<span class="badge-no-apto">No Apto</span>';
     return r;
+  }
+
+  function esc(txt) {
+    if (txt == null) return '';
+    return String(txt)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
   }
 
   function calcularPrevia() {
@@ -270,9 +293,14 @@
       criterios: [],
     };
 
+    const editId = document.getElementById('evaluacionEditId').value;
+    const isEdit = !!editId;
+    const endpoint = isEdit ? '/api/evaluaciones/' + editId : '/api/evaluaciones/';
+    const method = isEdit ? 'PUT' : 'POST';
+
     try {
-      const r = await fetch('/api/evaluaciones/', {
-        method: 'POST',
+      const r = await fetch(endpoint, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -281,8 +309,7 @@
         alert('Error: ' + (err.detail || r.status));
         return false;
       }
-      form.reset();
-      ocultarPrevia();
+      limpiarFormularioEvaluacion();
       await cargarEvaluaciones();
     } catch (ex) {
       alert('Error de red: ' + ex);
@@ -334,6 +361,8 @@
           <td style="text-align:center;">${e.fecha_evaluacion || '—'}</td>
           <td style="text-align:center;">${e.proxima_evaluacion || '—'}</td>
           <td style="text-align:center;">
+            <button class="btn-accion" style="padding:3px 10px;font-size:0.85em;margin-right:4px;background:#5a7d9a;" onclick="verDetalleEvaluacion(${e.id})">👁</button>
+            <button class="btn-accion" style="padding:3px 10px;font-size:0.85em;margin-right:4px;background:#0b5cab;" onclick="editarEvaluacion(${e.id})">✎</button>
             <button class="btn-accion" style="padding:3px 10px;font-size:0.85em;" onclick="eliminarEvaluacion(${e.id})">🗑</button>
           </td>
         </tr>
@@ -351,6 +380,145 @@
     } else {
       alert('Error al eliminar');
     }
+  }
+
+  async function editarEvaluacion(id) {
+    try {
+      const r = await fetch('/api/evaluaciones/' + id);
+      if (!r.ok) {
+        alert('No se pudo cargar la evaluación');
+        return;
+      }
+      const ev = await r.json();
+
+      const form = document.getElementById('formEvaluacion');
+      form.querySelector('[name=proveedor_id]').value = ev.proveedor_id ?? '';
+      form.querySelector('[name=anno]').value = ev.anno ?? '';
+      form.querySelector('[name=periodo]').value = ev.periodo ?? 0;
+      form.querySelector('[name=tipo_evaluacion]').value = ev.tipo_evaluacion || 'ANUAL';
+      form.querySelector('[name=puntaje_calidad]').value = ev.puntaje_calidad ?? '';
+      form.querySelector('[name=puntaje_servicio]').value = ev.puntaje_servicio ?? '';
+      form.querySelector('[name=puntaje_embalaje]').value = ev.puntaje_embalaje ?? '';
+      form.querySelector('[name=evaluador_nombre]').value = ev.evaluador_nombre || '';
+      form.querySelector('[name=sector_evaluador]').value = ev.sector_evaluador || '';
+      form.querySelector('[name=fecha_evaluacion]').value = ev.fecha_evaluacion || '';
+      form.querySelector('[name=proxima_evaluacion]').value = ev.proxima_evaluacion || '';
+      form.querySelector('[name=observaciones]').value = ev.observaciones || '';
+
+      document.getElementById('evaluacionEditId').value = id;
+      document.getElementById('btnGuardarEvaluacion').textContent = '✓ Actualizar Evaluación';
+      document.getElementById('btnCancelarEdicion').style.display = 'inline-block';
+
+      calcularPrevia();
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (ex) {
+      alert('Error de red: ' + ex);
+    }
+  }
+
+  async function verDetalleEvaluacion(id) {
+    const modal = document.getElementById('modalDetalleEval');
+    const titulo = document.getElementById('detalleTitulo');
+    const body = document.getElementById('detalleBody');
+
+    modal.style.display = 'block';
+    titulo.textContent = 'Detalle de Evaluación';
+    body.innerHTML = '<p style="margin:8px 0;color:#666;">Cargando detalle...</p>';
+
+    try {
+      const r = await fetch('/api/evaluaciones/' + id);
+      if (!r.ok) {
+        body.innerHTML = '<p style="margin:8px 0;color:#721c24;">No se pudo cargar el detalle.</p>';
+        return;
+      }
+      const ev = await r.json();
+
+      const criterios = (ev.criterios || []).map(c => `
+        <tr>
+          <td>${esc(c.categoria || '')}</td>
+          <td>${esc(c.criterio_codigo || '')}</td>
+          <td>${esc(c.criterio_nombre || '')}</td>
+          <td style="text-align:right;">${c.puntaje != null ? Number(c.puntaje).toFixed(2) : '—'}</td>
+          <td>${esc(c.comentario || '—')}</td>
+        </tr>
+      `).join('');
+
+      titulo.textContent = `Detalle Evaluación #${ev.id} - ${esc(ev.proveedor_codigo || '')} ${esc(ev.proveedor_nombre || '')}`;
+      body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px 16px;margin-bottom:12px;">
+          <div><strong>Año:</strong> ${esc(ev.anno)}</div>
+          <div><strong>Período:</strong> ${esc(PERIODO_LABELS[ev.periodo] ?? ev.periodo)}</div>
+          <div><strong>Tipo:</strong> ${esc(ev.tipo_evaluacion || '—')}</div>
+          <div><strong>Total:</strong> ${ev.puntaje_total != null ? Number(ev.puntaje_total).toFixed(2) : '—'}</div>
+          <div><strong>Resultado:</strong> ${badgeResultado(ev.resultado)}</div>
+          <div><strong>Evaluador:</strong> ${esc(ev.evaluador_nombre || '—')}</div>
+          <div><strong>Sector:</strong> ${esc(ev.sector_evaluador || '—')}</div>
+          <div><strong>Fecha eval.:</strong> ${esc(ev.fecha_evaluacion || '—')}</div>
+          <div><strong>Próx. eval.:</strong> ${esc(ev.proxima_evaluacion || '—')}</div>
+        </div>
+        <div style="margin:8px 0 12px;">
+          <strong>Observaciones:</strong>
+          <div style="margin-top:4px;padding:8px 10px;background:#f7f9fb;border:1px solid #dce6f1;border-radius:6px;white-space:pre-wrap;">${esc(ev.observaciones || '—')}</div>
+        </div>
+        <h4 style="margin:0 0 8px;color:#0b5cab;">Criterios</h4>
+        <div style="overflow:auto;">
+          <table class="productos-table" style="min-width:680px;">
+            <thead>
+              <tr>
+                <th>Categoría</th>
+                <th>Código</th>
+                <th>Criterio</th>
+                <th>Puntaje</th>
+                <th>Comentario</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${criterios || '<tr><td colspan="5" style="text-align:center;color:#777;">Sin criterios cargados</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } catch (ex) {
+      body.innerHTML = `<p style="margin:8px 0;color:#721c24;">Error de red: ${esc(ex)}</p>`;
+    }
+  }
+
+  function resetDetalleEvaluacion() {
+    document.getElementById('detalleTitulo').textContent = 'Detalle de Evaluación';
+    document.getElementById('detalleBody').innerHTML = '<p style="margin:8px 0;color:#666;">Cargando detalle...</p>';
+  }
+
+  function cerrarDetalleEvaluacion() {
+    document.getElementById('modalDetalleEval').style.display = 'none';
+    resetDetalleEvaluacion();
+  }
+
+  document.getElementById('modalDetalleEval').addEventListener('click', (ev) => {
+    if (ev.target && ev.target.id === 'modalDetalleEval') {
+      cerrarDetalleEvaluacion();
+    }
+  });
+
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') {
+      const modal = document.getElementById('modalDetalleEval');
+      if (modal && modal.style.display === 'block') {
+        cerrarDetalleEvaluacion();
+      }
+    }
+  });
+
+  function limpiarFormularioEvaluacion() {
+    const form = document.getElementById('formEvaluacion');
+    form.reset();
+    document.getElementById('evaluacionEditId').value = '';
+    document.getElementById('btnGuardarEvaluacion').textContent = '✓ Guardar Evaluación';
+    document.getElementById('btnCancelarEdicion').style.display = 'none';
+    ocultarPrevia();
+  }
+
+  function cancelarEdicion() {
+    limpiarFormularioEvaluacion();
   }
 
   async function importarHistorial() {

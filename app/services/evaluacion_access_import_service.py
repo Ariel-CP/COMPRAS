@@ -1,18 +1,19 @@
 """
-Importación del historial de evaluaciones de proveedores desde Access (avaprov).
+Importación del historial de evaluaciones de proveedores desde Access (Evaprov).
 
 Archivo Access:
   R:\\COMPARTIR-Calidad-ID\\CALIDAD\\Ecotermo Server
   \\Gestión de Evaluación de Proveedores\\Evaluación de Proveedores Database.accdb
 
-Tabla: avaprov
+Tabla: Evaprov
 Ejecutable manualmente vía endpoint POST /api/evaluaciones/importar-historial.
 Idempotente: si ya existe una evaluación para proveedor+año+período, la salta.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
@@ -26,9 +27,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 RUTA_ACCDB = (
     r"R:\COMPARTIR-Calidad-ID\CALIDAD\Ecotermo Server"
-    r"\Gestión de Evaluación de Proveedores\Evaluación de Proveedores Database.accdb"
+    r"\Listado de proveedores server\Proveedores Database.accdb"
 )
-TABLA_ACCESS = "avaprov"
+TABLA_ACCESS = "Evaprov"
 
 # ---------------------------------------------------------------------------
 # Mapas de criterios (columna Access → (codigo, nombre, categoria))
@@ -74,6 +75,33 @@ def _safe_str(v: Any) -> Optional[str]:
         return None
     s = str(v).strip()
     return s if s else None
+
+
+def _normalizar_codigo(v: Any) -> Optional[str]:
+    """
+    Normaliza códigos de proveedor para matching entre Access y MySQL.
+
+    Reglas:
+    - trim + casefold
+    - limpia espacios Unicode internos
+    - si es numérico entero (ej. 1, 001, 1.0), lo normaliza a entero sin ceros
+    """
+    s = _safe_str(v)
+    if not s:
+        return None
+
+    s = " ".join(s.replace("\xa0", " ").split()).casefold()
+    if not s:
+        return None
+
+    try:
+        d = Decimal(s.replace(",", "."))
+        if d == d.to_integral_value():
+            return str(int(d))
+    except (InvalidOperation, ValueError):
+        pass
+
+    return s
 
 
 def _safe_date(v: Any) -> Optional[date]:
@@ -182,7 +210,12 @@ def leer_tabla_access(ruta: str = RUTA_ACCDB, tabla: str = TABLA_ACCESS) -> list
 def _build_codigo_map(db: Session) -> dict[str, int]:
     """Retorna {codigo_proveedor: id} para búsqueda rápida."""
     rows = db.execute(text("SELECT id, codigo FROM proveedor")).fetchall()
-    return {str(r.codigo).strip(): r.id for r in rows if r.codigo}
+    codigo_map: dict[str, int] = {}
+    for r in rows:
+        codigo = _normalizar_codigo(r.codigo)
+        if codigo:
+            codigo_map[codigo] = r.id
+    return codigo_map
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +302,7 @@ def _mapear_fila(fila: dict, codigo_map: dict[str, int]) -> Optional[dict]:
     Convierte una fila del Access al dict que espera `_insertar_evaluacion`.
     Retorna None si no se puede resolver el proveedor.
     """
-    codigo = _safe_str(_get_col(fila, "Codigo", "CODIGO", "codigo"))
+    codigo = _normalizar_codigo(_get_col(fila, "Codigo", "CODIGO", "codigo"))
     if not codigo:
         return None
 
@@ -368,7 +401,7 @@ def importar_historial_desde_access(
     tabla: str = TABLA_ACCESS,
 ) -> dict:
     """
-    Lee la tabla `avaprov` del Access y la importa a `evaluacion_proveedor_anual`.
+    Lee la tabla `Evaprov` del Access y la importa a `evaluacion_proveedor_anual`.
 
     Retorna un dict con estadísticas:
       filas_leidas, importadas, duplicadas, sin_proveedor, errores, duracion_segundos
@@ -395,16 +428,26 @@ def importar_historial_desde_access(
         return stats
 
     stats["filas_leidas"] = len(filas)
-    logger.info("avaprov: %d filas leídas desde Access", len(filas))
+    logger.info("%s: %d filas leídas desde Access", tabla, len(filas))
 
     # 2) Construir mapa de códigos de proveedor
     codigo_map = _build_codigo_map(db)
 
     # 3) Procesar cada fila
+    muestras_sin_proveedor = 0
     for fila in filas:
         datos = _mapear_fila(fila, codigo_map)
         if datos is None:
             stats["sin_proveedor"] += 1
+            if muestras_sin_proveedor < 10:
+                codigo_raw = _get_col(fila, "Codigo", "CODIGO", "codigo")
+                codigo_normalizado = _normalizar_codigo(codigo_raw)
+                logger.warning(
+                    "Fila descartada por proveedor no encontrado: codigo_raw=%r codigo_normalizado=%r",
+                    codigo_raw,
+                    codigo_normalizado,
+                )
+                muestras_sin_proveedor += 1
             continue
 
         ok, msg = _insertar_evaluacion(db, datos)
@@ -429,7 +472,11 @@ def importar_historial_desde_access(
 
     stats["duracion_segundos"] = round((dt.now() - inicio).total_seconds(), 2)
     logger.info(
-        "Importación avaprov finalizada: importadas=%d duplicadas=%d sin_proveedor=%d errores=%d",
-        stats["importadas"], stats["duplicadas"], stats["sin_proveedor"], stats["errores"],
+        "Importación %s finalizada: importadas=%d duplicadas=%d sin_proveedor=%d errores=%d",
+        tabla,
+        stats["importadas"],
+        stats["duplicadas"],
+        stats["sin_proveedor"],
+        stats["errores"],
     )
     return stats

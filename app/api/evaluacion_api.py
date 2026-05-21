@@ -4,6 +4,7 @@ API endpoints para evaluación formal de proveedores (ISO 9001 — PG-4.06.02).
 import csv
 import io
 import logging
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -11,16 +12,25 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_db
 from app.api.deps_auth import get_current_user
-from app.schemas.evaluacion import EvaluacionCreate, EvaluacionOut, EvaluacionListItem
+from app.schemas.evaluacion import (
+    EvaluacionCreate,
+    EvaluacionListItem,
+    EvaluacionOut,
+    EvaluacionUpdate,
+)
+from app.services.evaluacion_access_import_service import (
+    importar_historial_desde_access,
+)
+from app.services.evaluacion_csv_recepcion_service import importar_desde_csv
 from app.services.evaluacion_service import (
+    actualizar_evaluacion,
     crear_evaluacion,
-    obtener_evaluacion,
-    listar_evaluaciones,
     eliminar_evaluacion,
     historial_proveedor,
+    listar_evaluaciones,
+    obtener_evaluacion,
+    ranking_proveedores_periodo,
 )
-from app.services.evaluacion_access_import_service import importar_historial_desde_access
-from app.services.evaluacion_csv_recepcion_service import importar_desde_csv
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +144,18 @@ def api_exportar_evaluaciones(
     )
 
 
+@router.get("/ranking-periodo")
+def api_ranking_proveedores_periodo(
+    desde: date = Query(..., description="Fecha desde (YYYY-MM-DD)"),
+    hasta: date = Query(..., description="Fecha hasta (YYYY-MM-DD)"),
+    db=Depends(get_db),
+):
+    """Ranking de proveedores por promedio en el rango seleccionado."""
+    if desde > hasta:
+        raise HTTPException(status_code=400, detail="El rango es inválido: desde no puede ser mayor que hasta")
+    return ranking_proveedores_periodo(db, desde, hasta)
+
+
 @router.get("/{evaluacion_id}", response_model=EvaluacionOut)
 def api_obtener_evaluacion(evaluacion_id: int, db=Depends(get_db)):
     """Obtiene una evaluación con sus criterios de detalle."""
@@ -143,11 +165,41 @@ def api_obtener_evaluacion(evaluacion_id: int, db=Depends(get_db)):
     return ev
 
 
+@router.put("/{evaluacion_id}", response_model=EvaluacionOut)
+def api_actualizar_evaluacion(
+    evaluacion_id: int,
+    payload: EvaluacionUpdate,
+    db=Depends(get_db),
+    _current_user=Depends(get_current_user),
+):
+    """Actualiza una evaluación y recalcula el resultado según puntajes."""
+    datos = payload.model_dump(exclude_unset=True)
+    if not datos:
+        raise HTTPException(
+            status_code=400, detail="No se enviaron cambios para actualizar"
+        )
+    try:
+        actualizado = actualizar_evaluacion(db, evaluacion_id, datos)
+    except Exception as exc:
+        logger.error("Error actualizando evaluación: %s", exc)
+        msg = str(exc)
+        if "Duplicate entry" in msg or "uq_eval_anual" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe una evaluación para ese proveedor/año/período.",
+            ) from exc
+        raise HTTPException(status_code=500, detail=msg) from exc
+
+    if not actualizado:
+        raise HTTPException(status_code=404, detail="Evaluación no encontrada")
+    return actualizado
+
+
 @router.delete("/{evaluacion_id}", status_code=204)
 def api_eliminar_evaluacion(
     evaluacion_id: int,
     db=Depends(get_db),
-    current_user=Depends(get_current_user),
+    _current_user=Depends(get_current_user),
 ):
     """Elimina una evaluación (y sus criterios, por CASCADE)."""
     ok = eliminar_evaluacion(db, evaluacion_id)
@@ -157,18 +209,31 @@ def api_eliminar_evaluacion(
 
 @router.post("/importar-historial")
 def api_importar_historial(
+    ruta_archivo: str | None = Query(
+        default=None,
+        description="Ruta completa al archivo .accdb de evaluaciones (opcional)",
+    ),
+    tabla_nombre: str | None = Query(
+        default=None,
+        description="Nombre de tabla dentro del Access (opcional, default Evaprov)",
+    ),
     db=Depends(get_db),
-    current_user=Depends(get_current_user),
+    _current_user=Depends(get_current_user),
 ):
     """
-    Importa el historial completo de evaluaciones desde el Access (tabla avaprov).
+    Importa el historial completo de evaluaciones desde el Access (tabla Evaprov).
 
     Idempotente: registros ya existentes (proveedor+año+período) son saltados.
     """
     try:
-        resultado = importar_historial_desde_access(db)
+        kwargs = {}
+        if ruta_archivo:
+            kwargs["ruta"] = ruta_archivo
+        if tabla_nombre:
+            kwargs["tabla"] = tabla_nombre
+        resultado = importar_historial_desde_access(db, **kwargs)
     except Exception as exc:
-        logger.error("Error importando historial avaprov: %s", exc)
+        logger.error("Error importando historial Access: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return resultado
 

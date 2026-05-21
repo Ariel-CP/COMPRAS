@@ -1,8 +1,7 @@
 from datetime import date
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 class CriterioDetalleIn(BaseModel):
     categoria: str = Field(..., pattern=r"^(CALIDAD|SERVICIO|EMBALAJE)$")
@@ -35,6 +34,31 @@ class EvaluacionCreate(BaseModel):
     referencias: Optional[str] = None
 
     criterios: List[CriterioDetalleIn] = Field(default_factory=list)
+
+
+class EvaluacionUpdate(BaseModel):
+    proveedor_id: Optional[int] = None
+    anno: Optional[int] = Field(default=None, ge=2000, le=2099)
+    periodo: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=3,
+        description="0=Anual, 1=1er Cuatri, 2=2do Cuatri, 3=3er Cuatri",
+    )
+    tipo_evaluacion: Optional[str] = Field(
+        default=None, pattern=r"^(ANUAL|CUATRIMESTRAL)$"
+    )
+
+    puntaje_calidad: Optional[float] = Field(default=None, ge=0, le=100)
+    puntaje_servicio: Optional[float] = Field(default=None, ge=0, le=100)
+    puntaje_embalaje: Optional[float] = Field(default=None, ge=0, le=100)
+
+    evaluador_nombre: Optional[str] = Field(default=None, max_length=128)
+    sector_evaluador: Optional[str] = Field(default=None, max_length=100)
+    fecha_evaluacion: Optional[date] = None
+    proxima_evaluacion: Optional[date] = None
+    observaciones: Optional[str] = None
+    referencias: Optional[str] = None
 
 
 class EvaluacionOut(BaseModel):

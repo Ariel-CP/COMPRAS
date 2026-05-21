@@ -9,6 +9,7 @@ Reglas de clasificación:
 from __future__ import annotations
 
 import logging
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 
@@ -97,6 +98,8 @@ def crear_evaluacion(db: Session, datos: dict) -> dict:
 
     # Obtener ID generado
     row = db.execute(text("SELECT LAST_INSERT_ID()")).scalar()
+    if row is None:
+        raise ValueError("No se pudo obtener el ID de la evaluación creada")
     evaluacion_id = int(row)
 
     # Insertar criterios
@@ -129,7 +132,10 @@ def crear_evaluacion(db: Session, datos: dict) -> dict:
         evaluacion_id, datos["proveedor_id"], datos["anno"], resultado or "N/A",
         float(puntaje_total or 0),
     )
-    return obtener_evaluacion(db, evaluacion_id)
+    creada = obtener_evaluacion(db, evaluacion_id)
+    if creada is None:
+        raise ValueError("No se pudo recuperar la evaluación creada")
+    return creada
 
 
 def obtener_evaluacion(db: Session, evaluacion_id: int) -> Optional[dict]:
@@ -208,12 +214,107 @@ def listar_evaluaciones(
 
 
 def eliminar_evaluacion(db: Session, evaluacion_id: int) -> bool:
-    result = db.execute(
+    existe = db.execute(
+        text("SELECT id FROM evaluacion_proveedor_anual WHERE id = :id"),
+        {"id": evaluacion_id},
+    ).fetchone()
+    if not existe:
+        return False
+
+    db.execute(
         text("DELETE FROM evaluacion_proveedor_anual WHERE id = :id"),
         {"id": evaluacion_id},
     )
     db.commit()
-    return result.rowcount > 0
+    return True
+
+
+def actualizar_evaluacion(
+    db: Session, evaluacion_id: int, datos: dict
+) -> Optional[dict]:
+    """Actualiza una evaluación existente y recalcula puntaje/resultado."""
+    actual = db.execute(
+        text("""
+        SELECT
+            id, proveedor_id, anno, periodo, tipo_evaluacion,
+            puntaje_calidad, puntaje_servicio, puntaje_embalaje,
+            evaluador_nombre, sector_evaluador,
+            fecha_evaluacion, proxima_evaluacion,
+            observaciones, referencias
+        FROM evaluacion_proveedor_anual
+        WHERE id = :id
+    """),
+        {"id": evaluacion_id},
+    ).fetchone()
+
+    if not actual:
+        return None
+
+    payload = {
+        "proveedor_id": datos.get("proveedor_id", actual[1]),
+        "anno": datos.get("anno", actual[2]),
+        "periodo": datos.get("periodo", actual[3]),
+        "tipo_evaluacion": datos.get("tipo_evaluacion", actual[4]),
+        "puntaje_calidad": datos.get("puntaje_calidad", _dec(actual[5])),
+        "puntaje_servicio": datos.get("puntaje_servicio", _dec(actual[6])),
+        "puntaje_embalaje": datos.get("puntaje_embalaje", _dec(actual[7])),
+        "evaluador_nombre": datos.get("evaluador_nombre", actual[8]),
+        "sector_evaluador": datos.get("sector_evaluador", actual[9]),
+        "fecha_evaluacion": datos.get("fecha_evaluacion", actual[10]),
+        "proxima_evaluacion": datos.get("proxima_evaluacion", actual[11]),
+        "observaciones": datos.get("observaciones", actual[12]),
+        "referencias": datos.get("referencias", actual[13]),
+    }
+
+    puntaje_total = _calcular_total(
+        payload.get("puntaje_calidad"),
+        payload.get("puntaje_servicio"),
+        payload.get("puntaje_embalaje"),
+    )
+    resultado = clasificar_resultado(puntaje_total)
+
+    db.execute(
+        text("""
+        UPDATE evaluacion_proveedor_anual
+        SET
+            proveedor_id = :proveedor_id,
+            anno = :anno,
+            periodo = :periodo,
+            tipo_evaluacion = :tipo_evaluacion,
+            puntaje_calidad = :puntaje_calidad,
+            puntaje_servicio = :puntaje_servicio,
+            puntaje_embalaje = :puntaje_embalaje,
+            puntaje_total = :puntaje_total,
+            resultado = :resultado,
+            evaluador_nombre = :evaluador_nombre,
+            sector_evaluador = :sector_evaluador,
+            fecha_evaluacion = :fecha_evaluacion,
+            proxima_evaluacion = :proxima_evaluacion,
+            observaciones = :observaciones,
+            referencias = :referencias,
+            fecha_actualizacion = CURRENT_TIMESTAMP
+        WHERE id = :id
+    """),
+        {
+            "id": evaluacion_id,
+            "puntaje_total": puntaje_total,
+            "resultado": resultado,
+            **payload,
+        },
+    )
+
+    if resultado:
+        db.execute(
+            text("""
+            UPDATE proveedor
+            SET estado_calificacion = :res
+            WHERE id = :pid
+        """),
+            {"res": resultado, "pid": payload["proveedor_id"]},
+        )
+
+    db.commit()
+    return obtener_evaluacion(db, evaluacion_id)
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +345,69 @@ def historial_proveedor(db: Session, proveedor_id: int) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def ranking_proveedores_periodo(db: Session, desde: date, hasta: date) -> dict:
+    """
+    Retorna ranking agregado por proveedor en un rango de fechas.
+
+    - mejores_10: promedio de puntaje_total descendente
+    - peores_20: promedio de puntaje_total ascendente
+    """
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                p.id AS proveedor_id,
+                p.codigo AS proveedor_codigo,
+                p.nombre AS proveedor_nombre,
+                COUNT(*) AS cantidad_evaluaciones,
+                AVG(e.puntaje_total) AS puntaje_promedio,
+                MIN(e.puntaje_total) AS puntaje_minimo,
+                MAX(e.puntaje_total) AS puntaje_maximo
+            FROM evaluacion_proveedor_anual e
+            JOIN proveedor p ON p.id = e.proveedor_id
+            WHERE e.puntaje_total IS NOT NULL
+              AND COALESCE(
+                    e.fecha_evaluacion,
+                    STR_TO_DATE(CONCAT(e.anno, '-01-01'), '%Y-%m-%d')
+                  ) BETWEEN :desde AND :hasta
+            GROUP BY p.id, p.codigo, p.nombre
+            """
+        ),
+        {"desde": desde, "hasta": hasta},
+    ).mappings().all()
+
+    items = [
+        {
+            "proveedor_id": int(r["proveedor_id"]),
+            "proveedor_codigo": r["proveedor_codigo"],
+            "proveedor_nombre": r["proveedor_nombre"],
+            "cantidad_evaluaciones": int(r["cantidad_evaluaciones"] or 0),
+            "puntaje_promedio": _dec(r["puntaje_promedio"]),
+            "puntaje_minimo": _dec(r["puntaje_minimo"]),
+            "puntaje_maximo": _dec(r["puntaje_maximo"]),
+        }
+        for r in rows
+    ]
+
+    mejores_10 = sorted(
+        items,
+        key=lambda x: (x["puntaje_promedio"] if x["puntaje_promedio"] is not None else -1),
+        reverse=True,
+    )[:10]
+    peores_20 = sorted(
+        items,
+        key=lambda x: (x["puntaje_promedio"] if x["puntaje_promedio"] is not None else 999),
+    )[:20]
+
+    return {
+        "desde": str(desde),
+        "hasta": str(hasta),
+        "total_proveedores": len(items),
+        "mejores_10": mejores_10,
+        "peores_20": peores_20,
+    }
 
 
 # ---------------------------------------------------------------------------

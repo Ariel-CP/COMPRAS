@@ -1,0 +1,302 @@
+{% extends 'base.html' %}
+{% block title %}Ranking de Proveedores - Evaluaciones{% endblock %}
+
+{% block content %}
+<section class="productos-wrapper">
+  <h2>Ranking de Proveedores por Evaluaciones</h2>
+
+  <div class="tabla-controles" style="justify-content:flex-start;gap:10px;margin-bottom:12px;">
+    <a class="btn-accion" href="/ui/evaluaciones">Volver a Evaluaciones</a>
+    <label for="desde">Desde</label>
+    <input id="desde" type="date" value="{{ desde_default }}" style="padding:6px 8px;border:1px solid #cfd5da;border-radius:4px;" />
+    <label for="hasta">Hasta</label>
+    <input id="hasta" type="date" value="{{ hasta_default }}" style="padding:6px 8px;border:1px solid #cfd5da;border-radius:4px;" />
+    <button type="button" class="btn-accion" onclick="cargarRanking()">Actualizar gráficos</button>
+    <button type="button" class="btn-accion" style="background:#0b5cab;" onclick="exportarCsvConsolidado()">Exportar consolidado CSV</button>
+    <button type="button" class="btn-accion" style="background:#6c757d;" onclick="window.print()">Imprimir reporte</button>
+    <span id="msg" style="font-size:0.9em;color:#555;"></span>
+  </div>
+
+  <div class="panel" style="margin-bottom:14px;">
+    <div id="resumen" style="font-size:0.95em;color:#333;">Sin datos cargados.</div>
+  </div>
+
+  <div class="panel" style="margin-bottom:14px;">
+    <h3 style="margin-top:0;">Mejores 10 proveedores</h3>
+    <canvas id="chartTop10" height="120"></canvas>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+      <button type="button" class="btn-accion" style="background:#1f9c4d;" onclick="exportarCsvTop10()">Exportar Top 10 CSV</button>
+    </div>
+    <div class="tabla-scroll" style="margin-top:10px;">
+      <table class="productos-table" id="tablaTop10">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Código</th>
+            <th>Proveedor</th>
+            <th>Promedio</th>
+            <th>Mín</th>
+            <th>Máx</th>
+            <th>Evaluaciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="7" style="text-align:center;color:#888;">Sin datos</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">20 peores proveedores</h3>
+    <canvas id="chartWorst20" height="220"></canvas>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+      <button type="button" class="btn-accion" style="background:#d63626;" onclick="exportarCsvPeores20()">Exportar Peores 20 CSV</button>
+    </div>
+    <div class="tabla-scroll" style="margin-top:10px;">
+      <table class="productos-table" id="tablaWorst20">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Código</th>
+            <th>Proveedor</th>
+            <th>Promedio</th>
+            <th>Mín</th>
+            <th>Máx</th>
+            <th>Evaluaciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="7" style="text-align:center;color:#888;">Sin datos</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  let chartTop10 = null;
+  let chartWorst20 = null;
+  let rankingData = null;
+
+  function fmt(n) {
+    if (n == null || Number.isNaN(Number(n))) return '-';
+    return Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  }
+
+  function renderTabla(idTabla, rows) {
+    const tbody = document.querySelector(`#${idTabla} tbody`);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">Sin datos</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((r, idx) => `
+      <tr>
+        <td style="text-align:center;">${idx + 1}</td>
+        <td>${r.proveedor_codigo || ''}</td>
+        <td>${r.proveedor_nombre || ''}</td>
+        <td style="text-align:right;">${fmt(r.puntaje_promedio)}</td>
+        <td style="text-align:right;">${fmt(r.puntaje_minimo)}</td>
+        <td style="text-align:right;">${fmt(r.puntaje_maximo)}</td>
+        <td style="text-align:center;">${r.cantidad_evaluaciones || 0}</td>
+      </tr>
+    `).join('');
+  }
+
+  function downloadCsv(filename, rows) {
+    const head = ['Posicion','Codigo','Proveedor','PuntajePromedio','PuntajeMinimo','PuntajeMaximo','CantidadEvaluaciones'];
+    const body = rows.map((r, idx) => [
+      idx + 1,
+      r.proveedor_codigo || '',
+      r.proveedor_nombre || '',
+      r.puntaje_promedio ?? '',
+      r.puntaje_minimo ?? '',
+      r.puntaje_maximo ?? '',
+      r.cantidad_evaluaciones ?? 0,
+    ]);
+    const lines = [head, ...body].map(cols => cols.map(v => `"${String(v).replaceAll('"', '""')}"`).join(';'));
+    const blob = new Blob(["\uFEFF" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarCsvTop10() {
+    if (!rankingData) return;
+    downloadCsv('ranking_mejores_10.csv', rankingData.mejores_10 || []);
+  }
+
+  function exportarCsvPeores20() {
+    if (!rankingData) return;
+    downloadCsv('ranking_peores_20.csv', rankingData.peores_20 || []);
+  }
+
+  function exportarCsvConsolidado() {
+    if (!rankingData) return;
+    const top10 = rankingData.mejores_10 || [];
+    const peores20 = rankingData.peores_20 || [];
+
+    const lines = [];
+    lines.push(`"Reporte Ranking Proveedores"`);
+    lines.push(`"Periodo";"${rankingData.desde || ''}";"${rankingData.hasta || ''}"`);
+    lines.push(`"Total proveedores";"${rankingData.total_proveedores || 0}"`);
+    lines.push('');
+
+    lines.push('"Mejores 10 proveedores"');
+    lines.push('"Posicion";"Codigo";"Proveedor";"PuntajePromedio";"PuntajeMinimo";"PuntajeMaximo";"CantidadEvaluaciones"');
+    top10.forEach((r, idx) => {
+      lines.push([
+        idx + 1,
+        r.proveedor_codigo || '',
+        r.proveedor_nombre || '',
+        r.puntaje_promedio ?? '',
+        r.puntaje_minimo ?? '',
+        r.puntaje_maximo ?? '',
+        r.cantidad_evaluaciones ?? 0,
+      ].map(v => `"${String(v).replaceAll('"', '""')}"`).join(';'));
+    });
+
+    lines.push('');
+    lines.push('"20 peores proveedores"');
+    lines.push('"Posicion";"Codigo";"Proveedor";"PuntajePromedio";"PuntajeMinimo";"PuntajeMaximo";"CantidadEvaluaciones"');
+    peores20.forEach((r, idx) => {
+      lines.push([
+        idx + 1,
+        r.proveedor_codigo || '',
+        r.proveedor_nombre || '',
+        r.puntaje_promedio ?? '',
+        r.puntaje_minimo ?? '',
+        r.puntaje_maximo ?? '',
+        r.cantidad_evaluaciones ?? 0,
+      ].map(v => `"${String(v).replaceAll('"', '""')}"`).join(';'));
+    });
+
+    const blob = new Blob(["\uFEFF" + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ranking_proveedores_consolidado.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function renderRanking(data) {
+    rankingData = data;
+    const top10 = data.mejores_10 || [];
+    const worst20 = data.peores_20 || [];
+
+    document.getElementById('resumen').textContent =
+      `Período: ${data.desde} a ${data.hasta} - Proveedores evaluados: ${data.total_proveedores}`;
+
+    if (chartTop10) chartTop10.destroy();
+    if (chartWorst20) chartWorst20.destroy();
+
+    chartTop10 = new Chart(document.getElementById('chartTop10'), {
+      type: 'bar',
+      data: {
+        labels: top10.map(i => `${i.proveedor_codigo || ''} ${i.proveedor_nombre || ''}`.trim()),
+        datasets: [{
+          label: 'Puntaje promedio',
+          data: top10.map(i => i.puntaje_promedio),
+          backgroundColor: '#1f9c4d',
+        }],
+      },
+      options: {
+        responsive: true,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const row = top10[ctx.dataIndex];
+                return `Prom: ${fmt(row.puntaje_promedio)} | Eval: ${row.cantidad_evaluaciones}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { beginAtZero: true, max: 100 },
+        },
+      },
+    });
+
+    chartWorst20 = new Chart(document.getElementById('chartWorst20'), {
+      type: 'bar',
+      data: {
+        labels: worst20.map(i => `${i.proveedor_codigo || ''} ${i.proveedor_nombre || ''}`.trim()),
+        datasets: [{
+          label: 'Puntaje promedio',
+          data: worst20.map(i => i.puntaje_promedio),
+          backgroundColor: '#d63626',
+        }],
+      },
+      options: {
+        responsive: true,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const row = worst20[ctx.dataIndex];
+                return `Prom: ${fmt(row.puntaje_promedio)} | Eval: ${row.cantidad_evaluaciones}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { beginAtZero: true, max: 100 },
+        },
+      },
+    });
+
+    renderTabla('tablaTop10', top10);
+    renderTabla('tablaWorst20', worst20);
+  }
+
+  async function cargarRanking() {
+    const desde = document.getElementById('desde').value;
+    const hasta = document.getElementById('hasta').value;
+    const msg = document.getElementById('msg');
+
+    if (!desde || !hasta) {
+      msg.textContent = 'Debes seleccionar ambas fechas.';
+      msg.style.color = '#721c24';
+      return;
+    }
+
+    msg.textContent = 'Consultando...';
+    msg.style.color = '#555';
+
+    try {
+      const qs = new URLSearchParams({ desde, hasta });
+      const resp = await fetch('/api/evaluaciones/ranking-periodo?' + qs.toString());
+      const data = await resp.json();
+      if (!resp.ok) {
+        msg.textContent = data.detail || 'Error al consultar ranking';
+        msg.style.color = '#721c24';
+        return;
+      }
+      renderRanking(data);
+      msg.textContent = 'Datos actualizados.';
+      msg.style.color = '#155724';
+    } catch (err) {
+      msg.textContent = 'Error de red: ' + err;
+      msg.style.color = '#721c24';
+    }
+  }
+
+  cargarRanking();
+</script>
+{% endblock %}

@@ -29,3 +29,17 @@ async def ui_evaluaciones(request: Request, db: Session = Depends(get_db)):
             "annos": annos,
         },
     )
+
+
+@router.get("/evaluaciones/ranking", response_class=HTMLResponse)
+async def ui_evaluaciones_ranking(request: Request):
+    hoy = date.today()
+    desde_default = date(hoy.year, 1, 1)
+    return templates.TemplateResponse(
+        "evaluaciones/ranking.html",
+        {
+            "request": request,
+            "desde_default": str(desde_default),
+            "hasta_default": str(hoy),
+        },
+    )
