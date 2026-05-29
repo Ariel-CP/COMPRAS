@@ -7,13 +7,41 @@ from sqlalchemy.orm import Session
 TIPO_VALUES = {"PT", "WIP", "MP", "EMB", "SERV", "HERR"}
 
 
+def _fix_mojibake_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    if not any(marker in text_value for marker in ("Ã", "Â", "â")):
+        return text_value
+    try:
+        repaired = text_value.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text_value
+    return repaired.strip() or text_value
+
+
+def _to_mojibake_variant(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    try:
+        variant = normalized.encode("utf-8").decode("latin-1")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return None
+    return variant if variant != normalized else None
+
+
 def _row_to_producto(row: Any) -> Dict[str, Any]:
     return {
         "id": row.id,
         "codigo": row.codigo,
-        "nombre": row.nombre,
+        "nombre": _fix_mojibake_text(row.nombre),
         "tipo_producto": row.tipo_producto,
-        "rubro": getattr(row, "rubro", None),
+        "rubro": _fix_mojibake_text(getattr(row, "rubro", None)),
         "unidad_medida_id": row.unidad_medida_id,
         "activo": bool(row.activo),
     }
@@ -40,7 +68,12 @@ def listar_productos(
     where = ["1=1"]
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
     if q:
-        where.append("(codigo LIKE :q OR nombre LIKE :q)")
+        q_variant = _to_mojibake_variant(q)
+        if q_variant:
+            where.append("(codigo LIKE :q OR nombre LIKE :q OR nombre LIKE :q_variant)")
+            params["q_variant"] = f"%{q_variant}%"
+        else:
+            where.append("(codigo LIKE :q OR nombre LIKE :q)")
         params["q"] = f"%{q}%"
     if tipo:
         if tipo not in TIPO_VALUES:
@@ -84,6 +117,9 @@ def crear_producto(
     unidad_medida_id: int,
     activo: bool = True,
 ) -> Dict[str, Any]:
+    codigo = (codigo or "").strip()
+    nombre = _fix_mojibake_text(nombre) or ""
+    rubro = _fix_mojibake_text(rubro)
     if tipo_producto not in TIPO_VALUES:
         raise ValueError("tipo_producto inválido")
     _ensure_um_exists(db, unidad_medida_id)
@@ -130,6 +166,9 @@ def actualizar_producto(
     unidad_medida_id: int,
     activo: bool,
 ) -> Dict[str, Any]:
+    codigo = (codigo or "").strip()
+    nombre = _fix_mojibake_text(nombre) or ""
+    rubro = _fix_mojibake_text(rubro)
     if tipo_producto not in TIPO_VALUES:
         raise ValueError("tipo_producto inválido")
     _ensure_um_exists(db, unidad_medida_id)

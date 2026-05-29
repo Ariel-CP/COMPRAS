@@ -99,6 +99,7 @@ pip install -r requirements.txt
 - `seed_admin.py` - Crea usuario administrador inicial
 - `seed_roles.py` - Popula roles de usuario
 - `sync_tipo_cambio.py` - Sincroniza tipos de cambio con BCRA
+- `repair_text_encoding.py` - Corrige mojibake UTF-8/Latin-1 en textos de maestros y precios
 - `deploy_raspberry.ps1` - Deploy automático en Raspberry
 - `update.sh` - Script de actualización en Raspberry
 - `post_deploy_raspberry.sh` - Post-deploy en Raspberry (migraciones + permisos admin + chequeo de integridad)
