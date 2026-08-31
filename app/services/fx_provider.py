@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Iterable, List, Optional
 from decimal import Decimal
+from typing import List, Optional
 
 import httpx
 
@@ -167,6 +167,11 @@ class BcraFxProvider:
             rate = self._map_record(rec)
             if desde <= rate.fecha <= hasta:
                 resultados.append(rate)
+
+        if not resultados:
+            raise FxProviderError(
+                f"Respuesta BCRA: no se encontraron registros para USD en el rango {desde.isoformat()} a {hasta.isoformat()}"
+            )
         return resultados
 
     def close(self) -> None:

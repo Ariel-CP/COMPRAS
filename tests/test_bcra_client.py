@@ -70,3 +70,16 @@ def test_missing_records_raises_error():
         assert False, "Expected FxProviderError"
     except FxProviderError:
         pass
+
+
+def test_no_matching_records_in_range_raises_error():
+    data = [{"fecha": "2026-08-01", "valor": "350.12"}]
+    fake_resp = FakeResponse(status_code=200, data=data)
+    fake_client = FakeClient(fake_resp)
+    prov = BcraFxProvider(client=fake_client)
+
+    try:
+        prov.fetch_range(date(2026, 8, 10), date(2026, 8, 12))
+        assert False, "Expected FxProviderError"
+    except FxProviderError:
+        pass
