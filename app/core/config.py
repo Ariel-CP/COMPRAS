@@ -29,9 +29,10 @@ class Settings:
     openai_model: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     anthropic_model: Optional[str] = None
-    bcra_api_base_url: str = "https://api.estadisticasbcra.com"
+    bcra_api_base_url: str = "https://api.bcra.gob.ar"
     bcra_api_token: Optional[str] = None
     bcra_sync_days: int = 5
+    bcra_historico_desde: Optional[str] = None
     sync_job_token: Optional[str] = None
 
 
@@ -126,13 +127,16 @@ def get_settings() -> Settings:
     bcra_api_base_url = (
         os.environ.get("BCRA_API_BASE_URL")
         or cfg.get("bcra_api_base_url")
-        or "https://api.estadisticasbcra.com"
+        or "https://api.bcra.gob.ar"
     )
     bcra_api_token = (
         os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
     )
     bcra_sync_days = int(
         os.environ.get("BCRA_SYNC_DAYS", cfg.get("bcra_sync_days", 5))
+    )
+    bcra_historico_desde = (
+        os.environ.get("BCRA_HISTORICO_DESDE") or cfg.get("bcra_historico_desde")
     )
     sync_job_token = (
         os.environ.get("SYNC_JOB_TOKEN") or cfg.get("sync_job_token")
@@ -161,5 +165,6 @@ def get_settings() -> Settings:
         bcra_api_base_url=bcra_api_base_url,
         bcra_api_token=bcra_api_token,
         bcra_sync_days=bcra_sync_days,
+        bcra_historico_desde=bcra_historico_desde,
         sync_job_token=sync_job_token,
     )

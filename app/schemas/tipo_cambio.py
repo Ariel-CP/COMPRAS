@@ -1,19 +1,19 @@
 from datetime import date
-from typing import Optional, List
+from typing import Optional, List, Literal
 from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class TipoCambioBase(BaseModel):
     fecha: date = Field(..., description="Fecha del tipo de cambio")
-    moneda: str = Field(
+    moneda: Literal["ARS", "USD", "USD_MAY", "EUR"] = Field(
         ..., description="Moneda (ARS, USD, USD_MAY, EUR)"
     )
-    tipo: str = Field(
+    tipo: Literal["COMPRA", "VENTA", "PROMEDIO"] = Field(
         "PROMEDIO", description="Tipo de tasa: COMPRA, VENTA, PROMEDIO"
     )
     tasa: float = Field(..., description="Valor de la tasa en pesos", gt=0)
-    origen: str = Field(
+    origen: Literal["ERP_FLEXXUS", "MANUAL", "OTRO"] = Field(
         "MANUAL", description="Origen del dato (MANUAL, ERP_FLEXXUS, OTRO)"
     )
     notas: Optional[str] = Field(None, description="Notas opcionales")
@@ -72,3 +72,14 @@ class TipoCambioSyncResponse(BaseModel):
     procesados: int
     desde: date
     hasta: date
+
+
+class TipoCambioSyncHistoricoResponse(BaseModel):
+    """Respuesta de sincronización histórica de BCRA."""
+    fecha_desde: date
+    fecha_hasta: date
+    recibidos: int
+    insertados: int
+    actualizados: int
+    sin_cambios: int
+    errores: int

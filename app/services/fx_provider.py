@@ -49,16 +49,30 @@ class BcraFxProvider:
             self._client = httpx.Client(timeout=self._timeout)
         return self._client
 
-    def _request_usd(self) -> dict:
+    def _request_usd(
+        self, desde: Optional[date] = None, hasta: Optional[date] = None
+    ) -> dict:
+        """Obtiene cotizaciones USD del BCRA.
+
+        Si desde/hasta se omiten, obtiene solo el día actual.
+        """
         url = f"{self._base_url}{self._ENDPOINT_USD}"
         headers = {"Accept": "application/json", "Accept-Language": "es-AR"}
+        params: dict[str, str] = {}
+        if desde is not None:
+            params["fechadesde"] = desde.isoformat()
+        if hasta is not None:
+            params["fechahasta"] = hasta.isoformat()
         try:
-            resp = self._http_client().get(url, headers=headers)
+            resp = self._http_client().get(
+                url, headers=headers, params=params if params else None
+            )
             resp.raise_for_status()
         except httpx.RequestError as exc:
             raise FxProviderError(f"Error de conexión a BCRA {url}: {exc}") from exc
         except httpx.HTTPStatusError as exc:
-            raise FxProviderError(f"HTTP {exc.response.status_code} al consultar {url}") from exc
+            msg = f"HTTP {exc.response.status_code} al consultar {url}"
+            raise FxProviderError(msg) from exc
         try:
             data = resp.json()
         except Exception as exc:
@@ -96,16 +110,16 @@ class BcraFxProvider:
         return FxRate(
             fecha=fecha,
             moneda="USD",
-            tipo="MAYORISTA",
+            tipo="VENTA",
             tasa=tasa,
-            origen="BCRA_OFICIAL",
+            origen="OTRO",
             notas=None,
         )
 
     def fetch_range(self, desde: date, hasta: date) -> List[FxRate]:
         if desde > hasta:
             raise ValueError("La fecha 'desde' no puede ser mayor a 'hasta'")
-        data = self._request_usd()
+        data = self._request_usd(desde=desde, hasta=hasta)
         # La API pública puede devolver varias estructuras. Normalizamos a una lista
         records: List[dict] = []
         if isinstance(data, dict):
