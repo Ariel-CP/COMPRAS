@@ -130,3 +130,20 @@ async def admin_logo(
             "current_user": current_user,
         },
     )
+
+
+    @router.get("/admin/settings", response_class=HTMLResponse)
+    async def admin_settings(
+        request: Request,
+        db: Session = Depends(get_db),
+        current_user=Depends(require_permission("admin_sistema", False)),
+    ):
+        status = db_status(db)
+        return templates.TemplateResponse(
+            "admin/settings.html",
+            {
+                "request": request,
+                "db_status": status,
+                "current_user": current_user,
+            },
+        )

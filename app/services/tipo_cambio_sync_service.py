@@ -59,16 +59,10 @@ def sync_bcra_tipos_cambio(
     rango_desde = desde
     rango_hasta = hasta
 
-    token = _SETTINGS.bcra_api_token
     created_provider = False
     if not provider:
-        if not token:
-            raise TipoCambioSyncError(
-                "Configura BCRA_API_TOKEN para sincronizar tipos de cambio"
-            )
         provider = BcraFxProvider(
             base_url=_SETTINGS.bcra_api_base_url,
-            token=token,
         )
         created_provider = True
 
