@@ -1,7 +1,9 @@
 """Endpoints de estado y actualización del sistema."""
+import json
 import logging
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps_auth import get_current_user, require_permission
@@ -12,9 +14,6 @@ from app.services.system_service import (
     save_ui_logo,
     trigger_update,
 )
-from fastapi import Body
-from pathlib import Path
-import json
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _APP_CONFIG_PATH = _PROJECT_ROOT / "app" / "config.json"

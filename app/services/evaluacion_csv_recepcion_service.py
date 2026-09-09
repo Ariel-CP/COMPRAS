@@ -1,7 +1,9 @@
 """
-Importación del historial de evaluaciones de proveedores desde CSV exportado de Power BI.
+Importación del historial de evaluaciones de proveedores desde archivos tabulares
+(CSV o XLSX) exportados de Power BI.
 
-Origen: tabla "CONTROL DE RECEPCION" exportada como CSV (sep=;, decimal=,).
+Origen: tabla "CONTROL DE RECEPCION" exportada como CSV (sep=;, decimal=,)
+o planilla XLSX equivalente.
 Lógica:
   - Cada fila es una recepción individual de material.
   - Se deduplica por Codigo Proveedor + Año → 1 evaluación anual por proveedor.
@@ -25,6 +27,26 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+IMPORT_REF_CSV = "IMPORT_POWERBI_CSV"
+IMPORT_REF_XLSX = "IMPORT_POWERBI_XLSX"
+
+COLUMNAS_REQUERIDAS = {
+    "codigo_proveedor": ("Codigo Proveedor", "CodigoProveedor", "codigo_proveedor"),
+    "anno": ("Año", "Anno", "Year", "Anio"),
+}
+
+COLUMNAS_RECOMENDADAS = {
+    "puntaje_calidad": ("PuntajeCalidadPonderado", "Puntaje Calidad Ponderado"),
+    "puntaje_entrega": ("PuntajeEntregaPonderado", "Puntaje Entrega Ponderado"),
+    "puntaje_certificado": (
+        "PuntajeCertificadoPonderado",
+        "Puntaje Certificado Ponderado",
+    ),
+    "puntaje_total": ("PuntajeTotalProveedor", "Puntaje Total Proveedor"),
+    "clasificacion": ("ClasificacionProveedor", "Clasificacion Proveedor"),
+    "controlo": ("Controlo", "controlo"),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +128,21 @@ def _leer_csv(contenido: bytes) -> "pd.DataFrame":
     raise ValueError("No se pudo decodificar el CSV (probados utf-8, latin-1, cp1252)")
 
 
+def _leer_xlsx(contenido: bytes) -> "pd.DataFrame":
+    """
+    Lee XLSX y devuelve DataFrame.
+
+    Se usa dtype=object para preservar formatos y aplicar conversiones seguras
+    posteriormente con _safe_int/_safe_decimal.
+    """
+    import pandas as pd
+
+    try:
+        return pd.read_excel(io.BytesIO(contenido), dtype=object)
+    except Exception as exc:  # pragma: no cover - errores de archivo corrupto/hoja inválida
+        raise ValueError(f"No se pudo leer el XLSX: {exc}") from exc
+
+
 def _deduplicar(df: "pd.DataFrame") -> "pd.DataFrame":
     """
     Agrupa por Codigo Proveedor + Año y toma la última fila de cada grupo.
@@ -133,6 +170,14 @@ def _buscar_col(df: "pd.DataFrame", *candidatos: str) -> Optional[str]:
         if found is not None:
             return found
     return None
+
+
+def _mapa_columnas_detectadas(df: "pd.DataFrame") -> dict[str, Optional[str]]:
+    """Devuelve el mapeo de columnas detectadas para requeridas/recomendadas."""
+    mapping: dict[str, Optional[str]] = {}
+    for key, candidatos in {**COLUMNAS_REQUERIDAS, **COLUMNAS_RECOMENDADAS}.items():
+        mapping[key] = _buscar_col(df, *candidatos)
+    return mapping
 
 
 # ---------------------------------------------------------------------------
@@ -173,11 +218,11 @@ def _insertar_evaluacion(db: Session, datos: dict) -> tuple[bool, str]:
             INSERT INTO evaluacion_proveedor_anual (
                 proveedor_id, anno, periodo, tipo_evaluacion,
                 puntaje_calidad, puntaje_servicio, puntaje_embalaje, puntaje_total,
-                resultado, evaluador_nombre, usuario_id
+                resultado, evaluador_nombre, referencias, usuario_id
             ) VALUES (
                 :proveedor_id, :anno, :periodo, :tipo_evaluacion,
                 :puntaje_calidad, :puntaje_servicio, :puntaje_embalaje, :puntaje_total,
-                :resultado, :evaluador_nombre, :usuario_id
+                :resultado, :evaluador_nombre, :referencias, :usuario_id
             )
         """),
             datos,
@@ -209,24 +254,17 @@ def _insertar_evaluacion(db: Session, datos: dict) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 
 
-def importar_desde_csv(
-    db: Session, contenido: bytes, usuario_id: Optional[int] = None
+def _importar_desde_dataframe(
+    db: Session,
+    df_raw: "pd.DataFrame",
+    usuario_id: Optional[int],
+    origen: str,
 ) -> dict:
-    """
-    Procesa el CSV exportado de Power BI e importa una evaluación anual por proveedor.
-
-    Parámetros:
-        db          : sesión SQLAlchemy
-        contenido   : bytes del archivo CSV
-        usuario_id  : ID del usuario que ejecuta la importación (opcional)
-
-    Retorna dict con estadísticas:
-        filas_csv, proveedores_unicos, importadas, duplicadas,
-        sin_proveedor, errores, errores_detalle, duracion_segundos
-    """
+    """Procesa un DataFrame tabular e importa una evaluación anual por proveedor."""
     inicio = datetime.now()
 
     stats: dict = {
+        "origen": origen,
         "filas_csv": 0,
         "proveedores_unicos": 0,
         "importadas": 0,
@@ -237,17 +275,19 @@ def importar_desde_csv(
         "duracion_segundos": 0.0,
     }
 
-    # 1) Leer CSV
-    try:
-        df_raw = _leer_csv(contenido)
-    except Exception as exc:
-        stats["errores"] = 1
-        stats["errores_detalle"].append(f"Error al leer CSV: {exc}")
-        return stats
-
     stats["filas_csv"] = len(df_raw)
 
-    # 2) Deduplicar por proveedor + año
+    # 2) Validar columnas requeridas
+    detectadas = _mapa_columnas_detectadas(df_raw)
+    faltantes_requeridas = [k for k in COLUMNAS_REQUERIDAS if not detectadas.get(k)]
+    if faltantes_requeridas:
+        stats["errores"] = 1
+        stats["errores_detalle"].append(
+            "Faltan columnas requeridas: " + ", ".join(faltantes_requeridas)
+        )
+        return stats
+
+    # 3) Deduplicar por proveedor + año
     try:
         df = _deduplicar(df_raw)
     except ValueError as exc:
@@ -257,10 +297,13 @@ def importar_desde_csv(
 
     stats["proveedores_unicos"] = len(df)
     logger.info(
-        "CSV: %d filas, %d combinaciones proveedor+año", stats["filas_csv"], len(df)
+        "%s: %d filas, %d combinaciones proveedor+año",
+        origen,
+        stats["filas_csv"],
+        len(df),
     )
 
-    # 3) Detectar nombres de columnas relevantes
+    # 4) Detectar nombres de columnas relevantes
     col_codigo = _buscar_col(df, "Codigo Proveedor", "CodigoProveedor")
     col_anno = _buscar_col(df, "Año", "Anno", "Year", "Anio")
     col_calidad = _buscar_col(
@@ -276,10 +319,12 @@ def importar_desde_csv(
     col_clasif = _buscar_col(df, "ClasificacionProveedor", "Clasificacion Proveedor")
     col_controlo = _buscar_col(df, "Controlo", "controlo")
 
-    # 4) Mapa de códigos de proveedor
+    # 5) Mapa de códigos de proveedor
     codigo_map = _build_codigo_map(db)
 
-    # 5) Procesar cada fila deduplicada
+    referencia_origen = IMPORT_REF_CSV if origen == "csv" else IMPORT_REF_XLSX
+
+    # 6) Procesar cada fila deduplicada
     for _, row in df.iterrows():
         codigo = _safe_str(row.get(col_codigo)) if col_codigo else None
         anno = _safe_int(row.get(col_anno)) if col_anno else None
@@ -300,7 +345,7 @@ def importar_desde_csv(
         p_tot = _safe_decimal(row.get(col_total) if col_total else None)
         clasif = _mapear_clasificacion(row.get(col_clasif) if col_clasif else None)
 
-        # Si puntaje_total no está en CSV, calcularlo
+        # Si puntaje_total no está en archivo, calcularlo
         if (
             p_tot is None
             and p_cal is not None
@@ -331,6 +376,7 @@ def importar_desde_csv(
             "puntaje_total": float(p_tot) if p_tot is not None else None,
             "resultado": clasif,
             "evaluador_nombre": evaluador,
+            "referencias": referencia_origen,
             "usuario_id": usuario_id,
         }
 
@@ -344,7 +390,7 @@ def importar_desde_csv(
             if len(stats["errores_detalle"]) < 20:
                 stats["errores_detalle"].append(f"prov={codigo} año={anno}: {msg}")
 
-    # 6) Commit
+    # 7) Commit
     if stats["importadas"] > 0:
         try:
             db.commit()
@@ -356,10 +402,207 @@ def importar_desde_csv(
 
     stats["duracion_segundos"] = round((datetime.now() - inicio).total_seconds(), 2)
     logger.info(
-        "CSV import finalizado: importadas=%d duplicadas=%d sin_proveedor=%d errores=%d",
+        "%s import finalizado: importadas=%d duplicadas=%d sin_proveedor=%d errores=%d",
+        origen,
         stats["importadas"],
         stats["duplicadas"],
         stats["sin_proveedor"],
         stats["errores"],
     )
     return stats
+
+
+def prevalidar_archivo_importacion(contenido: bytes, extension: str) -> dict:
+    """Valida estructura del archivo antes de importar y devuelve diagnóstico legible."""
+    ext = (extension or "").lower().strip(".")
+    if ext not in ("csv", "xlsx"):
+        return {
+            "ok": False,
+            "extension": ext,
+            "error": "Formato no soportado. Usa .csv o .xlsx",
+            "columnas": [],
+            "mapeo": {},
+            "faltantes_requeridas": [*COLUMNAS_REQUERIDAS.keys()],
+            "faltantes_recomendadas": [*COLUMNAS_RECOMENDADAS.keys()],
+            "filas_archivo": 0,
+        }
+
+    try:
+        df = _leer_csv(contenido) if ext == "csv" else _leer_xlsx(contenido)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "extension": ext,
+            "error": str(exc),
+            "columnas": [],
+            "mapeo": {},
+            "faltantes_requeridas": [*COLUMNAS_REQUERIDAS.keys()],
+            "faltantes_recomendadas": [*COLUMNAS_RECOMENDADAS.keys()],
+            "filas_archivo": 0,
+        }
+
+    mapeo = _mapa_columnas_detectadas(df)
+    faltantes_requeridas = [k for k in COLUMNAS_REQUERIDAS if not mapeo.get(k)]
+    faltantes_recomendadas = [k for k in COLUMNAS_RECOMENDADAS if not mapeo.get(k)]
+
+    return {
+        "ok": len(faltantes_requeridas) == 0,
+        "extension": ext,
+        "error": None,
+        "columnas": [str(c) for c in df.columns],
+        "mapeo": mapeo,
+        "faltantes_requeridas": faltantes_requeridas,
+        "faltantes_recomendadas": faltantes_recomendadas,
+        "filas_archivo": int(len(df)),
+    }
+
+
+def limpiar_evaluaciones_importadas(db: Session, incluir_legacy: bool = False) -> dict:
+    """
+    Elimina evaluaciones importadas para volver a cargar en limpio.
+
+    - Siempre borra registros marcados por referencias IMPORT_POWERBI_CSV/XLSX.
+    - Opcionalmente borra legado detectado por heurística:
+      periodo=0, tipo ANUAL y sin detalle de criterios.
+    """
+    filtros = [
+        "e.referencias = :ref_csv OR e.referencias = :ref_xlsx",
+    ]
+    params: dict[str, object] = {
+        "ref_csv": IMPORT_REF_CSV,
+        "ref_xlsx": IMPORT_REF_XLSX,
+    }
+
+    if incluir_legacy:
+        filtros.append(
+            "(e.periodo = 0 AND e.tipo_evaluacion = 'ANUAL' "
+            "AND NOT EXISTS (SELECT 1 FROM evaluacion_criterio_detalle d WHERE d.evaluacion_id = e.id))"
+        )
+
+    where_clause = " OR ".join(f"({f})" for f in filtros)
+
+    candidatos = db.execute(
+        text(
+            f"""
+            SELECT e.id, e.proveedor_id,
+                   CASE
+                     WHEN e.referencias = :ref_csv OR e.referencias = :ref_xlsx THEN 'marcado'
+                     ELSE 'legacy'
+                   END AS tipo_borrado
+            FROM evaluacion_proveedor_anual e
+            WHERE {where_clause}
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    if not candidatos:
+        return {
+            "eliminadas_total": 0,
+            "eliminadas_marcadas": 0,
+            "eliminadas_legacy": 0,
+            "proveedores_afectados": 0,
+        }
+
+    ids = [int(r["id"]) for r in candidatos]
+    proveedores = sorted({int(r["proveedor_id"]) for r in candidatos if r["proveedor_id"] is not None})
+    eliminadas_marcadas = sum(1 for r in candidatos if r["tipo_borrado"] == "marcado")
+    eliminadas_legacy = len(candidatos) - eliminadas_marcadas
+
+    db.execute(
+        text(
+            "DELETE FROM evaluacion_proveedor_anual "
+            f"WHERE id IN ({','.join(str(i) for i in ids)})"
+        )
+    )
+
+    # Recalcular estado_calificacion por proveedor afectado según última evaluación restante.
+    for proveedor_id in proveedores:
+        ultima = db.execute(
+            text(
+                """
+                SELECT resultado
+                FROM evaluacion_proveedor_anual
+                WHERE proveedor_id = :pid AND resultado IS NOT NULL
+                ORDER BY anno DESC, periodo DESC, id DESC
+                LIMIT 1
+                """
+            ),
+            {"pid": proveedor_id},
+        ).fetchone()
+        nuevo_estado = ultima[0] if ultima else None
+        db.execute(
+            text(
+                """
+                UPDATE proveedor
+                SET estado_calificacion = :estado
+                WHERE id = :pid
+                """
+            ),
+            {"estado": nuevo_estado, "pid": proveedor_id},
+        )
+
+    db.commit()
+
+    return {
+        "eliminadas_total": len(ids),
+        "eliminadas_marcadas": eliminadas_marcadas,
+        "eliminadas_legacy": eliminadas_legacy,
+        "proveedores_afectados": len(proveedores),
+    }
+
+
+def importar_desde_csv(
+    db: Session, contenido: bytes, usuario_id: Optional[int] = None
+) -> dict:
+    """
+    Procesa el CSV exportado de Power BI e importa una evaluación anual por proveedor.
+
+    Parámetros:
+        db          : sesión SQLAlchemy
+        contenido   : bytes del archivo CSV
+        usuario_id  : ID del usuario que ejecuta la importación (opcional)
+
+    Retorna dict con estadísticas:
+        filas_csv, proveedores_unicos, importadas, duplicadas,
+        sin_proveedor, errores, errores_detalle, duracion_segundos
+    """
+    # 1) Leer CSV
+    try:
+        df_raw = _leer_csv(contenido)
+    except Exception as exc:
+        return {
+            "origen": "csv",
+            "filas_csv": 0,
+            "proveedores_unicos": 0,
+            "importadas": 0,
+            "duplicadas": 0,
+            "sin_proveedor": 0,
+            "errores": 1,
+            "errores_detalle": [f"Error al leer CSV: {exc}"],
+            "duracion_segundos": 0.0,
+        }
+
+    return _importar_desde_dataframe(db, df_raw, usuario_id=usuario_id, origen="csv")
+
+
+def importar_desde_xlsx(
+    db: Session, contenido: bytes, usuario_id: Optional[int] = None
+) -> dict:
+    """Procesa XLSX con la misma lógica de importación usada para CSV."""
+    try:
+        df_raw = _leer_xlsx(contenido)
+    except Exception as exc:
+        return {
+            "origen": "xlsx",
+            "filas_csv": 0,
+            "proveedores_unicos": 0,
+            "importadas": 0,
+            "duplicadas": 0,
+            "sin_proveedor": 0,
+            "errores": 1,
+            "errores_detalle": [f"Error al leer XLSX: {exc}"],
+            "duracion_segundos": 0.0,
+        }
+
+    return _importar_desde_dataframe(db, df_raw, usuario_id=usuario_id, origen="xlsx")

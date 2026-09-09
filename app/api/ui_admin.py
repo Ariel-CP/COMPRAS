@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.deps_auth import require_permission
-from app.services import backup_service
-from app.services import user_service
+from app.services import backup_service, user_service
 from app.utils.health import db_status
 
 router = APIRouter()

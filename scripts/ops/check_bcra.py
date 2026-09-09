@@ -5,6 +5,7 @@ Ejecutar:
 
 """
 from datetime import date
+
 from app.services.fx_provider import BcraFxProvider
 
 
@@ -27,7 +28,7 @@ def main():
             print("Origen:", t.origen)
             print("Notas:", t.notas)
             print("---")
-    except Exception as exc:
+    except Exception:
         import traceback
         print("Error consultando BCRA:")
         traceback.print_exc()

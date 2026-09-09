@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services import mbom_service
+from app.services.costos_utils import normalizar_factor_merma
 from app.services.tipo_cambio_service import (
     obtener_tasa_cercana,
     obtener_tasa_cercana_flexible,
@@ -17,6 +18,20 @@ ALERTA_MSG = (
     "Algunas lÃ­neas fueron convertidas con tasa estimada; "
     "verifique tipo de cambio."
 )
+
+
+def _as_date(value: Any) -> Optional[date]:
+    """Normaliza una fecha desde SQLite o un objeto date."""
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _convertir_ars_a_usd(
@@ -58,10 +73,31 @@ def _convertir_ars_a_usd(
     }
 
 
+def _resolver_tasa_hist(
+    db: Session,
+    moneda: str,
+    fecha: date,
+    tipos_prioridad: Optional[List[str]] = None,
+) -> Optional[dict]:
+    """Resuelve la tasa histórica según la política del ERP por moneda."""
+    prioridad = list(tipos_prioridad or ["PROMEDIO", "VENTA", "COMPRA"])
+    if moneda == "USD_MAY":
+        prioridad = ["VENTA", "PROMEDIO", "COMPRA"]
+    elif moneda == "USD":
+        prioridad = ["PROMEDIO", "VENTA", "COMPRA"]
+    return obtener_tasa_cercana_flexible(
+        db,
+        moneda,
+        fecha,
+        tuple(prioridad),
+    )
+
+
 def _convertir_base_a_ars(
     db: Session,
     valor_base: float,
     moneda_base: str,
+    fecha: Optional[date] = None,
 ) -> Dict[str, Any]:
     """Convierte el valor base a ARS usando la tasa vigente mÃ¡s cercana."""
 
@@ -72,7 +108,8 @@ def _convertir_base_a_ars(
             "alerta": False,
         }
 
-    tasa = obtener_tasa_cercana(db, moneda_base, date.today(), "PROMEDIO")
+    fecha_ref = fecha or date.today()
+    tasa = _resolver_tasa_hist(db, moneda_base, fecha_ref)
     detalle = None
     alerta = False
     valor_convertido = valor_base
@@ -83,6 +120,7 @@ def _convertir_base_a_ars(
             "fecha_tasa": tasa["fecha"].isoformat(),
             "es_estimativa": bool(tasa.get("es_estimativa")),
             "origen_busqueda": tasa.get("origen_busqueda"),
+            "tipo_utilizado": tasa.get("tipo_sugerido"),
         }
         alerta = bool(tasa.get("es_estimativa"))
     else:
@@ -117,31 +155,113 @@ def _get_costo_vigente(
 
     en_stack.add(producto_id)
     try:
+        hoy = date.today()
         row = db.execute(
             text(
                 """
                 SELECT costo_unitario, moneda, vigencia_desde
                 FROM costo_producto
                 WHERE producto_id=:pid
-                  AND vigencia_desde <= CURRENT_DATE()
+                  AND vigencia_desde <= :hoy
                   AND (
                       vigencia_hasta IS NULL
-                      OR vigencia_hasta >= CURRENT_DATE()
+                      OR vigencia_hasta >= :hoy
                   )
                 ORDER BY vigencia_desde DESC
                 LIMIT 1
                 """
             ),
-            {"pid": producto_id},
+            {"pid": producto_id, "hoy": hoy},
         ).first()
         if row:
+            valor_origen = float(row.costo_unitario)
+            moneda_origen = row.moneda
+            fecha_precio = _as_date(row.vigencia_desde) or row.vigencia_desde
+            if moneda_origen == "ARS":
+                conversion = _convertir_ars_a_usd(db, valor_origen, fecha_precio)
+                data = {
+                    "valor_base": conversion["valor_base"],
+                    "moneda_base": conversion["moneda_base"],
+                    "moneda_origen": moneda_origen,
+                    "valor_origen": valor_origen,
+                    "fuente": "costo_producto",
+                    "fecha_precio": fecha_precio,
+                    "detalle_fx_hist": conversion["detalle_fx"],
+                    "alerta_fx_hist": conversion["alerta"],
+                }
+                memo_costos[producto_id] = data
+                return data
+
+            if moneda_origen == "USD_MAY":
+                tasa_hist = _resolver_tasa_hist(
+                    db,
+                    moneda_origen,
+                    fecha_precio,
+                    ["VENTA", "PROMEDIO", "COMPRA"],
+                )
+                if tasa_hist and tasa_hist.get("tasa"):
+                    ars_hist = valor_origen * float(tasa_hist["tasa"])
+                    conversion = _convertir_ars_a_usd(db, ars_hist, fecha_precio)
+                    detalle_fx_combined = {
+                        "usd_may_a_ars": {
+                            "tasa": float(tasa_hist["tasa"]),
+                            "fecha_tasa": tasa_hist["fecha"].isoformat(),
+                            "es_estimativa": bool(tasa_hist.get("es_estimativa")),
+                            "origen_busqueda": tasa_hist.get("origen_busqueda"),
+                        },
+                        "ars_a_usd": conversion["detalle_fx"],
+                    }
+                    data = {
+                        "valor_base": conversion["valor_base"],
+                        "moneda_base": conversion["moneda_base"],
+                        "moneda_origen": moneda_origen,
+                        "valor_origen": valor_origen,
+                        "fuente": "costo_producto",
+                        "fecha_precio": fecha_precio,
+                        "detalle_fx_hist": detalle_fx_combined,
+                        "alerta_fx_hist": bool(tasa_hist.get("es_estimativa")) or conversion["alerta"],
+                    }
+                    memo_costos[producto_id] = data
+                    return data
+
+            if moneda_origen != BASE_MONEDA:
+                tasa_hist = obtener_tasa_cercana(
+                    db,
+                    moneda_origen,
+                    fecha_precio,
+                    "PROMEDIO",
+                )
+                if tasa_hist and tasa_hist.get("tasa"):
+                    ars_hist = valor_origen * float(tasa_hist["tasa"])
+                    conversion = _convertir_ars_a_usd(db, ars_hist, fecha_precio)
+                    data = {
+                        "valor_base": conversion["valor_base"],
+                        "moneda_base": conversion["moneda_base"],
+                        "moneda_origen": moneda_origen,
+                        "valor_origen": valor_origen,
+                        "fuente": "costo_producto",
+                        "fecha_precio": fecha_precio,
+                        "detalle_fx_hist": {
+                            "moneda_origen_a_ars": {
+                                "tasa": float(tasa_hist["tasa"]),
+                                "fecha_tasa": tasa_hist["fecha"].isoformat(),
+                                "es_estimativa": bool(tasa_hist.get("es_estimativa")),
+                                "origen_busqueda": tasa_hist.get("origen_busqueda"),
+                            },
+                            "ars_a_usd": conversion["detalle_fx"],
+                        },
+                        "alerta_fx_hist": bool(tasa_hist.get("es_estimativa")) or conversion["alerta"],
+                    }
+                    memo_costos[producto_id] = data
+                    return data
+
             data = {
-                "valor_base": float(row.costo_unitario),
-                "moneda_base": row.moneda,
-                "moneda_origen": row.moneda,
-                "valor_origen": float(row.costo_unitario),
+                "valor_base": float(valor_origen),
+                "moneda_base": moneda_origen,
+                "moneda_origen": moneda_origen,
+                "valor_origen": float(valor_origen),
                 "fuente": "costo_producto",
-                "fecha_precio": row.vigencia_desde,
+                "fecha_precio": fecha_precio,
                 "detalle_fx_hist": None,
                 "alerta_fx_hist": False,
             }
@@ -401,6 +521,13 @@ def calcular_costos(db: Session, mbom_id: int) -> Dict[str, Any]:
         },
         "alerta_fx": alerta_fx,
         "detalle_alerta": ALERTA_MSG if alerta_fx else None,
+        "costo_materiales": total_materiales,
+        "costo_procesos": total_procesos,
+        "costo_terceros": 0.0,
+        "costo_total": total_general,
+        "porcentaje_materiales": round(pct_mat, 2),
+        "porcentaje_procesos": round(pct_proc, 2),
+        "porcentaje_terceros": 0.0,
         # Mantener compatibilidad con cÃ³digo anterior
         "componentes": resultado_mat["componentes"],
     }
@@ -445,10 +572,11 @@ def _calcular_costos_internal(
             db,
             base_valor,
             costo_info["moneda_base"],
+            costo_info.get("fecha_precio"),
         )
         costo_unitario_ars = conv_actual["valor_ars"]
         cantidad = float(r.cantidad)
-        merma = float(r.merma)
+        merma = normalizar_factor_merma(r.merma)
         line_total = costo_unitario_ars * cantidad * (1.0 + merma)
 
         detalle_fx = {
@@ -458,8 +586,11 @@ def _calcular_costos_internal(
             "moneda_origen": costo_info["moneda_origen"],
         }
         if costo_info.get("fecha_precio"):
+            fecha_precio_norm = _as_date(costo_info["fecha_precio"])
             detalle_fx["fecha_precio"] = (
-                costo_info["fecha_precio"].isoformat()
+                fecha_precio_norm.isoformat()
+                if fecha_precio_norm is not None
+                else str(costo_info["fecha_precio"])
             )
 
         if costo_info.get("alerta_fx_hist") or conv_actual.get("alerta"):
