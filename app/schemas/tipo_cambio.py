@@ -1,20 +1,21 @@
 from datetime import date
-from typing import Optional, List, Literal
 from decimal import Decimal
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from typing import List, Literal, Optional
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class TipoCambioBase(BaseModel):
     fecha: date = Field(..., description="Fecha del tipo de cambio")
     moneda: Literal["ARS", "USD", "USD_MAY", "EUR"] = Field(
         ..., description="Moneda (ARS, USD, USD_MAY, EUR)"
     )
-    tipo: Literal["COMPRA", "VENTA", "PROMEDIO"] = Field(
-        "PROMEDIO", description="Tipo de tasa: COMPRA, VENTA, PROMEDIO"
+    tipo: Literal["VENTA", "PROMEDIO", "MAYORISTA"] = Field(
+        "PROMEDIO", description="Tipo de tasa: VENTA, PROMEDIO, MAYORISTA"
     )
     tasa: float = Field(..., description="Valor de la tasa en pesos", gt=0)
-    origen: Literal["ERP_FLEXXUS", "MANUAL", "OTRO"] = Field(
-        "MANUAL", description="Origen del dato (MANUAL, ERP_FLEXXUS, OTRO)"
+    origen: Literal["ERP_FLEXXUS", "MANUAL", "OTRO", "BCRA_A3500"] = Field(
+        "MANUAL",
+        description="Origen del dato (MANUAL, ERP_FLEXXUS, OTRO, BCRA_A3500)",
     )
     notas: Optional[str] = Field(None, description="Notas opcionales")
 
@@ -54,7 +55,7 @@ class TipoCambioOut(TipoCambioBase):
 
 class TipoCambioFiltro(BaseModel):
     moneda: Optional[str] = None
-    tipo: Optional[str] = None
+    tipo: Optional[Literal["VENTA", "PROMEDIO", "MAYORISTA"]] = None
     desde: Optional[date] = None
     hasta: Optional[date] = None
 

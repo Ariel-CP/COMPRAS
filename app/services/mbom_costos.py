@@ -80,11 +80,11 @@ def _resolver_tasa_hist(
     tipos_prioridad: Optional[List[str]] = None,
 ) -> Optional[dict]:
     """Resuelve la tasa histórica según la política del ERP por moneda."""
-    prioridad = list(tipos_prioridad or ["PROMEDIO", "VENTA", "COMPRA"])
+    prioridad = list(tipos_prioridad or ["PROMEDIO", "VENTA"])
     if moneda == "USD_MAY":
-        prioridad = ["VENTA", "PROMEDIO", "COMPRA"]
+        prioridad = ["VENTA", "PROMEDIO"]
     elif moneda == "USD":
-        prioridad = ["PROMEDIO", "VENTA", "COMPRA"]
+        prioridad = ["PROMEDIO", "VENTA"]
     return obtener_tasa_cercana_flexible(
         db,
         moneda,
@@ -197,7 +197,7 @@ def _get_costo_vigente(
                     db,
                     moneda_origen,
                     fecha_precio,
-                    ["VENTA", "PROMEDIO", "COMPRA"],
+                    ["VENTA", "PROMEDIO"],
                 )
                 if tasa_hist and tasa_hist.get("tasa"):
                     ars_hist = valor_origen * float(tasa_hist["tasa"])

@@ -4,8 +4,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.services import mbom_costos
-from app.services.tipo_cambio_service import obtener_tasa_cercana
-
+from app.services.tipo_cambio_service import (
+    obtener_tasa_cercana,
+    obtener_tasa_cercana_flexible,
+)
 
 def _build_session(rows):
     engine = create_engine("sqlite:///:memory:")
@@ -70,6 +72,15 @@ def test_obtener_tasa_cercana_sin_anterior_no_usa_futura():
         ]
     ) as session:
         tasa = obtener_tasa_cercana(session, "USD", date(2025, 5, 17), "PROMEDIO")
+
+    assert tasa is None
+
+
+def test_obtener_tasa_flexible_no_usa_compra_como_fallback():
+    with _build_session(
+        [(date(2025, 5, 15), "USD", "COMPRA", 1400.0, "MANUAL")]
+    ) as session:
+        tasa = obtener_tasa_cercana_flexible(session, "USD", date(2025, 5, 17))
 
     assert tasa is None
 

@@ -8,9 +8,10 @@
   <div class="fx-header">
     <div>
       <p class="eyebrow">Fuente oficial</p>
-      <h3>Sincronización con BCRA</h3>
+      <h3 style="color:#0b5cab;">Sincronización con BCRA</h3>
     </div>
-    <button type="button" id="btnSyncBcra" class="btn-accion">Sincronizar con BCRA</button>
+    <button type="button" id="btnSyncBcra" class="btn-accion">Sincronizar minorista</button>
+    <button type="button" id="btnSyncMayorista" class="btn-secundario">Sincronizar mayorista</button>
   </div>
 
   <div id="syncStatus" class="status-box muted">
@@ -25,10 +26,8 @@
       Moneda
       <select id="filtroMoneda">
         <option value="">Todas</option>
-        <option value="USD" {% if moneda=='USD' %}selected{% endif %}>USD</option>
-        <option value="USD_MAY" {% if moneda=='USD_MAY' %}selected{% endif %}>USD MAY</option>
-        <option value="EUR" {% if moneda=='EUR' %}selected{% endif %}>EUR</option>
-        <option value="ARS" {% if moneda=='ARS' %}selected{% endif %}>ARS</option>
+        <option value="USD" {% if moneda=='USD' %}selected{% endif %}>USD minorista</option>
+        <option value="USD_MAY" {% if moneda=='USD_MAY' %}selected{% endif %}>USD mayorista</option>
       </select>
     </label>
 
@@ -37,8 +36,8 @@
       <select id="filtroTipo">
         <option value="">Todos</option>
         <option value="VENTA" {% if tipo=='VENTA' %}selected{% endif %}>VENTA</option>
-        <option value="COMPRA" {% if tipo=='COMPRA' %}selected{% endif %}>COMPRA</option>
         <option value="PROMEDIO" {% if tipo=='PROMEDIO' %}selected{% endif %}>PROMEDIO</option>
+        <option value="MAYORISTA" {% if tipo=='MAYORISTA' %}selected{% endif %}>MAYORISTA</option>
       </select>
     </label>
 
@@ -120,6 +119,7 @@
   const btnBuscar = document.getElementById('btnBuscar');
   const btnLimpiar = document.getElementById('btnLimpiar');
   const btnSyncBcra = document.getElementById('btnSyncBcra');
+  const btnSyncMayorista = document.getElementById('btnSyncMayorista');
   const syncStatus = document.getElementById('syncStatus');
   const tbody = document.querySelector('#tbl tbody');
   const resultInfo = document.getElementById('resultInfo');
@@ -127,16 +127,39 @@
   let chartTipoCambio = null;
 
   function renderTipoCambioChart(rows) {
-    if (!chartCanvas || !Array.isArray(rows) || rows.length === 0) return;
+    const rowsByDate = new Map();
+    const series = {
+      minorista: { label: 'Dólar minorista', color: '#2e7d32', fill: 'rgba(46, 125, 50, 0.15)' },
+      mayorista: { label: 'Dólar mayorista', color: '#1565c0', fill: 'rgba(21, 101, 192, 0.15)' },
+    };
 
-    const ordered = [...rows]
-      .filter(row => row.fecha && row.tasa != null)
-      .sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    rows.filter(row => row.fecha && row.tasa != null).forEach(row => {
+      const key = row.tipo === 'MAYORISTA' || row.moneda === 'USD_MAY'
+        ? 'mayorista'
+        : row.moneda === 'USD' && row.tipo === 'VENTA'
+          ? 'minorista'
+          : null;
+      if (!key) return;
+      if (!rowsByDate.has(row.fecha)) rowsByDate.set(row.fecha, {});
+      rowsByDate.get(row.fecha)[key] = Number(row.tasa);
+    });
 
-    if (ordered.length === 0) return;
-
-    const labels = ordered.map(row => row.fecha);
-    const data = ordered.map(row => Number(row.tasa));
+    const labels = [...rowsByDate.keys()].sort((a, b) => new Date(a) - new Date(b));
+    const monedas = [...new Set(
+      rows.map(row => row.tipo === 'MAYORISTA' || row.moneda === 'USD_MAY'
+        ? 'mayorista'
+        : row.moneda === 'USD' && row.tipo === 'VENTA'
+          ? 'minorista'
+          : null
+      ).filter(Boolean)
+    )];
+    if (!chartCanvas || labels.length === 0) {
+      if (chartTipoCambio) {
+        chartTipoCambio.destroy();
+        chartTipoCambio = null;
+      }
+      return;
+    }
 
     if (chartTipoCambio) chartTipoCambio.destroy();
 
@@ -144,26 +167,45 @@
       type: 'line',
       data: {
         labels,
-        datasets: [{
-          label: 'Tasa',
-          data,
-          borderColor: '#2e7d32',
-          backgroundColor: 'rgba(46, 125, 50, 0.15)',
+        datasets: monedas.map(moneda => ({
+          label: series[moneda].label,
+          data: labels.map(fecha => rowsByDate.get(fecha)[moneda] ?? null),
+          borderColor: series[moneda].color,
+          backgroundColor: series[moneda].fill,
           borderWidth: 2,
           pointRadius: 3,
           tension: 0.2,
-        }]
+        })),
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: monedas.length > 1 } },
         scales: {
           x: { title: { display: true, text: 'Fecha' } },
-          y: { title: { display: true, text: 'Tasa' } }
-        }
-      }
+          y: { title: { display: true, text: 'Cotización en ARS' } },
+        },
+      },
     });
+  }
+
+  async function cargarGrafico() {
+    const monedas = filtroMoneda.value ? [filtroMoneda.value] : ['USD', 'USD_MAY'];
+    const responses = await Promise.all(monedas.map(moneda => {
+      const params = new URLSearchParams({ moneda, limite: '1000' });
+      if (filtroTipo.value) params.append('tipo', filtroTipo.value);
+      if (filtroDesde.value) params.append('desde', filtroDesde.value);
+      if (filtroHasta.value) params.append('hasta', filtroHasta.value);
+      return fetch(`/api/tipo-cambio?${params.toString()}`);
+    }));
+
+    if (responses.some(response => !response.ok)) {
+      renderTipoCambioChart([]);
+      return;
+    }
+
+    const rows = (await Promise.all(responses.map(response => response.json()))).flat();
+    renderTipoCambioChart(rows);
   }
 
   async function cargarHistorial() {
@@ -188,15 +230,11 @@
 
       if (!Array.isArray(arr) || arr.length === 0) {
         resultInfo.innerHTML = '<em>Sin resultados</em>';
-        if (chartTipoCambio) {
-          chartTipoCambio.destroy();
-          chartTipoCambio = null;
-        }
+        await cargarGrafico();
         return;
       }
 
       resultInfo.textContent = `${arr.length} resultados`;
-      renderTipoCambioChart(arr);
 
       arr.forEach(it => {
         const tr = document.createElement('tr');
@@ -215,8 +253,10 @@
         `;
         tbody.appendChild(tr);
       });
+      await cargarGrafico();
     } catch (e) {
       resultInfo.innerHTML = '<em>Error de red</em>';
+      renderTipoCambioChart([], []);
     }
   }
 
@@ -261,6 +301,26 @@
       cargarHistorial();
     } catch (e) {
       syncStatus.textContent = e.message || 'No se pudo sincronizar con BCRA.';
+      syncStatus.className = 'status-box error';
+    }
+  });
+
+  btnSyncMayorista.addEventListener('click', async () => {
+    syncStatus.textContent = 'Sincronizando mayorista desde BCRA...';
+    syncStatus.className = 'status-box warning';
+
+    try {
+      const resp = await fetch('/api/tipo-cambio/sync-mayorista-incremental', {
+        method: 'POST',
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || 'Error al sincronizar mayorista');
+
+      syncStatus.textContent = `Mayorista actualizado: ${data.insertados} nuevos, ${data.actualizados} revisados.`;
+      syncStatus.className = 'status-box success';
+      cargarHistorial();
+    } catch (e) {
+      syncStatus.textContent = e.message || 'No se pudo sincronizar el mayorista.';
       syncStatus.className = 'status-box error';
     }
   });

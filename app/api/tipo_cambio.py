@@ -1,5 +1,6 @@
 from datetime import date
 from io import BytesIO
+from typing import Literal
 
 from fastapi import (
     APIRouter,
@@ -23,8 +24,8 @@ from ..schemas.tipo_cambio import (
     TipoCambioCreate,
     TipoCambioFiltro,
     TipoCambioOut,
-    TipoCambioSyncResponse,
     TipoCambioSyncHistoricoResponse,
+    TipoCambioSyncResponse,
     TipoCambioUpdate,
 )
 from ..services.tipo_cambio_service import (
@@ -37,9 +38,11 @@ from ..services.tipo_cambio_service import (
 )
 from ..services.tipo_cambio_sync_service import (
     TipoCambioSyncError,
-    sync_bcra_tipos_cambio,
-    sync_bcra_historico,
     sync_bcra_desde_ultima_fecha,
+    sync_bcra_historico,
+    sync_bcra_mayorista_desde_ultima_fecha,
+    sync_bcra_mayorista_historico,
+    sync_bcra_tipos_cambio,
 )
 from .deps_auth import require_permission
 
@@ -53,18 +56,13 @@ settings = get_settings()
     dependencies=[Depends(require_permission("tipo_cambio", False))],
 )
 def api_listar_tipos_cambio(
-    moneda: str | None = Query(
-        default=None, description="Moneda"
+    moneda: str | None = Query(default=None, description="Moneda"),
+    tipo: Literal["VENTA", "PROMEDIO", "MAYORISTA"] | None = Query(
+        default=None, description="VENTA/PROMEDIO/MAYORISTA"
     ),
-    tipo: str | None = Query(
-        default=None, description="COMPRA/VENTA/PROMEDIO"
-    ),
-    desde: str | None = Query(
-        default=None, description="Fecha desde (YYYY-MM-DD)"
-    ),
-    hasta: str | None = Query(
-        default=None, description="Fecha hasta (YYYY-MM-DD)"
-    ),
+    desde: str | None = Query(default=None, description="Fecha desde (YYYY-MM-DD)"),
+    hasta: str | None = Query(default=None, description="Fecha hasta (YYYY-MM-DD)"),
+    limite: int = Query(default=200, ge=1, le=1000, description="Máximo de registros"),
     db: Session = Depends(get_db),
 ):
     desde_dt = date.fromisoformat(desde) if desde else None
@@ -73,7 +71,7 @@ def api_listar_tipos_cambio(
         moneda=moneda, tipo=tipo, desde=desde_dt, hasta=hasta_dt
     )
     try:
-        return listar_tipos_cambio(db, filtro)
+        return listar_tipos_cambio(db, filtro, limite=limite)
     except SQLAlchemyError as ex:  # noqa: BLE001
         raise HTTPException(
             status_code=500, detail=str(getattr(ex, "orig", ex))
@@ -376,3 +374,68 @@ def api_sync_historico_incremental(
         errores=resumen.errores,
     )
 
+
+@router.post(
+    "/sync-mayorista-historico",
+    response_model=TipoCambioSyncHistoricoResponse,
+)
+def api_sync_mayorista_historico(
+    fecha_desde: str = Query(..., description="Fecha inicial (YYYY-MM-DD)"),
+    fecha_hasta: str = Query(..., description="Fecha final (YYYY-MM-DD)"),
+    x_sync_token: str | None = Header(default=None, alias="X-Sync-Token"),
+    db: Session = Depends(get_db),
+):
+    """Importa la serie mayorista A3500 desde BCRA v4.0."""
+    if settings.sync_job_token and x_sync_token != settings.sync_job_token:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    try:
+        resumen = sync_bcra_mayorista_historico(
+            db,
+            desde=date.fromisoformat(fecha_desde),
+            hasta=date.fromisoformat(fecha_hasta),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Fecha inválida: {exc}") from exc
+    except TipoCambioSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    db.commit()
+    return TipoCambioSyncHistoricoResponse(
+        fecha_desde=resumen.fecha_desde,
+        fecha_hasta=resumen.fecha_hasta,
+        recibidos=resumen.recibidos,
+        insertados=resumen.insertados,
+        actualizados=resumen.actualizados,
+        sin_cambios=resumen.sin_cambios,
+        errores=resumen.errores,
+    )
+
+
+@router.post(
+    "/sync-mayorista-incremental",
+    response_model=TipoCambioSyncHistoricoResponse,
+)
+def api_sync_mayorista_incremental(
+    x_sync_token: str | None = Header(default=None, alias="X-Sync-Token"),
+    db: Session = Depends(get_db),
+):
+    """Actualiza A3500 desde la última fecha mayorista guardada."""
+    if settings.sync_job_token and x_sync_token != settings.sync_job_token:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    try:
+        resumen = sync_bcra_mayorista_desde_ultima_fecha(db)
+    except TipoCambioSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    db.commit()
+    return TipoCambioSyncHistoricoResponse(
+        fecha_desde=resumen.fecha_desde,
+        fecha_hasta=resumen.fecha_hasta,
+        recibidos=resumen.recibidos,
+        insertados=resumen.insertados,
+        actualizados=resumen.actualizados,
+        sin_cambios=resumen.sin_cambios,
+        errores=resumen.errores,
+    )

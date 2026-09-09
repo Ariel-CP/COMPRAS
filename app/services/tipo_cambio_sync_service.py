@@ -6,11 +6,17 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Iterator, Optional
 
+from sqlalchemy import text
+
 from app.core.config import get_settings
 from app.schemas.tipo_cambio import TipoCambioCreate
+from app.services.bcra_monetarias_provider import BcraMonetariasProvider
 from app.services.fx_provider import BcraFxProvider, FxProviderError, FxRate
-from app.services.tipo_cambio_service import SQLConn, upsert_tipo_cambio
-from sqlalchemy import text
+from app.services.tipo_cambio_service import (
+    SQLConn,
+    upsert_tipo_cambio,
+    upsert_tipo_cambio_mayorista,
+)
 
 _SETTINGS = get_settings()
 logger = logging.getLogger(__name__)
@@ -28,6 +34,7 @@ class SyncResumen:
 @dataclass(slots=True)
 class SyncResumenHistorico:
     """Resumen detallado de sincronización histórica."""
+
     fecha_desde: date
     fecha_hasta: date
     recibidos: int
@@ -128,10 +135,9 @@ def _iterar_periodos_mensuales(desde: date, hasta: date) -> Iterator[tuple[date,
     while current <= hasta:
         # Calcular el último día del mes actual
         if current.month == 12:
-            fin_mes = (
-                current.replace(year=current.year + 1, month=1, day=1)
-                - timedelta(days=1)
-            )
+            fin_mes = current.replace(
+                year=current.year + 1, month=1, day=1
+            ) - timedelta(days=1)
         else:
             fin_mes = current.replace(month=current.month + 1, day=1) - timedelta(
                 days=1
@@ -239,12 +245,12 @@ def sync_bcra_historico(
                     f"{periodo_hasta.isoformat()}: {len(tasas)} cotizaciones"
                 )
             except Exception as exc:
-                logger.warning(
-                    f"Error inesperado en período {periodo_desde}: {exc}"
-                )
+                logger.warning(f"Error inesperado en período {periodo_desde}: {exc}")
                 errores_total += 1
 
-        sin_cambios = recibidos_total - insertados_total - actualizados_total - errores_total
+        sin_cambios = (
+            recibidos_total - insertados_total - actualizados_total - errores_total
+        )
 
         logger.info(
             f"BCRA histórico USD completo: "
@@ -351,3 +357,104 @@ def sync_bcra_desde_ultima_fecha(
 
     return sync_bcra_historico(db, desde=desde, hasta=hasta, provider=provider)
 
+
+def sync_bcra_mayorista_historico(
+    db: SQLConn,
+    *,
+    desde: date,
+    hasta: date,
+    provider: Optional[BcraMonetariasProvider] = None,
+) -> SyncResumenHistorico:
+    """Importa el histórico BCRA A3500 como USD/MAYORISTA."""
+    if desde > hasta:
+        raise TipoCambioSyncError("La fecha 'desde' no puede superar 'hasta'")
+
+    created_provider = False
+    if provider is None:
+        provider = BcraMonetariasProvider(base_url=_SETTINGS.bcra_api_base_url)
+        created_provider = True
+
+    try:
+        try:
+            tasas = provider.fetch_range(desde, hasta)
+        except FxProviderError as exc:
+            raise TipoCambioSyncError(str(exc)) from exc
+
+        insertados = 0
+        actualizados = 0
+        errores = 0
+        for tasa in tasas:
+            try:
+                insertado, _ = upsert_tipo_cambio_mayorista(
+                    db,
+                    fecha=tasa.fecha,
+                    tasa=tasa.tasa,
+                    notas=tasa.notas,
+                )
+                if insertado:
+                    insertados += 1
+                else:
+                    actualizados += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Error al guardar mayorista %s: %s", tasa.fecha, exc)
+                errores += 1
+
+        return SyncResumenHistorico(
+            fecha_desde=desde,
+            fecha_hasta=hasta,
+            recibidos=len(tasas),
+            insertados=insertados,
+            actualizados=actualizados,
+            sin_cambios=0,
+            errores=errores,
+        )
+    finally:
+        if created_provider:
+            provider.close()
+
+
+def obtener_ultima_fecha_bcra_mayorista(db: SQLConn) -> Optional[date]:
+    """Obtiene la última fecha A3500 guardada localmente."""
+    result = db.execute(text("""
+            SELECT MAX(fecha) AS max_fecha
+            FROM tipo_cambio_hist
+            WHERE moneda='USD' AND tipo='MAYORISTA' AND origen='BCRA_A3500'
+            """)).fetchone()
+    return result.max_fecha if result and result.max_fecha else None
+
+
+def sync_bcra_mayorista_desde_ultima_fecha(
+    db: SQLConn,
+    provider: Optional[BcraMonetariasProvider] = None,
+) -> SyncResumenHistorico:
+    """Sincroniza A3500 desde el día siguiente a la última fecha local."""
+    ultima_fecha = obtener_ultima_fecha_bcra_mayorista(db)
+    if ultima_fecha is None:
+        inicio = getattr(_SETTINGS, "bcra_historico_desde", None)
+        if not inicio:
+            raise TipoCambioSyncError(
+                "No hay histórico mayorista y no se configuró bcra_historico_desde"
+            )
+        try:
+            desde = date.fromisoformat(inicio)
+        except (TypeError, ValueError) as exc:
+            raise TipoCambioSyncError(
+                f"Configuración bcra_historico_desde inválida: {inicio}"
+            ) from exc
+    else:
+        desde = ultima_fecha + timedelta(days=1)
+
+    hasta = date.today()
+    if desde > hasta:
+        return SyncResumenHistorico(
+            fecha_desde=desde,
+            fecha_hasta=hasta,
+            recibidos=0,
+            insertados=0,
+            actualizados=0,
+            sin_cambios=0,
+            errores=0,
+        )
+    return sync_bcra_mayorista_historico(
+        db, desde=desde, hasta=hasta, provider=provider
+    )
