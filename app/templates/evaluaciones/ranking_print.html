@@ -1,0 +1,442 @@
+{% extends 'base.html' %} {% block title %}Reporte Ranking de Proveedores{%
+endblock %} {% block content %}
+<section class="productos-wrapper reporte-print-wrapper">
+  <div class="no-print toolbar-print">
+    <a class="btn-accion" href="/ui/evaluaciones/ranking">Volver al ranking</a>
+    <button type="button" class="btn-accion" onclick="cargarReporte()">
+      Actualizar reporte
+    </button>
+    <button
+      type="button"
+      class="btn-accion"
+      style="background: #495057"
+      onclick="imprimirReporte()"
+    >
+      Imprimir
+    </button>
+  </div>
+
+  <div class="panel reporte-header">
+    <div class="reporte-titulos">
+      <h2>Reporte de Ranking de Proveedores</h2>
+      <div class="reporte-subtitulo">Evaluaciones de desempeño por período</div>
+    </div>
+    <div class="reporte-filtros no-print">
+      <label for="desde">Desde</label>
+      <input id="desde" type="date" value="{{ desde_default }}" />
+      <label for="hasta">Hasta</label>
+      <input id="hasta" type="date" value="{{ hasta_default }}" />
+    </div>
+    <div class="reporte-meta" id="reporteMeta">Cargando metadatos...</div>
+  </div>
+
+  <div class="kpi-grid">
+    <article class="panel kpi-card">
+      <div class="kpi-label">Período</div>
+      <div class="kpi-value" id="kpiPeriodo">-</div>
+    </article>
+    <article class="panel kpi-card">
+      <div class="kpi-label">Total proveedores</div>
+      <div class="kpi-value" id="kpiTotal">0</div>
+    </article>
+    <article class="panel kpi-card">
+      <div class="kpi-label">Promedio general</div>
+      <div class="kpi-value" id="kpiPromedio">-</div>
+    </article>
+  </div>
+
+  <div class="panel bloque-grafico">
+    <h3>Top 10 proveedores</h3>
+    <canvas id="chartTop10" height="110"></canvas>
+    <img id="imgTop10Print" class="print-chart-image" alt="Grafico Top 10" />
+  </div>
+
+  <div class="panel bloque-tabla">
+    <h3>Detalle Top 10</h3>
+    <table class="productos-table reporte-table" id="tablaTop10">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Proveedor</th>
+          <th>Promedio</th>
+          <th>Mín</th>
+          <th>Máx</th>
+          <th>Evaluaciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="7" class="empty">Sin datos</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel bloque-grafico page-break-before">
+    <h3>20 peores proveedores</h3>
+    <canvas id="chartWorst20" height="190"></canvas>
+    <img
+      id="imgWorst20Print"
+      class="print-chart-image"
+      alt="Grafico peores 20"
+    />
+  </div>
+
+  <div class="panel bloque-tabla">
+    <h3>Detalle peores 20</h3>
+    <table class="productos-table reporte-table" id="tablaWorst20">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Proveedor</th>
+          <th>Promedio</th>
+          <th>Mín</th>
+          <th>Máx</th>
+          <th>Evaluaciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td colspan="7" class="empty">Sin datos</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="firma-print">
+    <div class="firma-item">
+      <span>Evaluador</span>
+    </div>
+    <div class="firma-item">
+      <span>Responsable Compras</span>
+    </div>
+    <div class="firma-item">
+      <span>Aprobador</span>
+    </div>
+  </footer>
+
+  <div class="no-print" id="msgPrint"></div>
+</section>
+{% endblock %} {% block styles %}
+<style>
+  .reporte-print-wrapper {
+    max-width: 1200px;
+  }
+  .toolbar-print {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .reporte-header {
+    margin-bottom: 12px;
+    border-left: 4px solid #0b5cab;
+    background: #f8fbff;
+  }
+  .reporte-titulos h2 {
+    margin: 0;
+  }
+  .reporte-subtitulo {
+    color: #4a5568;
+    margin-top: 4px;
+    font-size: 13px;
+  }
+  .reporte-filtros {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .reporte-filtros input {
+    padding: 6px 8px;
+    border: 1px solid #cfd5da;
+    border-radius: 4px;
+  }
+  .reporte-meta {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #4a5568;
+  }
+  .kpi-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 12px;
+  }
+  .kpi-card {
+    margin: 0;
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: #4a5568;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .kpi-value {
+    margin-top: 6px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #0b5cab;
+  }
+  .bloque-grafico,
+  .bloque-tabla {
+    margin-bottom: 12px;
+  }
+  .bloque-grafico h3,
+  .bloque-tabla h3 {
+    margin: 0 0 8px 0;
+  }
+  .reporte-table td.empty {
+    text-align: center;
+    color: #777;
+  }
+  .reporte-table tbody tr:nth-child(odd) {
+    background: #f8fbff;
+  }
+  .reporte-table td:nth-child(1),
+  .reporte-table td:nth-child(7) {
+    text-align: center;
+  }
+  .reporte-table td:nth-child(4),
+  .reporte-table td:nth-child(5),
+  .reporte-table td:nth-child(6) {
+    text-align: right;
+  }
+  .firma-print {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+    margin: 26px 0 14px;
+  }
+  .firma-item {
+    border-top: 1px solid #444;
+    padding-top: 8px;
+    text-align: center;
+    font-size: 12px;
+    color: #333;
+  }
+  #msgPrint {
+    font-size: 13px;
+    color: #555;
+    margin-top: 6px;
+  }
+  .print-chart-image {
+    display: none;
+    width: 100%;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    margin-top: 8px;
+  }
+
+  @media print {
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
+
+    header,
+    .no-print {
+      display: none !important;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #111;
+    }
+
+    .productos-wrapper {
+      max-width: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .panel {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      box-shadow: none;
+      border: 1px solid #cfd5da;
+    }
+
+    .page-break-before {
+      break-before: page;
+      page-break-before: always;
+    }
+
+    canvas {
+      display: none !important;
+    }
+
+    .print-chart-image {
+      display: block;
+    }
+
+    .firma-print {
+      margin-top: 18px;
+    }
+  }
+</style>
+{% endblock %} {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  let chartTop10 = null;
+  let chartWorst20 = null;
+
+  function fmt(n) {
+    if (n == null || Number.isNaN(Number(n))) return "-";
+    return Number(n).toLocaleString("es-AR", { maximumFractionDigits: 2 });
+  }
+
+  function renderTabla(idTabla, rows) {
+    const tbody = document.querySelector(`#${idTabla} tbody`);
+    if (!rows.length) {
+      tbody.innerHTML =
+        '<tr><td colspan="7" class="empty">Sin datos para el período seleccionado</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows
+      .map(
+        (r, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${r.proveedor_codigo || ""}</td>
+        <td>${r.proveedor_nombre || ""}</td>
+        <td>${fmt(r.puntaje_promedio)}</td>
+        <td>${fmt(r.puntaje_minimo)}</td>
+        <td>${fmt(r.puntaje_maximo)}</td>
+        <td>${r.cantidad_evaluaciones || 0}</td>
+      </tr>
+    `,
+      )
+      .join("");
+  }
+
+  function syncChartImage(chart, imageId) {
+    if (!chart) return;
+    const img = document.getElementById(imageId);
+    if (!img) return;
+    img.src = chart.toBase64Image();
+  }
+
+  function buildChart(canvasId, imageId, rows, color) {
+    const current = canvasId === "chartTop10" ? chartTop10 : chartWorst20;
+    if (current) current.destroy();
+
+    const chart = new Chart(document.getElementById(canvasId), {
+      type: "bar",
+      data: {
+        labels: rows.map((i) =>
+          `${i.proveedor_codigo || ""} ${i.proveedor_nombre || ""}`.trim(),
+        ),
+        datasets: [
+          {
+            label: "Puntaje promedio",
+            data: rows.map((i) => i.puntaje_promedio),
+            backgroundColor: color,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        indexAxis: "y",
+        animation: {
+          onComplete: () => syncChartImage(chart, imageId),
+        },
+        plugins: {
+          legend: { display: false },
+        },
+        scales: {
+          x: { beginAtZero: true, max: 100 },
+        },
+      },
+    });
+
+    syncChartImage(chart, imageId);
+    return chart;
+  }
+
+  function actualizarMeta(data) {
+    const ahora = new Date();
+    const emision = ahora.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    const hora = ahora.toLocaleTimeString("es-AR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    document.getElementById("kpiPeriodo").textContent =
+      `${data.desde} a ${data.hasta}`;
+    document.getElementById("kpiTotal").textContent =
+      data.total_proveedores || 0;
+    document.getElementById("kpiPromedio").textContent = fmt(
+      data.promedio_general,
+    );
+    document.getElementById("reporteMeta").textContent =
+      `Emitido: ${emision} ${hora} | Rango: ${data.desde} a ${data.hasta}`;
+  }
+
+  async function cargarReporte() {
+    const desde = document.getElementById("desde").value;
+    const hasta = document.getElementById("hasta").value;
+    const msg = document.getElementById("msgPrint");
+
+    if (!desde || !hasta) {
+      msg.textContent = "Debes seleccionar ambas fechas.";
+      msg.style.color = "#721c24";
+      return;
+    }
+
+    msg.textContent = "Consultando datos...";
+    msg.style.color = "#555";
+
+    try {
+      const qs = new URLSearchParams({ desde, hasta });
+      const resp = await fetch(
+        "/api/evaluaciones/ranking-periodo?" + qs.toString(),
+      );
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        msg.textContent = data.detail || "No se pudo cargar el reporte.";
+        msg.style.color = "#721c24";
+        return;
+      }
+
+      actualizarMeta(data);
+      renderTabla("tablaTop10", data.mejores_10 || []);
+      renderTabla("tablaWorst20", data.peores_20 || []);
+      chartTop10 = buildChart(
+        "chartTop10",
+        "imgTop10Print",
+        data.mejores_10 || [],
+        "#1f9c4d",
+      );
+      chartWorst20 = buildChart(
+        "chartWorst20",
+        "imgWorst20Print",
+        data.peores_20 || [],
+        "#d63626",
+      );
+
+      msg.textContent = "Reporte actualizado.";
+      msg.style.color = "#155724";
+    } catch (err) {
+      msg.textContent = "Error de red: " + err;
+      msg.style.color = "#721c24";
+    }
+  }
+
+  function imprimirReporte() {
+    window.print();
+  }
+
+  cargarReporte();
+</script>
+{% endblock %}

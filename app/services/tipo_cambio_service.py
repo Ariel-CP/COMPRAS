@@ -368,13 +368,14 @@ def obtener_tasa_cercana(
     moneda: str,
     fecha: date,
     tipo: str = "PROMEDIO",
+    permitir_futuras: bool = False,
 ) -> Optional[dict]:
-    """Obtiene la tasa exacta o la más cercana a la fecha indicada.
+    """Obtiene la última tasa disponible para la fecha solicitada.
 
-    - Prioriza coincidencia exacta.
-    - Si no existe, busca la última anterior.
-    - Finalmente, intenta con la siguiente posterior.
-    Devuelve None si no hay datos para la moneda/tipo.
+    La regla de negocio principal es usar la cotización más cercana pero no
+    futura. Primero busca exacta, luego la última anterior disponible. Solo si
+    se habilita explícitamente `permitir_futuras` se contempla un fallback hacia
+    adelante.
     """
 
     params = {"moneda": moneda, "tipo": tipo, "fecha": fecha}
@@ -390,7 +391,8 @@ def obtener_tasa_cercana(
     if exact:
         row = dict(exact)
         row["tasa"] = float(row["tasa"])
-        row["fecha"] = row["fecha"]
+        if isinstance(row.get("fecha"), str):
+            row["fecha"] = date.fromisoformat(row["fecha"])
         row["es_estimativa"] = False
         row["origen_busqueda"] = "exacta"
         return row
@@ -404,22 +406,27 @@ def obtener_tasa_cercana(
     if prev:
         row = dict(prev)
         row["tasa"] = float(row["tasa"])
+        if isinstance(row.get("fecha"), str):
+            row["fecha"] = date.fromisoformat(row["fecha"])
         row["es_estimativa"] = True
         row["origen_busqueda"] = "anterior"
         return row
 
-    nxt = conn.execute(
-        text(
-            f"{base_sql} AND fecha > :fecha ORDER BY fecha ASC LIMIT 1"
-        ),
-        params,
-    ).mappings().first()
-    if nxt:
-        row = dict(nxt)
-        row["tasa"] = float(row["tasa"])
-        row["es_estimativa"] = True
-        row["origen_busqueda"] = "posterior"
-        return row
+    if permitir_futuras:
+        nxt = conn.execute(
+            text(
+                f"{base_sql} AND fecha > :fecha ORDER BY fecha ASC LIMIT 1"
+            ),
+            params,
+        ).mappings().first()
+        if nxt:
+            row = dict(nxt)
+            row["tasa"] = float(row["tasa"])
+            if isinstance(row.get("fecha"), str):
+                row["fecha"] = date.fromisoformat(row["fecha"])
+            row["es_estimativa"] = True
+            row["origen_busqueda"] = "posterior"
+            return row
 
     return None
 
@@ -429,11 +436,18 @@ def obtener_tasa_cercana_flexible(
     moneda: str,
     fecha: date,
     tipos_prioridad: Sequence[str] | None = None,
+    permitir_futuras: bool = False,
 ) -> Optional[dict]:
     """Intenta obtener la tasa más cercana probando varios tipos (ordenados)."""
     tipos = tipos_prioridad or ("PROMEDIO", "VENTA", "COMPRA")
     for tipo in tipos:
-        tasa = obtener_tasa_cercana(conn, moneda, fecha, tipo)
+        tasa = obtener_tasa_cercana(
+            conn,
+            moneda,
+            fecha,
+            tipo,
+            permitir_futuras=permitir_futuras,
+        )
         if tasa:
             tasa["tipo_sugerido"] = tipo
             return tasa

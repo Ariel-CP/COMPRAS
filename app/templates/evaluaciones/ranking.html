@@ -13,6 +13,7 @@
     <input id="hasta" type="date" value="{{ hasta_default }}" style="padding:6px 8px;border:1px solid #cfd5da;border-radius:4px;" />
     <button type="button" class="btn-accion" onclick="cargarRanking()">Actualizar gráficos</button>
     <button type="button" class="btn-accion" style="background:#0b5cab;" onclick="exportarCsvConsolidado()">Exportar consolidado CSV</button>
+    <button type="button" class="btn-accion" style="background:#495057;" onclick="abrirImpresionPro()">Imprimir pro</button>
     <button type="button" class="btn-accion" style="background:#6c757d;" onclick="window.print()">Imprimir reporte</button>
     <span id="msg" style="font-size:0.9em;color:#555;"></span>
   </div>
@@ -188,6 +189,19 @@
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function abrirImpresionPro() {
+    const desde = document.getElementById('desde').value;
+    const hasta = document.getElementById('hasta').value;
+    if (!desde || !hasta) {
+      const msg = document.getElementById('msg');
+      msg.textContent = 'Debes seleccionar ambas fechas.';
+      msg.style.color = '#721c24';
+      return;
+    }
+    const qs = new URLSearchParams({ desde, hasta });
+    window.open('/ui/evaluaciones/ranking-print?' + qs.toString(), '_blank');
   }
 
   function renderRanking(data) {

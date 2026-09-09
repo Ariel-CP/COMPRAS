@@ -22,6 +22,9 @@ from app.services.evaluacion_access_import_service import (
     importar_historial_desde_access,
 )
 from app.services.evaluacion_csv_recepcion_service import importar_desde_csv
+from app.services.evaluacion_csv_recepcion_service import limpiar_evaluaciones_importadas
+from app.services.evaluacion_csv_recepcion_service import prevalidar_archivo_importacion
+from app.services.evaluacion_csv_recepcion_service import importar_desde_xlsx
 from app.services.evaluacion_service import (
     actualizar_evaluacion,
     crear_evaluacion,
@@ -86,9 +89,16 @@ def api_listar_evaluaciones(
 
 
 @router.get("/proveedor/{proveedor_id}/historial")
-def api_historial_proveedor(proveedor_id: int, db=Depends(get_db)):
+def api_historial_proveedor(
+    proveedor_id: int,
+    desde: Optional[date] = Query(default=None, description="Fecha desde (YYYY-MM-DD)"),
+    hasta: Optional[date] = Query(default=None, description="Fecha hasta (YYYY-MM-DD)"),
+    db=Depends(get_db),
+):
     """Historial completo de evaluaciones de un proveedor."""
-    return historial_proveedor(db, proveedor_id)
+    if desde and hasta and desde > hasta:
+        raise HTTPException(status_code=400, detail="El rango es inválido: desde no puede ser mayor que hasta")
+    return historial_proveedor(db, proveedor_id, desde=desde, hasta=hasta)
 
 
 @router.get("/exportar")
@@ -264,3 +274,69 @@ async def api_importar_csv(
         logger.error("Error importando CSV: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return resultado
+
+
+@router.post("/importar-xlsx")
+async def api_importar_xlsx(
+    archivo: UploadFile = File(..., description="XLSX exportado de Power BI"),
+    db=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Importa evaluaciones anuales por proveedor desde XLSX exportado de Power BI
+    (tabla CONTROL DE RECEPCION).
+
+    Idempotente: si ya existe evaluación para proveedor+año, la salta.
+    """
+    nombre = archivo.filename or ""
+    if not nombre.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .xlsx")
+    try:
+        contenido = await archivo.read()
+        resultado = importar_desde_xlsx(db, contenido, usuario_id=current_user.id)
+    except Exception as exc:
+        logger.error("Error importando XLSX: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return resultado
+
+
+@router.post("/importar-validar")
+async def api_prevalidar_importacion(
+    archivo: UploadFile = File(..., description="Archivo CSV/XLSX para prevalidar"),
+    _current_user=Depends(get_current_user),
+):
+    """Prevalida columnas detectadas antes de importar archivo de evaluaciones."""
+    nombre = (archivo.filename or "").lower()
+    if nombre.endswith(".csv"):
+        ext = "csv"
+    elif nombre.endswith(".xlsx"):
+        ext = "xlsx"
+    else:
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .csv o .xlsx")
+
+    contenido = await archivo.read()
+    resultado = prevalidar_archivo_importacion(contenido, ext)
+    if not resultado.get("ok") and resultado.get("error"):
+        raise HTTPException(status_code=400, detail=resultado)
+    return resultado
+
+
+@router.post("/limpiar-importados")
+def api_limpiar_importados(
+    confirmar: str = Query(..., description="Debe ser LIMPIAR para confirmar borrado"),
+    incluir_legacy: bool = Query(
+        default=False,
+        description="Incluye registros importados anteriores detectados por heurística",
+    ),
+    db=Depends(get_db),
+    _current_user=Depends(get_current_user),
+):
+    """Elimina evaluaciones importadas para volver a cargar en limpio."""
+    if confirmar.strip().upper() != "LIMPIAR":
+        raise HTTPException(status_code=400, detail="Confirmación inválida. Usa confirmar=LIMPIAR")
+
+    try:
+        return limpiar_evaluaciones_importadas(db, incluir_legacy=incluir_legacy)
+    except Exception as exc:
+        logger.error("Error limpiando evaluaciones importadas: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

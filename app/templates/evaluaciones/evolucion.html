@@ -1,0 +1,339 @@
+{% extends 'base.html' %}
+{% block title %}Evolución por Proveedor - Evaluaciones{% endblock %}
+
+{% block content %}
+<section class="productos-wrapper">
+  <h2>Evolución Histórica por Proveedor</h2>
+
+  <div class="tabla-controles" style="justify-content:flex-start;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <a class="btn-accion" href="/ui/evaluaciones">Volver a Evaluaciones</a>
+    <a class="btn-accion" href="/ui/evaluaciones/ranking" style="background:#0b5cab;">Ver Ranking</a>
+    <label for="txtBuscarProveedorEvolucion">Buscar proveedor</label>
+    <input
+      id="txtBuscarProveedorEvolucion"
+      type="text"
+      placeholder="Escribe parte del nombre o código..."
+      style="min-width:300px;padding:6px 8px;border:1px solid #cfd5da;border-radius:4px;"
+    />
+    <label for="selProveedorEvolucion">Proveedor</label>
+    <select id="selProveedorEvolucion" style="min-width:340px;padding:6px 8px;border:1px solid #cfd5da;border-radius:4px;">
+      <option value="">Seleccionar proveedor...</option>
+      {% for p in proveedores %}
+      <option value="{{ p.id }}" {% if proveedor_id_default and proveedor_id_default == p.id %}selected{% endif %}>
+        {{ p.codigo }} - {{ p.nombre }}
+      </option>
+      {% endfor %}
+    </select>
+    <label for="desdeEvolucion">Desde</label>
+    <input id="desdeEvolucion" type="date" value="{{ desde_default }}" style="padding:6px 8px;border:1px solid #cfd5da;border-radius:4px;" />
+    <label for="hastaEvolucion">Hasta</label>
+    <input id="hastaEvolucion" type="date" value="{{ hasta_default }}" style="padding:6px 8px;border:1px solid #cfd5da;border-radius:4px;" />
+    <button type="button" class="btn-accion" onclick="cargarEvolucion()">Analizar</button>
+    <span id="msgEvolucion" style="font-size:0.9em;color:#555;"></span>
+  </div>
+
+  <div class="kpi-grid-evolucion">
+    <article class="panel kpi-evolucion">
+      <div class="kpi-label">Evaluaciones</div>
+      <div class="kpi-value" id="kpiCantidad">0</div>
+    </article>
+    <article class="panel kpi-evolucion">
+      <div class="kpi-label">Promedio total</div>
+      <div class="kpi-value" id="kpiPromedio">-</div>
+    </article>
+    <article class="panel kpi-evolucion">
+      <div class="kpi-label">Último resultado</div>
+      <div class="kpi-value" id="kpiUltimo">-</div>
+    </article>
+    <article class="panel kpi-evolucion">
+      <div class="kpi-label">Tendencia</div>
+      <div class="kpi-value" id="kpiTendencia">-</div>
+    </article>
+  </div>
+
+  <div class="panel" style="margin-bottom:14px;">
+    <h3 style="margin-top:0;">Evolución de puntajes</h3>
+    <canvas id="chartEvolucion" height="110"></canvas>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-top:0;">Historial de evaluaciones</h3>
+    <div class="tabla-scroll" style="margin-top:10px;">
+      <table class="productos-table" id="tablaHistorialProveedor">
+        <thead>
+          <tr>
+            <th>Período</th>
+            <th>Tipo</th>
+            <th>Calidad</th>
+            <th>Servicio</th>
+            <th>Embalaje</th>
+            <th>Total</th>
+            <th>Resultado</th>
+            <th>Evaluador</th>
+            <th>Fecha Eval.</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="9" style="text-align:center;color:#888;">Selecciona un proveedor para ver el historial.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block styles %}
+<style>
+  .kpi-grid-evolucion {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .kpi-evolucion {
+    margin: 0;
+    border-left: 4px solid #0b5cab;
+    background: #f8fbff;
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: #4a5568;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .kpi-value {
+    margin-top: 6px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #0b5cab;
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  const PERIODO_LABELS = { 0: 'Anual', 1: '1er Cuatrimestre', 2: '2do Cuatrimestre', 3: '3er Cuatrimestre' };
+  let chartEvolucion = null;
+  const proveedorSelect = document.getElementById('selProveedorEvolucion');
+  const buscarProveedorInput = document.getElementById('txtBuscarProveedorEvolucion');
+  const proveedoresBase = Array.from(proveedorSelect.options)
+    .filter(opt => opt.value)
+    .map(opt => ({ value: opt.value, text: opt.text }));
+
+  function repoblarSelectProveedores(items, selectedValue) {
+    proveedorSelect.innerHTML = '';
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Seleccionar proveedor...';
+    proveedorSelect.appendChild(placeholder);
+
+    items.forEach((item) => {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.text;
+      if (selectedValue && selectedValue === item.value) {
+        opt.selected = true;
+      }
+      proveedorSelect.appendChild(opt);
+    });
+
+    if (selectedValue && !items.some(item => item.value === selectedValue)) {
+      proveedorSelect.value = '';
+    }
+  }
+
+  function filtrarProveedores() {
+    const term = (buscarProveedorInput.value || '').trim().toLowerCase();
+    const currentValue = proveedorSelect.value;
+    const filtrados = !term
+      ? proveedoresBase
+      : proveedoresBase.filter(item => item.text.toLowerCase().includes(term));
+
+    repoblarSelectProveedores(filtrados, currentValue);
+  }
+
+  function fmt(n) {
+    if (n == null || Number.isNaN(Number(n))) return '-';
+    return Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
+  }
+
+  function badgeResultado(r) {
+    if (!r) return '<span style="background:#e2e3e5;color:#383d41;padding:3px 10px;border-radius:12px;">Sin evaluar</span>';
+    if (r === 'APROBADO') return '<span style="background:#d4edda;color:#155724;padding:3px 10px;border-radius:12px;font-weight:600;">Aprobado</span>';
+    if (r === 'APROB_CONDICIONAL') return '<span style="background:#fff3cd;color:#856404;padding:3px 10px;border-radius:12px;font-weight:600;">Aprob. Condicional</span>';
+    if (r === 'NO_APTO') return '<span style="background:#f8d7da;color:#721c24;padding:3px 10px;border-radius:12px;font-weight:600;">No Apto</span>';
+    return r;
+  }
+
+  function claveOrden(e) {
+    return (Number(e.anno || 0) * 10) + Number(e.periodo || 0);
+  }
+
+  function actualizarTabla(rows) {
+    const tbody = document.querySelector('#tablaHistorialProveedor tbody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#888;">No hay evaluaciones para este proveedor.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map((e) => `
+      <tr>
+        <td style="text-align:center;">${e.anno} - ${PERIODO_LABELS[e.periodo] || e.periodo}</td>
+        <td style="text-align:center;">${e.tipo_evaluacion || '-'}</td>
+        <td style="text-align:right;">${fmt(e.puntaje_calidad)}</td>
+        <td style="text-align:right;">${fmt(e.puntaje_servicio)}</td>
+        <td style="text-align:right;">${fmt(e.puntaje_embalaje)}</td>
+        <td style="text-align:right;font-weight:600;">${fmt(e.puntaje_total)}</td>
+        <td style="text-align:center;">${badgeResultado(e.resultado)}</td>
+        <td>${e.evaluador_nombre || '-'}</td>
+        <td style="text-align:center;">${e.fecha_evaluacion || '-'}</td>
+      </tr>
+    `).join('');
+  }
+
+  function actualizarKpi(rows) {
+    const totales = rows.map(r => r.puntaje_total).filter(v => v != null && !Number.isNaN(Number(v))).map(Number);
+    const cantidad = rows.length;
+    const promedio = totales.length ? (totales.reduce((a, b) => a + b, 0) / totales.length) : null;
+    const ultimo = rows.length ? rows[rows.length - 1] : null;
+
+    let tendencia = '-';
+    if (totales.length >= 2) {
+      const delta = totales[totales.length - 1] - totales[totales.length - 2];
+      if (delta > 0.25) tendencia = `En alza (+${fmt(delta)})`;
+      else if (delta < -0.25) tendencia = `En baja (${fmt(delta)})`;
+      else tendencia = 'Estable';
+    }
+
+    document.getElementById('kpiCantidad').textContent = cantidad;
+    document.getElementById('kpiPromedio').textContent = fmt(promedio);
+    document.getElementById('kpiUltimo').textContent = ultimo ? (ultimo.resultado || '-') : '-';
+    document.getElementById('kpiTendencia').textContent = tendencia;
+  }
+
+  function renderGrafico(rows, nombreProveedor) {
+    const labels = rows.map(e => `${e.anno}-${e.periodo}`);
+    const totales = rows.map(e => e.puntaje_total);
+    const calidad = rows.map(e => e.puntaje_calidad);
+    const servicio = rows.map(e => e.puntaje_servicio);
+    const embalaje = rows.map(e => e.puntaje_embalaje);
+
+    if (chartEvolucion) chartEvolucion.destroy();
+
+    chartEvolucion = new Chart(document.getElementById('chartEvolucion'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Puntaje total',
+            data: totales,
+            borderColor: '#0b5cab',
+            backgroundColor: 'rgba(11,92,171,0.12)',
+            borderWidth: 3,
+            tension: 0.2,
+            pointRadius: 3,
+          },
+          {
+            label: 'Calidad',
+            data: calidad,
+            borderColor: '#1f9c4d',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: 2,
+          },
+          {
+            label: 'Servicio',
+            data: servicio,
+            borderColor: '#e67e22',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: 2,
+          },
+          {
+            label: 'Embalaje',
+            data: embalaje,
+            borderColor: '#d63626',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: nombreProveedor ? `Proveedor: ${nombreProveedor}` : 'Evolución histórica',
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+          },
+        },
+      },
+    });
+  }
+
+  async function cargarEvolucion() {
+    const proveedorId = proveedorSelect.value;
+    const desde = document.getElementById('desdeEvolucion').value;
+    const hasta = document.getElementById('hastaEvolucion').value;
+    const msg = document.getElementById('msgEvolucion');
+
+    if (!proveedorId) {
+      msg.textContent = 'Selecciona un proveedor.';
+      msg.style.color = '#721c24';
+      return;
+    }
+
+    if (desde && hasta && desde > hasta) {
+      msg.textContent = 'Rango inválido: Desde no puede ser mayor que Hasta.';
+      msg.style.color = '#721c24';
+      return;
+    }
+
+    msg.textContent = 'Consultando historial...';
+    msg.style.color = '#555';
+
+    try {
+      const qs = new URLSearchParams();
+      if (desde) qs.set('desde', desde);
+      if (hasta) qs.set('hasta', hasta);
+      const resp = await fetch(`/api/evaluaciones/proveedor/${proveedorId}/historial?${qs.toString()}`);
+      const data = await resp.json();
+      if (!resp.ok) {
+        msg.textContent = data.detail || 'Error al cargar historial.';
+        msg.style.color = '#721c24';
+        return;
+      }
+
+      const rows = (Array.isArray(data) ? data : []).slice().sort((a, b) => claveOrden(a) - claveOrden(b));
+      const proveedorNombre = proveedorSelect.options[proveedorSelect.selectedIndex]?.text || '';
+
+      actualizarTabla(rows);
+      actualizarKpi(rows);
+      renderGrafico(rows, proveedorNombre);
+      const rango = (desde || hasta) ? ` en rango ${desde || '...'} a ${hasta || '...'}` : '';
+      msg.textContent = `Historial cargado (${rows.length} evaluaciones${rango}).`;
+      msg.style.color = '#155724';
+    } catch (err) {
+      msg.textContent = 'Error de red: ' + err;
+      msg.style.color = '#721c24';
+    }
+  }
+
+  buscarProveedorInput.addEventListener('input', filtrarProveedores);
+
+  const proveedorDefault = proveedorSelect.value;
+  if (proveedorDefault) {
+    cargarEvolucion();
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}Configuración del sistema{% endblock %}
+
+{% block content %}
+<section class="panel" style="max-width:760px;">
+  <h2 style="margin-top:0;">Configuración del BCRA</h2>
+  <p class="hint" style="margin-top:0;">La API pública del BCRA no requiere token. Ajustá la URL base y la cantidad de días de sincronización.</p>
+
+  <form id="bcra-form" class="panel-filtros" style="margin-top:12px; align-items:flex-end; gap:12px; flex-wrap:wrap;">
+    <label style="display:flex; flex-direction:column; gap:6px; min-width:220px; flex:1;">
+      <span>URL base</span>
+      <input id="bcra-base-url" type="url" value="https://api.bcra.gob.ar" style="width:100%;" />
+    </label>
+
+    <label style="display:flex; flex-direction:column; gap:6px; min-width:150px;">
+      <span>Días a sincronizar</span>
+      <input id="bcra-sync-days" type="number" min="1" max="30" step="1" value="5" style="width:100%;" />
+    </label>
+
+    <button type="submit" class="btn-accion">Guardar</button>
+  </form>
+
+  <div id="bcra-msg" class="hint" style="margin-top:12px;"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const API_URL = '/api/system/settings';
+  const form = document.getElementById('bcra-form');
+  const baseUrlInput = document.getElementById('bcra-base-url');
+  const syncDaysInput = document.getElementById('bcra-sync-days');
+  const msg = document.getElementById('bcra-msg');
+
+  async function loadCurrent() {
+    msg.textContent = '';
+    try {
+      const r = await fetch(API_URL);
+      if (!r.ok) {
+        msg.textContent = 'No se pudo cargar la configuración actual.';
+        return;
+      }
+      const cfg = await r.json().catch(() => ({}));
+      if (cfg && cfg.bcra_api_base_url) {
+        baseUrlInput.value = cfg.bcra_api_base_url;
+      }
+      if (cfg && cfg.bcra_sync_days) {
+        syncDaysInput.value = cfg.bcra_sync_days;
+      }
+    } catch (_) {
+      msg.textContent = 'No se pudo cargar la configuración actual.';
+    }
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const baseUrl = (baseUrlInput.value || 'https://api.bcra.gob.ar').trim();
+    const syncDays = Number(syncDaysInput.value || 5);
+    msg.textContent = 'Guardando...';
+    try {
+      const r = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bcra_api_base_url: baseUrl,
+          bcra_sync_days: Number.isFinite(syncDays) ? syncDays : 5,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        msg.textContent = (data && data.detail) ? data.detail : 'No se pudo guardar la configuración.';
+        return;
+      }
+      msg.textContent = 'Configuración guardada correctamente. La sincronización usa la API pública del BCRA sin token.';
+    } catch (_) {
+      msg.textContent = 'Error de red al guardar la configuración.';
+    }
+  });
+
+  loadCurrent();
+})();
+</script>
+{% endblock %}

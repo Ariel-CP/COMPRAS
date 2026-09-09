@@ -24,6 +24,7 @@ from ..schemas.tipo_cambio import (
     TipoCambioFiltro,
     TipoCambioOut,
     TipoCambioSyncResponse,
+    TipoCambioSyncHistoricoResponse,
     TipoCambioUpdate,
 )
 from ..services.tipo_cambio_service import (
@@ -37,6 +38,8 @@ from ..services.tipo_cambio_service import (
 from ..services.tipo_cambio_sync_service import (
     TipoCambioSyncError,
     sync_bcra_tipos_cambio,
+    sync_bcra_historico,
+    sync_bcra_desde_ultima_fecha,
 )
 from .deps_auth import require_permission
 
@@ -267,6 +270,11 @@ def api_sync_oficial(
         )
     except TipoCambioSyncError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # capturar errores inesperados y devolver JSON
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Confirmar los cambios en la BD
+    db.commit()
 
     return TipoCambioSyncResponse(
         insertados=resumen.insertados,
@@ -275,3 +283,96 @@ def api_sync_oficial(
         desde=resumen.desde,
         hasta=resumen.hasta,
     )
+
+
+@router.post("/sync-historico", response_model=TipoCambioSyncHistoricoResponse)
+def api_sync_historico(
+    fecha_desde: str = Query(
+        ..., description="Fecha inicial del histórico (YYYY-MM-DD)"
+    ),
+    fecha_hasta: str = Query(
+        ..., description="Fecha final del histórico (YYYY-MM-DD)"
+    ),
+    x_sync_token: str | None = Header(
+        default=None,
+        alias="X-Sync-Token",
+        description="Token simple para autorizar la sincronización",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Sincroniza un rango completo de cotizaciones USD del BCRA.
+
+    Descarga cotizaciones en bloques mensuales desde la API pública BCRA
+    (https://api.bcra.gob.ar) y las guarda sin duplicados.
+    """
+    if settings.sync_job_token and x_sync_token != settings.sync_job_token:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    try:
+        desde_dt = date.fromisoformat(fecha_desde)
+        hasta_dt = date.fromisoformat(fecha_hasta)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Fecha inválida: {exc}") from exc
+
+    try:
+        resumen = sync_bcra_historico(
+            db,
+            desde=desde_dt,
+            hasta=hasta_dt,
+        )
+    except TipoCambioSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    db.commit()
+
+    return TipoCambioSyncHistoricoResponse(
+        fecha_desde=resumen.fecha_desde,
+        fecha_hasta=resumen.fecha_hasta,
+        recibidos=resumen.recibidos,
+        insertados=resumen.insertados,
+        actualizados=resumen.actualizados,
+        sin_cambios=resumen.sin_cambios,
+        errores=resumen.errores,
+    )
+
+
+@router.post(
+    "/sync-historico-incremental", response_model=TipoCambioSyncHistoricoResponse
+)
+def api_sync_historico_incremental(
+    x_sync_token: str | None = Header(
+        default=None,
+        alias="X-Sync-Token",
+        description="Token simple para autorizar la sincronización",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Sincroniza USD del BCRA desde la última fecha guardada hasta hoy.
+
+    Actualiza incrementalmente sin descargar datos ya procesados.
+    Utiliza la API pública oficial del BCRA (https://api.bcra.gob.ar).
+    """
+    if settings.sync_job_token and x_sync_token != settings.sync_job_token:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    try:
+        resumen = sync_bcra_desde_ultima_fecha(db)
+    except TipoCambioSyncError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    db.commit()
+
+    return TipoCambioSyncHistoricoResponse(
+        fecha_desde=resumen.fecha_desde,
+        fecha_hasta=resumen.fecha_hasta,
+        recibidos=resumen.recibidos,
+        insertados=resumen.insertados,
+        actualizados=resumen.actualizados,
+        sin_cambios=resumen.sin_cambios,
+        errores=resumen.errores,
+    )
+

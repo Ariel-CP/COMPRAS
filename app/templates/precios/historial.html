@@ -92,6 +92,67 @@
 </section>
 
 <section class="panel">
+  <h3>Variaciones de precios</h3>
+  <form id="variacionesForm" onsubmit="return false" style="display:flex; gap:8px; flex-wrap:wrap; align-items:end;">
+    <label>Modo
+      <select id="varModo">
+        <option value="ultima_vs_anterior">Ultima vs anterior</option>
+        <option value="mensual">Mensual</option>
+        <option value="entre_fechas">Entre fechas (usa Desde y Hasta)</option>
+      </select>
+    </label>
+    <label>Formato exporte
+      <select id="varFormato">
+        <option value="csv">CSV</option>
+        <option value="xlsx">XLSX</option>
+      </select>
+    </label>
+    <button type="button" id="btnVerVariaciones">Ver variaciones</button>
+    <button type="button" id="btnExportarVariaciones">Descargar variaciones</button>
+  </form>
+  <div id="variacionesInfo"><em>Presione "Ver variaciones" para consultar cambios</em></div>
+  <table id="tblVariaciones" class="striped" style="width:100%; table-layout:auto; margin-top:8px;">
+    <thead>
+      <tr>
+        <th>Producto</th>
+        <th>Proveedor</th>
+        <th>Moneda</th>
+        <th>Fecha base</th>
+        <th>Fecha nueva</th>
+        <th>Precio base</th>
+        <th>Precio nuevo</th>
+        <th>Variación</th>
+        <th>Variación %</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h3>Importaciones recientes</h3>
+  <button type="button" id="btnRefrescarImportaciones">Refrescar</button>
+  <div id="importacionesInfo"><em>Cargando...</em></div>
+  <table id="tblImportaciones" class="striped" style="width:100%; table-layout:auto; margin-top:8px;">
+    <thead>
+      <tr>
+        <th>Inicio</th>
+        <th>Archivo</th>
+        <th>Formato</th>
+        <th>Estado</th>
+        <th>Total</th>
+        <th>Insertados</th>
+        <th>Actualizados</th>
+        <th>Rechazados</th>
+        <th>Usuario</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section class="panel">
   <div id="resultInfo"><em>Use los filtros y presione Buscar</em></div>
 <style>
 .producto-picker {
@@ -137,6 +198,45 @@
 .picker-results .msg {
   font-size: 0.9rem;
   color: #555;
+}
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.tag.ok {
+  background: #e8f7ed;
+  color: #1f6b3a;
+}
+.tag.warn {
+  background: #fff7e6;
+  color: #8a5600;
+}
+.tag.err {
+  background: #fdecec;
+  color: #8a1f1f;
+}
+.btn-mini {
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.btn-mini:hover {
+  background: #f8fafc;
+}
+.import-error-row td {
+  background: #fffaf3;
+  padding: 10px;
+}
+.import-error-box {
+  white-space: pre-wrap;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: #6b3f00;
 }
 </style>
   <table id="tbl" class="striped" style="width:100%; table-layout:auto;">
@@ -188,6 +288,15 @@
   const manualNotas = document.getElementById('manualNotas');
   const btnGuardarPrecioManual = document.getElementById('btnGuardarPrecioManual');
   const manualPriceResult = document.getElementById('manualPriceResult');
+  const varModo = document.getElementById('varModo');
+  const varFormato = document.getElementById('varFormato');
+  const btnVerVariaciones = document.getElementById('btnVerVariaciones');
+  const btnExportarVariaciones = document.getElementById('btnExportarVariaciones');
+  const variacionesInfo = document.getElementById('variacionesInfo');
+  const variacionesTbody = document.querySelector('#tblVariaciones tbody');
+  const btnRefrescarImportaciones = document.getElementById('btnRefrescarImportaciones');
+  const importacionesInfo = document.getElementById('importacionesInfo');
+  const importacionesTbody = document.querySelector('#tblImportaciones tbody');
   let selectedProduct = null;
 
   function hoyISO(){
@@ -279,6 +388,144 @@
     }catch(e){
       resultInfo.innerHTML = '<em>Error de red</em>';
     }
+  }
+
+  function fmtNumero(val, min = 2, max = 6){
+    const num = Number(val);
+    if(!Number.isFinite(num)) return '';
+    return num.toLocaleString(undefined, { minimumFractionDigits: min, maximumFractionDigits: max });
+  }
+
+  function fmtFechaHora(val){
+    if(!val) return '';
+    const dt = new Date(val);
+    if(Number.isNaN(dt.getTime())) return String(val);
+    return dt.toLocaleString();
+  }
+
+  function estadoClase(estado){
+    if(estado === 'EXITOSA') return 'ok';
+    if(estado === 'PARCIAL') return 'warn';
+    if(estado === 'ERROR') return 'err';
+    return '';
+  }
+
+  function toggleErrorDetalle(button){
+    if(!button) return;
+    const detailRow = button.closest('tr') ? button.closest('tr').nextElementSibling : null;
+    if(!detailRow || !detailRow.classList.contains('import-error-row')) return;
+    const isHidden = detailRow.style.display === 'none' || !detailRow.style.display;
+    detailRow.style.display = isHidden ? 'table-row' : 'none';
+    button.textContent = isHidden ? 'Ocultar' : 'Ver';
+  }
+
+  async function cargarImportaciones(){
+    if(!importacionesTbody || !importacionesInfo) return;
+    importacionesInfo.innerHTML = '<em>Cargando importaciones...</em>';
+    importacionesTbody.innerHTML = '';
+    try{
+      const resp = await fetch('/api/precios/importaciones?limit=20&offset=0');
+      const data = await resp.json().catch(() => []);
+      if(!resp.ok){
+        importacionesInfo.textContent = extractApiError(data) || 'No se pudieron cargar las importaciones';
+        return;
+      }
+      if(!Array.isArray(data) || data.length === 0){
+        importacionesInfo.innerHTML = '<em>Sin importaciones registradas</em>';
+        return;
+      }
+      importacionesInfo.textContent = `${data.length} importaciones recientes`;
+      data.forEach((row) => {
+        const tr = document.createElement('tr');
+        const detailTr = document.createElement('tr');
+        const usuario = [row.usuario_nombre || '', row.usuario_email || ''].filter(Boolean).join(' - ');
+        const tieneDetalle = !!(row.mensaje_error && String(row.mensaje_error).trim());
+        tr.innerHTML = `
+          <td>${fmtFechaHora(row.fecha_inicio)}</td>
+          <td>${row.archivo_nombre || ''}</td>
+          <td>${row.formato || ''}</td>
+          <td><span class="tag ${estadoClase(row.estado)}">${row.estado || ''}</span></td>
+          <td class="num">${fmtNumero(row.total_registros, 0, 0)}</td>
+          <td class="num">${fmtNumero(row.insertados, 0, 0)}</td>
+          <td class="num">${fmtNumero(row.actualizados, 0, 0)}</td>
+          <td class="num">${fmtNumero(row.rechazados, 0, 0)}</td>
+          <td>${usuario}</td>
+          <td>${tieneDetalle ? '<button type="button" class="btn-mini">Ver</button>' : ''}</td>
+        `;
+        detailTr.className = 'import-error-row';
+        detailTr.style.display = 'none';
+        detailTr.innerHTML = `
+          <td colspan="10">
+            <strong>Detalle del lote</strong>
+            <div class="import-error-box">${tieneDetalle ? String(row.mensaje_error) : 'Sin detalle registrado'}</div>
+          </td>
+        `;
+        const toggleBtn = tr.querySelector('.btn-mini');
+        if(toggleBtn){
+          toggleBtn.addEventListener('click', () => toggleErrorDetalle(toggleBtn));
+        }
+        importacionesTbody.appendChild(tr);
+        importacionesTbody.appendChild(detailTr);
+      });
+    }catch(_err){
+      importacionesInfo.textContent = 'Error de red al cargar importaciones';
+    }
+  }
+
+  async function cargarVariaciones(){
+    if(!variacionesTbody || !variacionesInfo) return;
+    const params = new URLSearchParams();
+    params.set('modo', varModo && varModo.value ? varModo.value : 'ultima_vs_anterior');
+    params.set('limit', '200');
+    if(productoIdInput && productoIdInput.value){ params.set('producto_id', productoIdInput.value); }
+    if(proveedor && proveedor.value.trim()){ params.set('proveedor', proveedor.value.trim()); }
+    if(desde && desde.value){ params.set('desde', desde.value); }
+    if(hasta && hasta.value){ params.set('hasta', hasta.value); }
+
+    variacionesInfo.innerHTML = '<em>Cargando variaciones...</em>';
+    variacionesTbody.innerHTML = '';
+    try{
+      const resp = await fetch(`/api/precios/variaciones?${params.toString()}`);
+      const data = await resp.json().catch(() => []);
+      if(!resp.ok){
+        variacionesInfo.textContent = extractApiError(data) || 'No se pudieron cargar las variaciones';
+        return;
+      }
+      if(!Array.isArray(data) || data.length === 0){
+        variacionesInfo.innerHTML = '<em>Sin variaciones para los filtros seleccionados</em>';
+        return;
+      }
+      variacionesInfo.textContent = `${data.length} variaciones encontradas`;
+      data.forEach((it) => {
+        const tr = document.createElement('tr');
+        const prov = [it.proveedor_codigo || '', it.proveedor_nombre || ''].filter(Boolean).join(' - ');
+        tr.innerHTML = `
+          <td><strong>${it.producto_codigo}</strong> - ${it.producto_nombre || ''}</td>
+          <td>${prov}</td>
+          <td>${it.moneda || ''}</td>
+          <td>${it.fecha_base || ''}</td>
+          <td>${it.fecha_nueva || ''}</td>
+          <td class="num">${fmtNumero(it.precio_base)}</td>
+          <td class="num">${fmtNumero(it.precio_nuevo)}</td>
+          <td class="num">${fmtNumero(it.variacion_abs)}</td>
+          <td class="num">${it.variacion_pct === null || it.variacion_pct === undefined ? '' : fmtNumero(it.variacion_pct, 2, 2) + '%'}</td>
+        `;
+        variacionesTbody.appendChild(tr);
+      });
+    }catch(_err){
+      variacionesInfo.textContent = 'Error de red al cargar variaciones';
+    }
+  }
+
+  function exportarVariaciones(){
+    const params = new URLSearchParams();
+    params.set('modo', varModo && varModo.value ? varModo.value : 'ultima_vs_anterior');
+    params.set('formato', varFormato && varFormato.value ? varFormato.value : 'csv');
+    if(productoIdInput && productoIdInput.value){ params.set('producto_id', productoIdInput.value); }
+    if(proveedor && proveedor.value.trim()){ params.set('proveedor', proveedor.value.trim()); }
+    if(desde && desde.value){ params.set('desde', desde.value); }
+    if(hasta && hasta.value){ params.set('hasta', hasta.value); }
+    window.location.href = `/api/precios/variaciones/export?${params.toString()}`;
   }
 
   btnBuscar.addEventListener('click', cargar);
@@ -491,8 +738,18 @@
   if(btnGuardarPrecioManual){
     btnGuardarPrecioManual.addEventListener('click', guardarPrecioManual);
   }
+  if(btnRefrescarImportaciones){
+    btnRefrescarImportaciones.addEventListener('click', cargarImportaciones);
+  }
+  if(btnVerVariaciones){
+    btnVerVariaciones.addEventListener('click', cargarVariaciones);
+  }
+  if(btnExportarVariaciones){
+    btnExportarVariaciones.addEventListener('click', exportarVariaciones);
+  }
   syncManualFormState();
   cargarProductoInicial();
+  cargarImportaciones();
 })();
 </script>
 {% endblock %}
