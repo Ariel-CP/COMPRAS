@@ -7,6 +7,39 @@ from sqlalchemy.orm import Session
 TIPO_VALUES = {"PT", "WIP", "MP", "EMB", "SERV", "HERR"}
 
 
+def _repair_mixed_mojibake(value: str) -> str:
+    repaired: list[str] = []
+    index = 0
+    while index < len(value):
+        if value[index] in {"Ã", "Â", "â"}:
+            for width in (3, 2):
+                segment = value[index : index + width]
+                if len(segment) != width:
+                    continue
+                raw = bytearray()
+                try:
+                    for character in segment:
+                        codepoint = ord(character)
+                        if 0x80 <= codepoint <= 0x9F:
+                            raw.append(codepoint)
+                        else:
+                            raw.extend(character.encode("cp1252"))
+                    decoded = bytes(raw).decode("utf-8")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    continue
+                if decoded != segment:
+                    repaired.append(decoded)
+                    index += width
+                    break
+            else:
+                repaired.append(value[index])
+                index += 1
+            continue
+        repaired.append(value[index])
+        index += 1
+    return "".join(repaired)
+
+
 def _fix_mojibake_text(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -15,10 +48,16 @@ def _fix_mojibake_text(value: Optional[str]) -> Optional[str]:
         return None
     if not any(marker in text_value for marker in ("Ã", "Â", "â")):
         return text_value
-    try:
-        repaired = text_value.encode("latin-1").decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return text_value
+    for encoding in ("cp1252", "latin-1"):
+        try:
+            repaired = text_value.encode(encoding).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if repaired != text_value and not any(
+            marker in repaired for marker in ("Ã", "Â", "â")
+        ):
+            return repaired.strip() or text_value
+    repaired = _repair_mixed_mojibake(text_value)
     return repaired.strip() or text_value
 
 
@@ -28,11 +67,14 @@ def _to_mojibake_variant(value: Optional[str]) -> Optional[str]:
     normalized = str(value).strip()
     if not normalized:
         return None
-    try:
-        variant = normalized.encode("utf-8").decode("latin-1")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return None
-    return variant if variant != normalized else None
+    for encoding in ("cp1252", "latin-1"):
+        try:
+            variant = normalized.encode("utf-8").decode(encoding)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if variant != normalized:
+            return variant
+    return None
 
 
 def _row_to_producto(row: Any) -> Dict[str, Any]:
