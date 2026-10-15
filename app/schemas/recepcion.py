@@ -4,10 +4,9 @@ Schemas Pydantic para endpoints de recepción y evaluación de proveedores.
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
-
 
 # ============================================================================
 # Schemas para Recepción (canónico)
@@ -75,6 +74,50 @@ class RecepcionCabeceraOut(RecepcionCabeceraBase):
 class RecepcionCabeceraDetalle(RecepcionCabeceraOut):
     """Detalle completo de recepción con líneas."""
     lineas: List[RecepcionLineaOut] = []
+
+
+class RecepcionCotaCreate(BaseModel):
+    """Medición individual del checklist de inspección."""
+
+    criterio_nombre: str = Field(min_length=1, max_length=255)
+    especificacion: Optional[str] = Field(default=None, max_length=255)
+    valor_medido: Optional[str] = Field(default=None, max_length=255)
+    desviacion: Optional[str] = None
+    resultado: Literal["OK", "NO_CONFORME", "PENDIENTE", "NO_APLICA"] = "PENDIENTE"
+    observaciones: Optional[str] = None
+
+
+class RecepcionOperativaCreate(BaseModel):
+    """Datos iniciales para registrar una inspección de recepción."""
+
+    proveedor_id: int = Field(gt=0)
+    producto_id: int = Field(gt=0)
+    fecha_recepcion: date
+    fecha_entrega_esperada: Optional[date] = None
+    fecha_control: date
+    orden_compra: str = Field(min_length=1, max_length=50)
+    remito: Optional[str] = Field(default=None, max_length=100)
+    cantidad_solicitada: Decimal = Field(gt=0)
+    cantidad_recibida: Decimal = Field(ge=0)
+    cantidad_lote: Decimal = Field(gt=0)
+    numero_plano: Optional[str] = Field(default=None, max_length=50)
+    designacion: Optional[str] = Field(default=None, max_length=255)
+    nivel_inspeccion: Optional[str] = Field(default=None, max_length=30)
+    tamano_muestra: Optional[int] = Field(default=None, ge=0)
+    porcentaje_muestreo: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    material_utilizado: Optional[str] = Field(default=None, max_length=255)
+    terminacion_superficial: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    control_dimensional: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    embalaje: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    lote_numero: Optional[str] = Field(default=None, max_length=100)
+    notas: Optional[str] = None
+    cotas: List[RecepcionCotaCreate] = Field(default_factory=list, max_length=250)
+
+
+class RecepcionOperativaOut(BaseModel):
+    id: int
+    numero_recepcion: str
+    estado: str
 
 
 # ============================================================================

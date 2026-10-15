@@ -34,6 +34,8 @@ class Settings:
     bcra_sync_days: int = 5
     bcra_historico_desde: Optional[str] = None
     sync_job_token: Optional[str] = None
+    access_db_path: Optional[str] = None
+    access_table_name: str = "CONTROL DE RECEPCION"
 
 
 def _load_json_config() -> dict:
@@ -141,6 +143,12 @@ def get_settings() -> Settings:
     sync_job_token = (
         os.environ.get("SYNC_JOB_TOKEN") or cfg.get("sync_job_token")
     )
+    access_db_path = os.environ.get("ACCESS_DB_PATH") or cfg.get("access_db_path")
+    access_table_name = (
+        os.environ.get("ACCESS_TABLE_NAME")
+        or cfg.get("access_table_name")
+        or "CONTROL DE RECEPCION"
+    )
     auth_remember_days = int(
         os.environ.get("AUTH_REMEMBER_DAYS", cfg.get("auth_remember_days", 30))
     )
@@ -167,4 +175,6 @@ def get_settings() -> Settings:
         bcra_sync_days=bcra_sync_days,
         bcra_historico_desde=bcra_historico_desde,
         sync_job_token=sync_job_token,
+        access_db_path=access_db_path,
+        access_table_name=access_table_name,
     )

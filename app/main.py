@@ -1,14 +1,12 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
-from fastapi.responses import RedirectResponse
-
-from .core.version import APP_VERSION
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import (
     get_swagger_ui_html,
     get_swagger_ui_oauth2_redirect_html,
 )
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -23,12 +21,14 @@ from .api import (
     ui_mbom,
     ui_plan,
     ui_precios,
-    ui_proveedores,
     ui_productos,
+    ui_proveedores,
+    ui_recepcion,
     ui_stock,
     ui_tipo_cambio,
 )
 from .api.router import api_router
+from .core.version import APP_VERSION
 from .services.backup_scheduler import (
     start_backup_scheduler,
     stop_backup_scheduler,
@@ -126,6 +126,7 @@ def create_app() -> FastAPI:
     application.include_router(ui_plan.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_stock.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_productos.router, prefix="/ui", dependencies=deps)
+    application.include_router(ui_recepcion.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_mbom.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_informes.router, prefix="/ui", dependencies=deps)
     application.include_router(ui_precios.router, prefix="/ui", dependencies=deps)

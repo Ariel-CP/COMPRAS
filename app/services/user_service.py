@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.services import auth_service
 
-
 PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
     ("admin_backups", "Administracion de backups"),
     ("admin_roles", "Administracion de roles"),
@@ -17,6 +16,7 @@ PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
     ("precios", "Precios"),
     ("proveedores", "Proveedores"),
     ("productos", "Articulos"),
+    ("recepcion", "Control de recepción"),
     ("rubros", "Rubros"),
     ("stock", "Stock"),
     ("tipo_cambio", "Tipo de cambio"),
