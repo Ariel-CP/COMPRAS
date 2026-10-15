@@ -1,35 +1,23 @@
 from datetime import date
 from decimal import Decimal
 
+import httpx
+import pytest
+
 from app.services.fx_provider import BcraFxProvider, FxProviderError
 
 
-class FakeResponse:
-    def __init__(self, status_code=200, data=None):
-        self.status_code = status_code
-        self._data = data
-
-    def raise_for_status(self):
-        if not (200 <= self.status_code < 300):
-            raise Exception(f"HTTP {self.status_code}")
-
-    def json(self):
-        return self._data
+def _provider(handler):
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    return BcraFxProvider(client=client)
 
 
-class FakeClient:
-    def __init__(self, response: FakeResponse):
-        self._response = response
-        self.last_headers = None
-        self.last_url = None
-
-    def get(self, url, headers=None):
-        self.last_headers = headers
-        self.last_url = url
-        return self._response
-
-    def close(self):
-        pass
+def _minorista_payload(detalle):
+    return {
+        "status": 200,
+        "metadata": {"resultset": {"count": len(detalle)}},
+        "results": [{"idVariable": 4, "detalle": detalle}],
+    }
 
 
 def test_client_constructs_without_token():
@@ -37,49 +25,97 @@ def test_client_constructs_without_token():
     assert c is not None
 
 
-def test_request_has_no_authorization_header_and_parses_list():
-    data = [{"d": "2026-08-31", "v": "350.12"}]
-    fake_resp = FakeResponse(status_code=200, data=data)
-    fake_client = FakeClient(fake_resp)
-    prov = BcraFxProvider(client=fake_client)
-
+def test_request_uses_v4_minorista_series_and_parses_results():
     desde = date(2026, 8, 31)
     hasta = date(2026, 8, 31)
-    tasas = prov.fetch_range(desde, hasta)
+    requests = []
 
-    # verify request
-    assert fake_client.last_url is not None
-    # no Authorization header present
-    headers = fake_client.last_headers or {}
-    assert 'Authorization' not in headers
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json=_minorista_payload([{"fecha": "2026-08-31", "valor": "350.12"}]),
+        )
+
+    provider = _provider(handler)
+    try:
+        tasas = provider.fetch_range(desde, hasta)
+    finally:
+        provider.close()
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.url.path == "/estadisticas/v4.0/monetarias/4"
+    assert dict(request.url.params) == {
+        "desde": "2026-08-31",
+        "hasta": "2026-08-31",
+    }
+    assert "authorization" not in request.headers
 
     assert len(tasas) == 1
-    t = tasas[0]
-    assert t.fecha == desde
-    assert t.moneda == 'USD'
-    assert isinstance(t.tasa, Decimal)
-    assert t.tasa == Decimal('350.12')
+    tasa = tasas[0]
+    assert tasa.fecha == desde
+    assert tasa.moneda == "USD"
+    assert tasa.tipo == "VENTA"
+    assert tasa.origen == "OTRO"
+    assert isinstance(tasa.tasa, Decimal)
+    assert tasa.tasa == Decimal("350.12")
 
 
-def test_missing_records_raises_error():
-    fake_resp = FakeResponse(status_code=200, data={})
-    fake_client = FakeClient(fake_resp)
-    prov = BcraFxProvider(client=fake_client)
+def test_empty_detail_raises_provider_error():
+    provider = _provider(
+        lambda request: httpx.Response(200, json=_minorista_payload([]))
+    )
     try:
-        prov.fetch_range(date(2026, 1, 1), date(2026, 1, 1))
-        assert False, "Expected FxProviderError"
-    except FxProviderError:
-        pass
+        with pytest.raises(FxProviderError, match="no se encontraron registros"):
+            provider.fetch_range(date(2026, 1, 1), date(2026, 1, 31))
+    finally:
+        provider.close()
 
 
-def test_no_matching_records_in_range_raises_error():
-    data = [{"fecha": "2026-08-01", "valor": "350.12"}]
-    fake_resp = FakeResponse(status_code=200, data=data)
-    fake_client = FakeClient(fake_resp)
-    prov = BcraFxProvider(client=fake_client)
-
+def test_records_outside_requested_range_are_rejected():
+    provider = _provider(
+        lambda request: httpx.Response(
+            200,
+            json=_minorista_payload([{"fecha": "2026-08-01", "valor": "350.12"}]),
+        )
+    )
     try:
-        prov.fetch_range(date(2026, 8, 10), date(2026, 8, 12))
-        assert False, "Expected FxProviderError"
-    except FxProviderError:
-        pass
+        with pytest.raises(FxProviderError, match="en el rango"):
+            provider.fetch_range(date(2026, 8, 10), date(2026, 8, 12))
+    finally:
+        provider.close()
+
+
+def test_invalid_detail_record_raises_provider_error():
+    provider = _provider(
+        lambda request: httpx.Response(
+            200,
+            json=_minorista_payload([{"fecha": "2026-08-31"}]),
+        )
+    )
+    try:
+        with pytest.raises(FxProviderError, match="Registro BCRA inválido"):
+            provider.fetch_range(date(2026, 8, 31), date(2026, 8, 31))
+    finally:
+        provider.close()
+
+
+def test_http_error_raises_provider_error():
+    provider = _provider(lambda request: httpx.Response(500, request=request))
+    try:
+        with pytest.raises(FxProviderError, match="HTTP 500"):
+            provider.fetch_range(date(2026, 8, 31), date(2026, 8, 31))
+    finally:
+        provider.close()
+
+
+def test_invalid_json_raises_provider_error():
+    provider = _provider(
+        lambda request: httpx.Response(200, content=b"not-json", request=request)
+    )
+    try:
+        with pytest.raises(FxProviderError, match="Respuesta JSON inválida"):
+            provider.fetch_range(date(2026, 8, 31), date(2026, 8, 31))
+    finally:
+        provider.close()

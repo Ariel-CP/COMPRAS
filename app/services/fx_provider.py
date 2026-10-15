@@ -24,14 +24,14 @@ class FxProviderError(RuntimeError):
 
 
 class BcraFxProvider:
-    """Cliente para la API pública de Estadísticas Cambiarias del BCRA.
+    """Cliente para la serie minorista de Estadísticas Monetarias v4 del BCRA.
 
     Este cliente no requiere token ni autorización. Realiza una llamada
-    al endpoint `/estadisticascambiarias/v1.0/Cotizaciones/USD` y mappea
-    los resultados a `FxRate` usando `Decimal` para la tasa.
+    a la variable 4 (promedio vendedor minorista) y mapea los resultados
+    a `FxRate` usando `Decimal` para la tasa.
     """
 
-    _ENDPOINT_USD = "/estadisticascambiarias/v1.0/Cotizaciones/USD"
+    _ENDPOINT_USD = "/estadisticas/v4.0/monetarias/4"
 
     def __init__(
         self,
@@ -52,17 +52,18 @@ class BcraFxProvider:
     def _request_usd(
         self, desde: Optional[date] = None, hasta: Optional[date] = None
     ) -> dict:
-        """Obtiene cotizaciones USD del BCRA.
+        """Obtiene cotizaciones minoristas USD del BCRA.
 
-        Si desde/hasta se omiten, obtiene solo el día actual.
+        Si desde/hasta se omiten, el BCRA aplica sus valores predeterminados.
         """
+
         url = f"{self._base_url}{self._ENDPOINT_USD}"
         headers = {"Accept": "application/json", "Accept-Language": "es-AR"}
         params: dict[str, str] = {}
         if desde is not None:
-            params["fechadesde"] = desde.isoformat()
+            params["desde"] = desde.isoformat()
         if hasta is not None:
-            params["fechahasta"] = hasta.isoformat()
+            params["hasta"] = hasta.isoformat()
         try:
             resp = self._http_client().get(
                 url, headers=headers, params=params if params else None
@@ -81,30 +82,10 @@ class BcraFxProvider:
 
     @staticmethod
     def _map_record(record: dict) -> FxRate:
-        # La estructura puede variar; intentamos mapear campos comunes
         try:
-            # Buscar fecha en campos comunes
-            if "d" in record:
-                fecha = date.fromisoformat(record["d"])  # formato ISO
-            elif "fecha" in record:
-                fecha = date.fromisoformat(record["fecha"])
-            else:
-                raise KeyError("fecha")
-
-            # valor puede estar en 'v' o 'valor' o 'p'; convertir a Decimal
-            # Soporte estructura BCRA reciente: registro con 'detalle' -> handled upstream
-            if "v" in record:
-                raw = record["v"]
-            elif "valor" in record:
-                raw = record["valor"]
-            elif "p" in record:
-                raw = record["p"]
-            elif "tipoCotizacion" in record:
-                raw = record["tipoCotizacion"]
-            else:
-                raise KeyError("valor")
-            tasa = Decimal(str(raw))
-        except (KeyError, ValueError, TypeError) as exc:
+            fecha = date.fromisoformat(str(record["fecha"]))
+            tasa = Decimal(str(record["valor"]))
+        except (KeyError, ValueError, TypeError, ArithmeticError) as exc:
             raise FxProviderError(f"Registro BCRA inválido: {record}") from exc
 
         return FxRate(
@@ -120,71 +101,33 @@ class BcraFxProvider:
         if desde > hasta:
             raise ValueError("La fecha 'desde' no puede ser mayor a 'hasta'")
         data = self._request_usd(desde=desde, hasta=hasta)
-        # La API pública puede devolver varias estructuras. Normalizamos a una lista
+        if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+            raise FxProviderError("Respuesta BCRA minorista sin resultados válidos")
+
         records: List[dict] = []
-        if isinstance(data, dict):
-            # Caso: {'fecha': '2026-08-28', 'detalle': [ {codigoMoneda: 'USD', 'tipoCotizacion': 1512.0}, ... ]}
-            if "detalle" in data and isinstance(data["detalle"], list):
-                for item in data["detalle"]:
-                    # adjuntar la fecha al item para mapearlo
-                    rec = dict(item)
-                    rec["fecha"] = data.get("fecha")
-                    # mapear posibles campos de valor a 'tipoCotizacion'
-                    if "tipoCotizacion" in item:
-                        rec["tipoCotizacion"] = item.get("tipoCotizacion")
-                    records.append(rec)
-            elif "results" in data and isinstance(data["results"], list):
-                    # Expand posibles objetos con 'detalle' dentro de results
-                    tmp = data.get("results") or []
-                    expanded: List[dict] = []
-                    for entry in tmp:
-                        if isinstance(entry, dict) and isinstance(entry.get("detalle"), list):
-                            for item in entry.get("detalle", []):
-                                rec = dict(item)
-                                rec["fecha"] = entry.get("fecha")
-                                if "tipoCotizacion" in item:
-                                    rec["tipoCotizacion"] = item.get("tipoCotizacion")
-                                expanded.append(rec)
-                        else:
-                            expanded.append(entry)
-                    records = expanded
-            else:
-                # buscar listas en claves conocidas
-                for k in ("data", "serie", "series"):
-                    if isinstance(data.get(k), list):
-                        records = data.get(k)
-                        break
-        elif isinstance(data, list):
-            # Puede venir una lista de objetos con 'detalle'
-            # e.g. [ { 'fecha': '2026-08-28', 'detalle': [...] } ]
-            if data and isinstance(data[0], dict) and "detalle" in data[0]:
-                for entry in data:
-                    if isinstance(entry.get("detalle"), list):
-                        for item in entry["detalle"]:
-                            rec = dict(item)
-                            rec["fecha"] = entry.get("fecha")
-                            if "tipoCotizacion" in item:
-                                rec["tipoCotizacion"] = item.get("tipoCotizacion")
-                            records.append(rec)
-            else:
-                records = data
+        for result in data["results"]:
+            if not isinstance(result, dict):
+                raise FxProviderError(
+                    "Respuesta BCRA minorista contiene una serie inválida"
+                )
+            detalle = result.get("detalle")
+            if not isinstance(detalle, list):
+                raise FxProviderError("Respuesta BCRA minorista sin detalle válido")
+            records.extend(item for item in detalle if isinstance(item, dict))
 
         if not records:
             raise FxProviderError("Respuesta BCRA: no se encontraron registros para USD")
 
         resultados: List[FxRate] = []
         for rec in records:
-            # Filtrar por moneda si la estructura lo provee
-            codigo = rec.get("codigoMoneda") or rec.get("moneda") or rec.get("codigo")
-            if codigo and str(codigo).upper() != "USD":
-                continue
             rate = self._map_record(rec)
             if desde <= rate.fecha <= hasta:
                 resultados.append(rate)
 
         if not resultados:
             raise FxProviderError(
-                f"Respuesta BCRA: no se encontraron registros para USD en el rango {desde.isoformat()} a {hasta.isoformat()}"
+                "Respuesta BCRA: no se encontraron registros para USD en el rango "
+                f"{desde.isoformat()} a {hasta.isoformat()}"
             )
         return resultados
 
