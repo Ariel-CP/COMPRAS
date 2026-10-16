@@ -19,7 +19,6 @@
     {% if _user %}
     {% set perms = _user.permissions if _user.permissions is defined else {} %}
     <nav>
-      <a href="/ui" class="inicio-verde">Inicio</a>
       {% if perms.get('plan', (False, False))[0] %}<a href="/ui/plan">Plan</a>{% endif %}
       {% if perms.get('plan', (False, False))[0] %}
       <a href="/ui/plan-asistente-oc" class="wizard-oc-link">
@@ -39,9 +38,12 @@
       {% endif %}
       {% if perms.get('precios', (False, False))[0] %}<a href="/ui/precios">Precios</a>{% endif %}
       {% if perms.get('proveedores', (False, False))[0] %}<a href="/ui/proveedores">Proveedores</a>{% endif %}
-      {% if perms.get('recepcion', (False, False))[0] %}<a href="/ui/recepcion">Recepción</a>{% endif %}
+      {% if perms.get('recepcion', (False, False))[0] %}
+        <a href="/ui/recepcion">Recepción</a>
+        <a href="/ui/recepcion/historial-access">Historial Access</a>
+      {% endif %}
       {% if perms.get('proveedores', (False, False))[0] %}<a href="/ui/evaluaciones">Evaluaciones</a>{% endif %}
-      {% if _user %}<a href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
+      {% if perms.get('tipo_cambio', (False, False))[0] %}<a href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
       {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] or perms.get('admin_backups', (False, False))[0] or perms.get('admin_sistema', (False, False))[0] %}
       {% if show_admin %}
       <span class="import-dropdown" style="vertical-align:middle;">

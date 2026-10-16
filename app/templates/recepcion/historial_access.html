@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Historial de Access | Recepción{% endblock %}
+{% block content %}
+<style>
+  .access-history-page {
+    max-width: 1500px;
+    margin: 0 auto;
+    color: #182a3a;
+  }
+  .access-history-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 16px;
+    padding: 8px 0 16px;
+    border-bottom: 3px solid #159c9b;
+  }
+  .access-history-heading h1 {
+    margin: 0;
+    color: #174f7a;
+    font-size: 24px;
+  }
+  .access-history-heading p,
+  .access-history-note {
+    margin: 6px 0 0;
+    color: #526576;
+    font-size: 13px;
+  }
+  .access-history-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .access-history-button {
+    display: inline-block;
+    padding: 9px 13px;
+    border: 0;
+    border-radius: 3px;
+    background: #145f91;
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .access-history-button[hidden] {
+    display: none;
+  }
+  .access-history-button:hover {
+    background: #0e4d76;
+  }
+  .access-history-button.secondary {
+    background: #536b7d;
+  }
+  .access-history-button.secondary:hover {
+    background: #405767;
+  }
+  .access-history-pill {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 2px;
+    background: #e8f1f5;
+    color: #345369;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .access-history-toolbar {
+    display: flex;
+    gap: 8px;
+    margin: 16px 0 8px;
+  }
+  .access-history-toolbar input {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid #b9c8d3;
+    border-radius: 3px;
+  }
+  .access-history-date-label {
+    align-self: center;
+    color: #405366;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .access-history-status {
+    min-height: 20px;
+    color: #526576;
+    font-size: 12px;
+  }
+  .access-history-status.error {
+    color: #a32222;
+  }
+  .access-history-table-wrap {
+    max-height: 58vh;
+    overflow: auto;
+    border-top: 2px solid #145f91;
+  }
+  .access-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .access-history-table th {
+    position: sticky;
+    top: 0;
+    background: #eaf0f4;
+    color: #344a5c;
+    text-align: left;
+  }
+  .access-history-table th,
+  .access-history-table td {
+    padding: 8px;
+    border-bottom: 1px solid #dce4e9;
+    vertical-align: top;
+  }
+  .access-history-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin: 10px 0 8px;
+  }
+  .access-history-detail {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 2px solid #159c9b;
+  }
+  .access-history-detail[hidden] {
+    display: none;
+  }
+  .access-history-detail h2 {
+    margin: 0 0 12px;
+    color: #174f7a;
+    font-size: 18px;
+  }
+  .access-history-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 14px;
+    font-size: 12px;
+  }
+  .access-history-detail-grid strong {
+    display: block;
+    margin-bottom: 3px;
+    color: #526576;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .access-history-cotas {
+    width: 100%;
+    margin-top: 16px;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .access-history-cotas th,
+  .access-history-cotas td {
+    padding: 7px;
+    border-bottom: 1px solid #dce4e9;
+    text-align: left;
+  }
+  .access-history-empty {
+    color: #526576;
+    font-size: 12px;
+  }
+  @media (max-width: 800px) {
+    .access-history-detail-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
+
+<main class="access-history-page" id="access-history-page">
+  <header class="access-history-heading">
+    <div>
+      <h1>Historial de controles de recepción</h1>
+      <p>Registros históricos consultados directamente desde Access.</p>
+    </div>
+    <div class="access-history-actions">
+      <span class="access-history-pill">Solo lectura</span>
+      <a class="access-history-button secondary" href="/ui/recepcion">Recepción</a>
+    </div>
+  </header>
+
+  <p class="access-history-note">Buscar por ID, plano, material, proveedor, orden de compra o remito.</p>
+  <form class="access-history-toolbar" id="access-history-form">
+    <input id="access-history-query" type="search" maxlength="100" aria-label="Buscar controles históricos" placeholder="Buscar controles históricos">
+    <label class="access-history-date-label" for="access-history-from">Desde</label>
+    <input id="access-history-from" type="date" aria-label="Fecha desde">
+    <label class="access-history-date-label" for="access-history-to">Hasta</label>
+    <input id="access-history-to" type="date" aria-label="Fecha hasta">
+    <button class="access-history-button" type="submit">Buscar</button>
+  </form>
+  <p class="access-history-status" id="access-history-status" role="status" aria-live="polite">Consultando Access...</p>
+  <div class="access-history-pagination">
+    <span id="access-history-count" class="hint"></span>
+    <button class="access-history-button secondary" id="access-history-more" type="button" hidden>Ver anteriores</button>
+  </div>
+
+  <div class="access-history-table-wrap">
+    <table class="access-history-table">
+      <thead>
+        <tr>
+          <th>ID / interno</th>
+          <th>Fecha control</th>
+          <th>Plano</th>
+          <th>Proveedor</th>
+          <th>Material</th>
+          <th>OC / remito</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="access-history-rows">
+        <tr><td colspan="7">Cargando historial...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <section class="access-history-detail" id="access-history-detail" aria-live="polite" hidden>
+    <p class="access-history-empty">Seleccioná un control para ver sus datos y cotas.</p>
+  </section>
+</main>
+<script src="/static/js/recepcion_access_history.js" defer></script>
+{% endblock %}

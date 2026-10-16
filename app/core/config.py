@@ -36,6 +36,9 @@ class Settings:
     sync_job_token: Optional[str] = None
     access_db_path: Optional[str] = None
     access_table_name: str = "CONTROL DE RECEPCION"
+    planos_dir: str = (
+        r"\\192.168.1.5\id\01 DISEÑOS EN INVENTOR ECOTERMO\03-PLANOS"
+    )
 
 
 def _load_json_config() -> dict:
@@ -149,6 +152,11 @@ def get_settings() -> Settings:
         or cfg.get("access_table_name")
         or "CONTROL DE RECEPCION"
     )
+    planos_dir = (
+        os.environ.get("PLANOS_DIR")
+        or cfg.get("planos_dir")
+        or r"\\192.168.1.5\id\01 DISEÑOS EN INVENTOR ECOTERMO\03-PLANOS"
+    )
     auth_remember_days = int(
         os.environ.get("AUTH_REMEMBER_DAYS", cfg.get("auth_remember_days", 30))
     )
@@ -177,4 +185,5 @@ def get_settings() -> Settings:
         sync_job_token=sync_job_token,
         access_db_path=access_db_path,
         access_table_name=access_table_name,
+        planos_dir=planos_dir,
     )

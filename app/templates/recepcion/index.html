@@ -350,7 +350,8 @@ block styles %}
     white-space: nowrap;
   }
   .proveedor-change,
-  .articulo-change {
+  .articulo-change,
+  .articulo-open-plan {
     flex: 0 0 auto;
     margin-left: auto;
     padding: 4px 7px;
@@ -361,6 +362,33 @@ block styles %}
     cursor: pointer;
     font-size: 11px;
     font-weight: 700;
+    text-decoration: none;
+  }
+  .articulo-open-plan {
+    display: inline-block;
+    color: #145f91;
+  }
+  .articulo-plan-actions {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 6px;
+  }
+  .articulo-plan-actions[hidden] {
+    display: none;
+  }
+  .recepcion-quality-form {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #d8e0e5;
+  }
+  .recepcion-quality-form h3 {
+    margin: 0 0 12px;
+    font-size: 16px;
+  }
+  .articulo-open-plan[aria-disabled="true"] {
+    color: #66727b;
+    cursor: not-allowed;
+    opacity: 0.65;
   }
   @media (max-width: 1050px) {
     .recepcion-layout {
@@ -400,6 +428,7 @@ block styles %}
 <div
   class="recepcion-page"
   data-can-write="{{ 'true' if current_user.permissions.get('recepcion', (False, False))[1] else 'false' }}"
+  data-current-user-name="{{ current_user.get('nombre') or current_user.get('email') or 'Usuario actual' }}"
 >
   <div class="recepcion-title">
     <div>
@@ -476,14 +505,13 @@ block styles %}
               required
           /></label>
           <label
-            >Entrega esperada<input name="fecha_entrega_esperada" type="date"
+            >Recepcionó<input
+              type="text"
+              value="{{ current_user.get('nombre') or current_user.get('email') or 'Usuario actual' }}"
+              readonly
           /></label>
           <label
-            >Fecha de control<input
-              name="fecha_control"
-              type="date"
-              value="{{ hoy }}"
-              required
+            >Entrega esperada<input name="fecha_entrega_esperada" type="date"
           /></label>
           <div class="span-2 articulo-search-wrap">
             <label for="articulo-search">Artículo</label>
@@ -512,6 +540,15 @@ block styles %}
               <strong id="articulo-selected-code" class="articulo-selected-code"></strong>
               <span id="articulo-selected-name" class="articulo-selected-name"></span>
               <button id="articulo-change" class="articulo-change" type="button">Cambiar</button>
+            </div>
+            <div id="articulo-plan-actions" class="articulo-plan-actions" hidden>
+              <a
+                id="articulo-open-plan"
+                class="articulo-open-plan"
+                target="_blank"
+                rel="noopener"
+                aria-disabled="true"
+              >Buscando última revisión...</a>
             </div>
             <div
               id="articulo-suggestions"
@@ -587,53 +624,6 @@ block styles %}
               max="100"
               step="0.001"
           /></label>
-          <label
-            >Terminación superficial (%)<input
-              name="terminacion_superficial"
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-          /></label>
-          <label
-            >Control dimensional (%)<input
-              name="control_dimensional"
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-          /></label>
-          <label
-            >Embalaje (%)<input
-              name="embalaje"
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-          /></label>
-        </div>
-      </section>
-
-      <section class="recepcion-section">
-        <h2>Control por cota</h2>
-        <div class="cotas-head">
-          <span>Cota / criterio</span><span>Especificación</span
-          ><span>Control</span><span>Desviación</span><span>Resultado</span
-          ><span></span>
-        </div>
-        <div id="cotas-list"></div>
-        <div class="section-actions">
-          <button
-            class="recepcion-button secondary"
-            type="button"
-            id="cota-add"
-          >
-            Agregar cota
-          </button>
-          <span class="hint"
-            >El resultado general se determina a partir de las cotas
-            guardadas.</span
-          >
         </div>
       </section>
 
@@ -675,7 +665,7 @@ block styles %}
           <table class="recepcion-table">
             <thead>
               <tr>
-                <th>Número / fecha</th>
+                <th>ID / fecha control</th>
                 <th>Proveedor</th>
                 <th>OC / remito</th>
                 <th>Estado</th>
@@ -694,6 +684,7 @@ block styles %}
           </p>
         </div>
       </section>
+
     </aside>
   </div>
 </div>

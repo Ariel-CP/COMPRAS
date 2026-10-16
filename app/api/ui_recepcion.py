@@ -22,3 +22,14 @@ def ui_recepcion(
             "hoy": date.today().isoformat(),
         },
     )
+
+
+@router.get("/recepcion/historial-access", response_class=HTMLResponse)
+def ui_recepcion_historial_access(
+    request: Request,
+    current_user: dict = Depends(require_permission("recepcion", False)),
+):
+    return templates.TemplateResponse(
+        "recepcion/historial_access.html",
+        {"request": request, "current_user": current_user},
+    )

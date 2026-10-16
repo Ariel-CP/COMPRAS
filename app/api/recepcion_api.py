@@ -5,10 +5,11 @@ Fase 5: Explotación de datos - lecturas analíticas separadas de operaciones.
 """
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from app.api.deps_auth import get_current_user, require_permission
 from app.db import get_db
@@ -16,6 +17,7 @@ from app.schemas.recepcion import (
     EvaluacionCalculoResult,
     EvaluacionProveedorMetricaOut,
     EvaluacionProveedorRanking,
+    RecepcionCalidadCreate,
     RecepcionImportResult,
     RecepcionNormalizacionResult,
     RecepcionOperativaCreate,
@@ -23,18 +25,22 @@ from app.schemas.recepcion import (
 )
 from app.services.access_read_service import (
     AccessReadError,
+    listar_controles_access,
+    listar_recepciones_recientes_access,
+    obtener_control_access,
     inspect_access_schema,
     inspect_access_table,
 )
 from app.services.producto_service import listar_productos
+from app.services.plano_service import obtener_plano_pdf
 from app.services.proveedor_service import listar_proveedores
 from app.services.recepcion_access_import_service import importar_recepcion_desde_access
 from app.services.recepcion_metrics_service import calcular_metricas_todos_proveedores
 from app.services.recepcion_normalization_service import normalizar_todo_staging
 from app.services.recepcion_operativa_service import (
     crear_recepcion_operativa,
-    listar_recepciones_operativas,
     obtener_recepcion_operativa,
+    registrar_control_calidad,
 )
 from app.services.recepcion_scheduler import get_scheduler_status
 from app.services.recepcion_sync_service import sincronizar_ciclo_completo
@@ -84,15 +90,57 @@ def buscar_articulos_recepcion(
     ]
 
 
+@router.get("/planos/{numero_plano}/pdf")
+def abrir_plano_pdf(
+    numero_plano: str,
+    _current_user=Depends(require_permission("recepcion", False)),
+):
+    """Entrega inline el PDF asociado a un número de plano de cuatro dígitos."""
+    try:
+        path = obtener_plano_pdf(numero_plano)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=path.name,
+        content_disposition_type="inline",
+    )
+
+
+@router.get("/planos/{numero_plano}/ultima-version")
+def obtener_ultima_version_plano(
+    numero_plano: str,
+    _current_user=Depends(require_permission("recepcion", False)),
+):
+    """Devuelve el nombre de la revisión más alta disponible del plano."""
+    try:
+        path = obtener_plano_pdf(numero_plano)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"numero_plano": path.stem, "archivo": path.name}
+
+
 @router.get("/operativas")
 def listar_recepciones(
     q: str | None = Query(default=None, max_length=100),
+    proveedor_codigo: str | None = Query(default=None, max_length=50),
     limit: int = Query(default=100, ge=1, le=500),
-    db=Depends(get_db),
     _current_user=Depends(require_permission("recepcion", False)),
 ):
-    """Lista recepciones creadas en COMPRAS para operación paralela."""
-    return listar_recepciones_operativas(db, q=q, limit=limit)
+    """Lista recepciones históricas de Access, igual que el buscador de historial."""
+    try:
+        return listar_recepciones_recientes_access(
+            q=q, proveedor_codigo=proveedor_codigo, limit=limit
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AccessReadError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/operativas/{recepcion_id}")
@@ -129,6 +177,25 @@ def crear_recepcion(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/operativas/{recepcion_id}/control-calidad")
+def guardar_control_calidad(
+    recepcion_id: int,
+    payload: RecepcionCalidadCreate,
+    db=Depends(get_db),
+    current_user=Depends(require_permission("recepcion", True)),
+):
+    """Guarda la inspección posterior con el usuario autenticado como inspector."""
+    try:
+        return registrar_control_calidad(
+            db,
+            recepcion_id,
+            payload,
+            usuario_id=int(current_user["id"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/access/inspect")
 async def inspeccionar_access(
     sample_limit: int = Query(default=10, ge=1, le=100),
@@ -151,6 +218,51 @@ async def inspeccionar_esquema_access():
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AccessReadError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/access/controles")
+def listar_controles_historicos_access(
+    q: str | None = Query(default=None, max_length=100),
+    proveedor_codigo: str | None = Query(default=None, max_length=50),
+    desde: date | None = Query(default=None),
+    hasta: date | None = Query(default=None),
+    before_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
+    _current_user=Depends(require_permission("recepcion", False)),
+):
+    """Lista controles históricos directamente desde Access, en modo readonly."""
+    try:
+        return listar_controles_access(
+            q=q,
+            proveedor_codigo=proveedor_codigo,
+            desde=desde,
+            hasta=hasta,
+            before_id=before_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AccessReadError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/access/controles/{access_id}")
+def obtener_control_historico_access(
+    access_id: int,
+    _current_user=Depends(require_permission("recepcion", False)),
+):
+    """Devuelve una recepción histórica y sus cotas CRD asociadas."""
+    try:
+        control = obtener_control_access(access_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AccessReadError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if control is None:
+        raise HTTPException(status_code=404, detail="Control Access no encontrado")
+    return control
 
 
 # ============================================================================

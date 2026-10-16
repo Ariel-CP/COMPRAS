@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 # Schemas para Recepción (canónico)
 # ============================================================================
 
+
 class RecepcionLineaBase(BaseModel):
     """Base para línea de recepción."""
     numero_linea: int
@@ -94,7 +95,7 @@ class RecepcionOperativaCreate(BaseModel):
     producto_id: int = Field(gt=0)
     fecha_recepcion: date
     fecha_entrega_esperada: Optional[date] = None
-    fecha_control: date
+    fecha_control: Optional[date] = None
     orden_compra: str = Field(min_length=1, max_length=50)
     remito: Optional[str] = Field(default=None, max_length=100)
     cantidad_solicitada: Decimal = Field(gt=0)
@@ -112,6 +113,15 @@ class RecepcionOperativaCreate(BaseModel):
     lote_numero: Optional[str] = Field(default=None, max_length=100)
     notas: Optional[str] = None
     cotas: List[RecepcionCotaCreate] = Field(default_factory=list, max_length=250)
+
+
+class RecepcionCalidadCreate(BaseModel):
+    """Resultados del control de calidad ejecutado después de la recepción."""
+
+    cotas: List[RecepcionCotaCreate] = Field(min_length=1, max_length=250)
+    terminacion_superficial: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    control_dimensional: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    embalaje: Optional[Decimal] = Field(default=None, ge=0, le=100)
 
 
 class RecepcionOperativaOut(BaseModel):

@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.schemas.recepcion import RecepcionOperativaCreate
+from app.schemas.recepcion import RecepcionCalidadCreate, RecepcionOperativaCreate
 
 
 def listar_recepciones_operativas(
@@ -31,11 +31,16 @@ def listar_recepciones_operativas(
         text(f"""
             SELECT rc.id, rc.numero_recepcion, rc.orden_compra, rc.remito,
                    rc.fecha_recepcion, rc.fecha_control, rc.estado,
+                     rc.usuario_creacion_id, rc.usuario_inspeccion_id,
+                     ur.nombre AS usuario_recepcion_nombre,
+                     ui.nombre AS usuario_calidad_nombre,
                    p.nombre AS proveedor_nombre,
                    (SELECT COUNT(*) FROM recepcion_linea rl
                     WHERE rl.recepcion_cabecera_id = rc.id) AS cantidad_lineas
             FROM recepcion_cabecera rc
             JOIN proveedor p ON p.id = rc.proveedor_id
+            LEFT JOIN usuario ur ON ur.id = rc.usuario_creacion_id
+            LEFT JOIN usuario ui ON ui.id = rc.usuario_inspeccion_id
             {filtros}
             ORDER BY rc.fecha_recepcion DESC, rc.id DESC
             LIMIT :limit
@@ -54,11 +59,16 @@ def obtener_recepcion_operativa(
             SELECT rc.id, rc.numero_recepcion, rc.proveedor_id,
                    rc.orden_compra, rc.remito, rc.fecha_recepcion,
                    rc.fecha_entrega_esperada, rc.fecha_control, rc.estado,
+                     rc.usuario_creacion_id, rc.usuario_inspeccion_id,
                    rc.notas, rc.terminacion_superficial,
                    rc.control_dimensional, rc.embalaje,
-                   p.codigo AS proveedor_codigo, p.nombre AS proveedor_nombre
+                     p.codigo AS proveedor_codigo, p.nombre AS proveedor_nombre,
+                     ur.nombre AS usuario_recepcion_nombre,
+                     ui.nombre AS usuario_calidad_nombre
             FROM recepcion_cabecera rc
             JOIN proveedor p ON p.id = rc.proveedor_id
+                 LEFT JOIN usuario ur ON ur.id = rc.usuario_creacion_id
+                 LEFT JOIN usuario ui ON ui.id = rc.usuario_inspeccion_id
             WHERE rc.id = :id
             """),
             {"id": recepcion_id},
@@ -136,10 +146,8 @@ def crear_recepcion_operativa(
     if not producto:
         raise ValueError("El artículo no existe o está inactivo")
     plano_desde_codigo = re.search(r"(\d{4})$", str(producto.codigo))
-    numero_plano = (
-        plano_desde_codigo.group(1)
-        if plano_desde_codigo
-        else payload.numero_plano
+    numero_plano = payload.numero_plano or (
+        plano_desde_codigo.group(1) if plano_desde_codigo else None
     )
 
     numero_temporal = f"TMP-{uuid4().hex}"
@@ -153,7 +161,7 @@ def crear_recepcion_operativa(
             ) VALUES (
                 :numero_recepcion, :proveedor_id, :orden_compra, :remito,
                 :fecha_recepcion, :fecha_entrega_esperada, :fecha_control,
-                'PENDIENTE', :usuario_id, :usuario_id, :notas,
+                'PENDIENTE', :usuario_id, :inspector_id, :notas,
                 :terminacion_superficial, :control_dimensional, :embalaje
             )
             """),
@@ -166,6 +174,7 @@ def crear_recepcion_operativa(
             "fecha_entrega_esperada": payload.fecha_entrega_esperada,
             "fecha_control": payload.fecha_control,
             "usuario_id": usuario_id,
+            "inspector_id": usuario_id if payload.cotas else None,
             "notas": payload.notas,
             "terminacion_superficial": (
                 str(payload.terminacion_superficial)
@@ -296,3 +305,115 @@ def crear_recepcion_operativa(
         "numero_recepcion": numero_recepcion,
         "estado": estado_cabecera,
     }
+
+
+def registrar_control_calidad(
+    db: Session,
+    recepcion_id: int,
+    payload: RecepcionCalidadCreate,
+    *,
+    usuario_id: int,
+) -> dict[str, Any]:
+    """Guarda el control posterior e identifica al usuario que lo realizó."""
+    recepcion = db.execute(
+        text("""
+                SELECT rc.usuario_inspeccion_id, rc.estado, rl.id AS linea_id,
+                   (SELECT COUNT(*) FROM recepcion_inspeccion ri
+                    WHERE ri.recepcion_linea_id = rl.id) AS cantidad_inspecciones
+            FROM recepcion_cabecera rc
+            JOIN recepcion_linea rl ON rl.recepcion_cabecera_id = rc.id
+            WHERE rc.id = :recepcion_id
+            ORDER BY rl.numero_linea
+            LIMIT 1
+            """),
+        {"recepcion_id": recepcion_id},
+    ).mappings().first()
+    if not recepcion:
+        raise ValueError("Recepción no encontrada")
+    if recepcion["cantidad_inspecciones"] or recepcion["estado"] not in {
+        "PENDIENTE",
+        "EN_INSPECCIÓN",
+    }:
+        raise ValueError("El control de calidad ya fue registrado")
+
+    resultados = [cota.resultado for cota in payload.cotas]
+    if "NO_CONFORME" in resultados:
+        estado_inspeccion = "RECHAZADO"
+    elif all(resultado in {"OK", "NO_APLICA"} for resultado in resultados):
+        estado_inspeccion = "APROBADO"
+    else:
+        estado_inspeccion = "PENDIENTE"
+
+    for cota in payload.cotas:
+        db.execute(
+            text("""
+                INSERT INTO recepcion_inspeccion (
+                    recepcion_linea_id, criterio_nombre, especificacion,
+                    valor_medido, desviacion, resultado, observaciones,
+                    inspector_id
+                ) VALUES (
+                    :linea_id, :criterio_nombre, :especificacion,
+                    :valor_medido, :desviacion, :resultado, :observaciones,
+                    :usuario_id
+                )
+                """),
+            {
+                "linea_id": recepcion["linea_id"],
+                "criterio_nombre": cota.criterio_nombre,
+                "especificacion": cota.especificacion,
+                "valor_medido": cota.valor_medido,
+                "desviacion": cota.desviacion,
+                "resultado": cota.resultado,
+                "observaciones": cota.observaciones,
+                "usuario_id": usuario_id,
+            },
+        )
+
+    estado_cabecera = (
+        "RECHAZADA"
+        if estado_inspeccion == "RECHAZADO"
+        else "COMPLETA"
+        if estado_inspeccion == "APROBADO"
+        else "EN_INSPECCIÓN"
+    )
+    db.execute(
+        text("""
+            UPDATE recepcion_linea
+            SET estado_inspeccion = :estado
+            WHERE id = :linea_id
+            """),
+        {"estado": estado_inspeccion, "linea_id": recepcion["linea_id"]},
+    )
+    db.execute(
+        text("""
+            UPDATE recepcion_cabecera
+            SET usuario_inspeccion_id = :usuario_id,
+                fecha_control = CURRENT_DATE,
+                estado = :estado,
+                terminacion_superficial = :terminacion_superficial,
+                control_dimensional = :control_dimensional,
+                embalaje = :embalaje,
+                cantidad_aceptadas = :aceptadas,
+                cantidad_rechazadas = :rechazadas
+            WHERE id = :recepcion_id
+            """),
+        {
+            "usuario_id": usuario_id,
+            "estado": estado_cabecera,
+            "terminacion_superficial": (
+                str(payload.terminacion_superficial)
+                if payload.terminacion_superficial is not None
+                else None
+            ),
+            "control_dimensional": (
+                str(payload.control_dimensional)
+                if payload.control_dimensional is not None
+                else None
+            ),
+            "embalaje": str(payload.embalaje) if payload.embalaje is not None else None,
+            "aceptadas": int(estado_inspeccion == "APROBADO"),
+            "rechazadas": int(estado_inspeccion == "RECHAZADO"),
+            "recepcion_id": recepcion_id,
+        },
+    )
+    return {"estado": estado_cabecera, "estado_inspeccion": estado_inspeccion}

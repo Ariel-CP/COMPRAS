@@ -1,20 +1,15 @@
 {% extends 'base.html' %}
-{% block title %}<span class="inicio-verde">Inicio</span>{% endblock %}
+{% block title %}Seleccionar formulario{% endblock %}
 {% block content %}
-<h2 class="inicio-verde">Inicio</h2>
-<p>Fecha: {{ hoy }}</p>
+<h2>Seleccioná un formulario</h2>
 <section class="grid">
-  <a class="card" href="/ui/plan">
-    <h3>Plan de Producción</h3>
-    <p>Cargar y editar cantidades por período.</p>
+  {% for form in form_options %}
+  <a class="card" href="{{ form.url }}">
+    <h3>{{ form.name }}</h3>
+    <p>{{ form.description }}</p>
   </a>
-  <a class="card" href="/ui/stock">
-    <h3>Stock Mensual</h3>
-    <p>Importar foto de stock desde Flexxus.</p>
-  </a>
-  <a class="card" href="/ui/proveedores">
-    <h3>Proveedores</h3>
-    <p>Gestionar proveedores e importar datos desde CSV.</p>
-  </a>
+  {% else %}
+  <p>No tenés formularios habilitados. Contactá al administrador del sistema.</p>
+  {% endfor %}
 </section>
 {% endblock %}

@@ -16,3 +16,9 @@ def test_ui_requires_login_redirect():
     # middleware should redirect to login
     assert r.status_code in (302, 307)
     assert "/ui/login" in r.headers.get("location", "")
+
+
+def test_recepcion_access_history_requires_login():
+    r = client.get("/ui/recepcion/historial-access", follow_redirects=False)
+    assert r.status_code in (302, 307)
+    assert "/ui/login" in r.headers.get("location", "")

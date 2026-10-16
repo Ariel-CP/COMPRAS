@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from app.api.deps_auth import require_permission
 from ..db import get_db
 from ..services.tipo_cambio_service import obtener_resumen_ultimas_tasas
 from ..utils.health import db_status
@@ -21,6 +22,7 @@ async def ui_tipo_cambio(
     desde: Optional[date] = Query(default=None),
     hasta: Optional[date] = Query(default=None),
     db: Session = Depends(get_db),
+    _current_user=Depends(require_permission("tipo_cambio", False)),
 ):
     status = db_status(db)
     ultimas_tasas = obtener_resumen_ultimas_tasas(db)
