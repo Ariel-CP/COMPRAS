@@ -1,12 +1,16 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from pypdf.errors import PdfReadError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..schemas.producto import ProductoIn, ProductoOut
+from ..services.articulo_plano_service import listar_articulos_con_planos
+from ..services.plano_service import obtener_metadatos_plano, obtener_plano_pdf
 from ..services.producto_service import (
     actualizar_producto,
     crear_producto,
@@ -17,6 +21,62 @@ from ..services.producto_service import (
 from .deps_auth import require_permission
 
 router = APIRouter()
+
+
+@router.get("/planos")
+def api_listar_articulos_con_planos(
+    q: Optional[str] = Query(default=None, max_length=120),
+    db: Session = Depends(get_db),
+    _current_user: dict = Depends(require_permission("productos", False)),
+):
+    try:
+        return listar_articulos_con_planos(db, q=q)
+    except SQLAlchemyError as ex:
+        raise HTTPException(
+            status_code=500, detail=str(getattr(ex, "orig", ex))
+        ) from ex
+
+
+@router.get("/planos/{numero_plano}/pdf")
+def api_abrir_plano_articulo(
+    numero_plano: str,
+    _current_user: dict = Depends(require_permission("productos", False)),
+):
+    try:
+        path = obtener_plano_pdf(numero_plano)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+    except FileNotFoundError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=path.name,
+        content_disposition_type="inline",
+    )
+
+
+@router.get("/planos/{numero_plano}/metadatos")
+def api_metadatos_plano_articulo(
+    numero_plano: str,
+    _current_user: dict = Depends(require_permission("productos", False)),
+):
+    try:
+        metadata = obtener_metadatos_plano(numero_plano)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+    except FileNotFoundError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+    except (OSError, PdfReadError) as ex:
+        raise HTTPException(
+            status_code=422,
+            detail="No se pudieron leer los metadatos del PDF",
+        ) from ex
+    return {
+        "numero_plano": numero_plano,
+        "metadatos": metadata,
+        "tiene_metadatos": bool(metadata),
+    }
 
 
 @router.get("/", response_model=list[ProductoOut])

@@ -1,0 +1,903 @@
+{% extends "base.html" %} {% block title %}Planos de artículos{% endblock %} {%
+block styles %}
+<style>
+  .planos-page {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .planos-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .planos-heading h1 {
+    margin: 0 0 5px;
+    font-size: 25px;
+  }
+  .planos-heading p {
+    margin: 0;
+    color: var(--ui-text-muted);
+    font-size: 13px;
+  }
+  .planos-searchbar {
+    display: flex;
+    align-items: end;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+  }
+  .planos-searchbar label {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .planos-filter {
+    display: grid;
+    min-width: 150px;
+    gap: 5px;
+  }
+  .planos-filter-search {
+    flex: 1;
+    min-width: 250px;
+  }
+  .planos-filter label {
+    margin: 0;
+    color: var(--ui-text-muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .planos-count {
+    color: var(--ui-text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    margin-left: auto;
+  }
+  .planos-workspace {
+    display: grid;
+    gap: 14px;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+  }
+  .planos-results {
+    min-width: 0;
+  }
+  .planos-list-status {
+    min-height: 20px;
+    padding: 10px 14px 0;
+    color: var(--ui-text-muted);
+    font-size: 12px;
+  }
+  .planos-list {
+    max-height: 62vh;
+    overflow: auto;
+  }
+  .planos-grid {
+    width: 100%;
+    margin: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    font-size: 13px;
+  }
+  .planos-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 9px 11px;
+    background: #eaf0f4;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .planos-column-resize {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    z-index: 3;
+    width: 9px;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .planos-column-resize::after {
+    position: absolute;
+    top: 20%;
+    bottom: 20%;
+    left: 4px;
+    width: 1px;
+    background: #aab8c3;
+    content: "";
+  }
+  .planos-column-resize:hover::after,
+  .planos-column-resize:focus-visible::after {
+    width: 3px;
+    background: var(--ui-brand);
+  }
+  .planos-grid.is-resizing,
+  .planos-grid.is-resizing * {
+    cursor: col-resize !important;
+    user-select: none;
+  }
+  .planos-width-reset {
+    flex: 0 0 auto;
+    min-height: 32px;
+    margin: 0;
+    padding: 6px 9px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    background: var(--ui-surface);
+    color: var(--ui-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .planos-width-reset:hover {
+    border-color: #9cb9cf;
+    color: var(--ui-brand);
+  }
+  .planos-grid tbody td {
+    overflow: hidden;
+    padding: 5px 8px;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .planos-grid tbody tr.is-selected td {
+    background: #eaf3f5;
+  }
+  .planos-grid tbody tr:focus-within td {
+    background: #f1f7f8;
+  }
+  .planos-grid-number {
+    display: inline-flex;
+    align-items: center;
+    min-height: auto;
+    margin: 0;
+    padding: 3px 5px;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--ui-brand);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .planos-grid-number:hover {
+    background: #eaf3f5;
+  }
+  .planos-cell-muted {
+    color: var(--ui-text-muted);
+  }
+  .planos-status-linked {
+    color: #227044;
+    font-weight: 600;
+  }
+  .planos-status-unlinked {
+    color: #896a24;
+  }
+  .plano-result {
+    display: grid;
+    width: 100%;
+    gap: 4px;
+    margin-right: 0;
+    padding: 12px 14px;
+    border: 0;
+    border-bottom: 1px solid #e7edf1;
+    border-radius: 0;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .plano-result:hover,
+  .plano-result:focus-visible {
+    background: #eef5f7;
+  }
+  .plano-result.is-selected {
+    box-shadow: inset 3px 0 var(--ui-accent);
+    background: #eaf3f5;
+  }
+  .planos-preview {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+  .plano-detail {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--ui-border);
+  }
+  .plano-detail-heading {
+    min-width: 0;
+  }
+  .plano-detail-eyebrow {
+    margin: 0 0 4px;
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .plano-detail h2 {
+    overflow-wrap: anywhere;
+    margin: 0 0 6px;
+    font-size: 17px;
+  }
+  .plano-detail-meta {
+    margin: 0;
+    color: var(--ui-text-muted);
+    font-size: 12px;
+  }
+  .plano-description {
+    margin: 0;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--ui-border);
+    color: #40515f;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .plano-file-metadata {
+    padding: 10px 18px 12px;
+    border-bottom: 1px solid var(--ui-border);
+    background: #f8fafb;
+  }
+  .plano-file-metadata h3 {
+    margin: 0 0 6px;
+    color: #40515f;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .plano-file-metadata-status {
+    margin: 0;
+    color: var(--ui-text-muted);
+    font-size: 12px;
+  }
+  .plano-file-metadata-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 5px 16px;
+    margin: 0;
+  }
+  .plano-file-metadata-list div {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 5px;
+    min-width: 0;
+    font-size: 12px;
+  }
+  .plano-file-metadata-list dt {
+    color: var(--ui-text-muted);
+    font-weight: 600;
+  }
+  .plano-file-metadata-list dd {
+    overflow-wrap: anywhere;
+    margin: 0;
+    color: var(--ui-text);
+  }
+  .plano-open {
+    flex: 0 0 auto;
+    text-decoration: none;
+  }
+  .plano-frame-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 420px;
+    background: #e8edf1;
+  }
+  .plano-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 420px;
+    border: 0;
+    background: #e8edf1;
+  }
+  .plano-empty-preview {
+    display: grid;
+    min-height: 420px;
+    place-content: center;
+    padding: 24px;
+    color: var(--ui-text-muted);
+    text-align: center;
+  }
+  .plano-empty-preview strong {
+    margin-bottom: 6px;
+    color: #40515f;
+    font-size: 14px;
+  }
+  .plano-empty-results {
+    padding: 20px 14px;
+    color: var(--ui-text-muted);
+    font-size: 13px;
+  }
+  @media (max-width: 900px) {
+    .planos-list {
+      max-height: 52vh;
+    }
+  }
+  @media (max-width: 680px) {
+    .planos-heading {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .planos-filter-search,
+    .planos-filter {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .planos-filter-search input,
+    .planos-filter select {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .planos-list {
+      max-height: 36vh;
+    }
+    .planos-grid {
+      min-width: 720px;
+    }
+    .plano-frame-wrap,
+    .plano-frame,
+    .plano-empty-preview {
+      min-height: 55vh;
+    }
+    .plano-detail {
+      padding: 12px;
+    }
+    .plano-description {
+      padding: 10px 12px;
+    }
+  }
+</style>
+{% endblock %} {% block content %}
+<section class="planos-page" aria-labelledby="planos-title">
+  <div class="planos-heading">
+    <div>
+      <h1 id="planos-title">Planos de artículos</h1>
+      <p>Catálogo completo de PDFs con filtros, descripción y acceso a la vista previa.</p>
+    </div>
+  </div>
+
+  <div class="planos-searchbar" role="search">
+    <div class="planos-filter planos-filter-search">
+      <label for="planos-search">Buscar</label>
+      <input id="planos-search" type="search" autocomplete="off" placeholder="Número, archivo, artículo o descripción" />
+    </div>
+    <div class="planos-filter">
+      <label for="planos-revision">Revisión</label>
+      <select id="planos-revision">
+        <option value="">Todas las revisiones</option>
+        <option value="with">Con revisión</option>
+        <option value="without">Sin revisión</option>
+      </select>
+    </div>
+    <div class="planos-filter">
+      <label for="planos-asociacion">Asociación</label>
+      <select id="planos-asociacion">
+        <option value="">Todos</option>
+        <option value="linked">Con artículo</option>
+        <option value="unlinked">Sin artículo asociado</option>
+      </select>
+    </div>
+    <div class="planos-filter">
+      <label for="planos-articulo">Artículo</label>
+      <select id="planos-articulo" disabled>
+        <option value="">Todos los artículos</option>
+      </select>
+    </div>
+    <div class="planos-filter">
+      <label for="planos-mbom">Uso en producción</label>
+      <select id="planos-mbom">
+        <option value="">Todos</option>
+        <option value="used">Usado en MBOM activa</option>
+        <option value="unused">Sin uso en MBOM activa</option>
+      </select>
+    </div>
+    <button id="planos-width-reset" class="planos-width-reset" type="button" title="Restaurar los anchos originales de las columnas">
+      Restablecer anchos
+    </button>
+    <span id="planos-count" class="planos-count" aria-live="polite"></span>
+  </div>
+
+  <div class="planos-workspace">
+    <section class="planos-results" aria-label="Resultados de planos">
+      <div
+        id="planos-status"
+        class="planos-list-status"
+        role="status"
+        aria-live="polite"
+      >
+        Cargando planos...
+      </div>
+      <div id="planos-list" class="planos-list">
+        <table class="planos-grid">
+          <colgroup>
+            <col /><col /><col /><col /><col />
+            <col />
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Plano<button class="planos-column-resize" type="button" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Cambiar ancho de la columna Plano" aria-controls="planos-list" title="Arrastrá para cambiar el ancho; usa las flechas para ajustarlo"></button></th>
+              <th scope="col">Código artículo<button class="planos-column-resize" type="button" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Cambiar ancho de la columna Código artículo" aria-controls="planos-list" title="Arrastrá para cambiar el ancho; usa las flechas para ajustarlo"></button></th>
+              <th scope="col">Artículo<button class="planos-column-resize" type="button" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Cambiar ancho de la columna Artículo" aria-controls="planos-list" title="Arrastrá para cambiar el ancho; usa las flechas para ajustarlo"></button></th>
+              <th scope="col">Revisión<button class="planos-column-resize" type="button" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Cambiar ancho de la columna Revisión" aria-controls="planos-list" title="Arrastrá para cambiar el ancho; usa las flechas para ajustarlo"></button></th>
+              <th scope="col">Estado<button class="planos-column-resize" type="button" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Cambiar ancho de la columna Estado" aria-controls="planos-list" title="Arrastrá para cambiar el ancho; usa las flechas para ajustarlo"></button></th>
+              <th scope="col">Uso en MBOM<button class="planos-column-resize" type="button" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Cambiar ancho de la columna Uso en MBOM" aria-controls="planos-list" title="Arrastrá para cambiar el ancho; usa las flechas para ajustarlo"></button></th>
+            </tr>
+          </thead>
+          <tbody id="planos-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section
+      class="planos-preview"
+      aria-label="Detalle y vista previa del plano"
+    >
+      <div class="plano-detail">
+        <div class="plano-detail-heading">
+          <p class="plano-detail-eyebrow">DETALLE DEL ARTÍCULO</p>
+          <h2 id="plano-detail-title">Seleccioná un artículo</h2>
+          <p id="plano-detail-meta" class="plano-detail-meta">
+            El número de plano y archivo aparecerán aquí.
+          </p>
+        </div>
+        <a
+          id="plano-open"
+          class="btn-accion plano-open hidden"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Abrir PDF</a
+        >
+      </div>
+      <p id="plano-description" class="plano-description">
+        Al enfocar un artículo se mostrará la descripción registrada.
+      </p>
+      <section class="plano-file-metadata" aria-label="Metadatos del archivo PDF">
+        <h3>Metadatos del archivo</h3>
+        <p id="plano-metadata-status" class="plano-file-metadata-status" role="status" aria-live="polite">
+          Enfocá un plano para consultar sus metadatos.
+        </p>
+        <dl id="plano-metadata-list" class="plano-file-metadata-list hidden"></dl>
+      </section>
+      <div class="plano-frame-wrap">
+        <iframe
+          id="plano-frame"
+          class="plano-frame hidden"
+          title="Vista previa del plano PDF"
+        ></iframe>
+        <div id="plano-empty-preview" class="plano-empty-preview">
+          <strong>Vista previa</strong>
+          <span>Seleccioná un plano disponible para cargar el PDF.</span>
+        </div>
+      </div>
+    </section>
+  </div>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+  (() => {
+    const searchInput = document.getElementById("planos-search");
+    const revisionFilter = document.getElementById("planos-revision");
+    const associationFilter = document.getElementById("planos-asociacion");
+    const articleFilter = document.getElementById("planos-articulo");
+    const mbomFilter = document.getElementById("planos-mbom");
+    const plansTable = document.querySelector(".planos-grid");
+    const tableViewport = document.getElementById("planos-list");
+    const resizeHandles = plansTable.querySelectorAll(".planos-column-resize");
+    const resetWidthsButton = document.getElementById("planos-width-reset");
+    const rows = document.getElementById("planos-rows");
+    const status = document.getElementById("planos-status");
+    const count = document.getElementById("planos-count");
+    const detailTitle = document.getElementById("plano-detail-title");
+    const detailMeta = document.getElementById("plano-detail-meta");
+    const description = document.getElementById("plano-description");
+    const metadataStatus = document.getElementById("plano-metadata-status");
+    const metadataList = document.getElementById("plano-metadata-list");
+    const openLink = document.getElementById("plano-open");
+    const frame = document.getElementById("plano-frame");
+    const emptyPreview = document.getElementById("plano-empty-preview");
+    let debounceTimer;
+    let requestController;
+    let allPlans = [];
+    let selectedPlan = null;
+    let metadataRequestController;
+    let metadataRequestPlan = null;
+    const metadataCache = new Map();
+    const metadataLabels = {
+      titulo: "Título",
+      autor: "Autor",
+      asunto: "Asunto",
+      palabras_clave: "Palabras clave",
+      creador: "Aplicación creadora",
+      productor_pdf: "Generador PDF",
+      fecha_creacion: "Creación",
+      fecha_modificacion: "Modificación",
+    };
+    const defaultWidthRatios = [0.12, 0.17, 0.21, 0.12, 0.12, 0.26];
+    const minimumColumnWidths = [90, 115, 125, 95, 95, 140];
+    const widthStorageKey = "compras.planos-grid.column-widths.v2";
+    let columnWidths = null;
+    let activeResize = null;
+
+    function applyColumnWidths() {
+      if (!columnWidths) return;
+      const columns = plansTable.querySelectorAll("colgroup col");
+      const handles = plansTable.querySelectorAll(".planos-column-resize");
+      columnWidths.forEach((width, index) => {
+        columns[index].style.width = `${width}px`;
+        handles[index].setAttribute("aria-valuemin", String(minimumColumnWidths[index]));
+        handles[index].setAttribute("aria-valuenow", String(Math.round(width)));
+      });
+      plansTable.style.width = `${Math.max(tableViewport.clientWidth, columnWidths.reduce((sum, width) => sum + width, 0))}px`;
+    }
+
+    function initializeColumnWidths() {
+      let savedWidths = null;
+      try {
+        savedWidths = JSON.parse(localStorage.getItem(widthStorageKey));
+      } catch {
+        savedWidths = null;
+      }
+
+      if (Array.isArray(savedWidths) && savedWidths.length === defaultWidthRatios.length && savedWidths.every(Number.isFinite)) {
+        columnWidths = savedWidths.map((width, index) => Math.max(minimumColumnWidths[index], width));
+      } else {
+        const availableWidth = Math.max(tableViewport.clientWidth, minimumColumnWidths.reduce((sum, width) => sum + width, 0));
+        columnWidths = defaultWidthRatios.map((ratio) => Math.round(availableWidth * ratio));
+      }
+      applyColumnWidths();
+    }
+
+    function saveColumnWidths() {
+      try {
+        localStorage.setItem(widthStorageKey, JSON.stringify(columnWidths));
+      } catch {
+        // El ajuste sigue funcionando aunque el almacenamiento local no esté disponible.
+      }
+    }
+
+    function resizeColumn(index, delta) {
+      const neighborIndex = index < columnWidths.length - 1 ? index + 1 : index - 1;
+      const minimumDelta = minimumColumnWidths[index] - columnWidths[index];
+      const maximumDelta = columnWidths[neighborIndex] - minimumColumnWidths[neighborIndex];
+      const appliedDelta = Math.min(maximumDelta, Math.max(minimumDelta, delta));
+      if (!appliedDelta) return;
+      columnWidths[index] += appliedDelta;
+      columnWidths[neighborIndex] -= appliedDelta;
+      applyColumnWidths();
+      saveColumnWidths();
+    }
+
+    resizeHandles.forEach((handle, index) => {
+      handle.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        const neighborIndex = index < columnWidths.length - 1 ? index + 1 : index - 1;
+        activeResize = {
+          index,
+          neighborIndex,
+          startX: event.clientX,
+          startWidth: columnWidths[index],
+          neighborWidth: columnWidths[neighborIndex],
+        };
+        plansTable.classList.add("is-resizing");
+        handle.setPointerCapture(event.pointerId);
+      });
+
+      handle.addEventListener("pointermove", (event) => {
+        if (!activeResize || activeResize.index !== index) return;
+        const delta = event.clientX - activeResize.startX;
+        const minimumDelta = minimumColumnWidths[index] - activeResize.startWidth;
+        const maximumDelta = activeResize.neighborWidth - minimumColumnWidths[activeResize.neighborIndex];
+        const appliedDelta = Math.min(maximumDelta, Math.max(minimumDelta, delta));
+        columnWidths[index] = activeResize.startWidth + appliedDelta;
+        columnWidths[activeResize.neighborIndex] = activeResize.neighborWidth - appliedDelta;
+        applyColumnWidths();
+      });
+
+      const finishResize = () => {
+        if (!activeResize || activeResize.index !== index) return;
+        activeResize = null;
+        plansTable.classList.remove("is-resizing");
+        saveColumnWidths();
+      };
+      handle.addEventListener("pointerup", finishResize);
+      handle.addEventListener("pointercancel", finishResize);
+      handle.addEventListener("lostpointercapture", finishResize);
+      handle.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          resizeColumn(index, -10);
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          resizeColumn(index, 10);
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          resizeColumn(index, minimumColumnWidths[index] - columnWidths[index]);
+        }
+      });
+    });
+
+    resetWidthsButton.addEventListener("click", () => {
+      try {
+        localStorage.removeItem(widthStorageKey);
+      } catch {
+        // Los anchos predeterminados se restauran aunque el almacenamiento no esté disponible.
+      }
+      columnWidths = null;
+      initializeColumnWidths();
+    });
+
+    window.addEventListener("resize", applyColumnWidths);
+    initializeColumnWidths();
+
+    function applyFilters() {
+      const query = searchInput.value.trim().toLocaleLowerCase();
+      const revision = revisionFilter.value;
+      const association = associationFilter.value;
+      const articleId = articleFilter.value;
+      const mbomUsage = mbomFilter.value;
+      const filtered = allPlans.filter((item) => {
+        const matchesQuery = !query || [
+          item.numero_plano,
+          item.archivo,
+          item.articulos_texto,
+          item.articulos?.join(" "),
+          item.descripcion,
+        ].some((value) => String(value || "").toLocaleLowerCase().includes(query));
+        const matchesRevision = !revision || (revision === "with" ? item.tiene_revision : !item.tiene_revision);
+        const matchesAssociation = !association || (association === "linked" ? item.asociado : !item.asociado);
+        const matchesArticle = !articleId || item.producto_ids.includes(Number(articleId));
+        const matchesMbom = !mbomUsage || (mbomUsage === "used" ? item.usado_en_mbom : !item.usado_en_mbom);
+        return matchesQuery && matchesRevision && matchesAssociation && matchesArticle && matchesMbom;
+      });
+      renderResults(filtered);
+    }
+
+    function populateArticleFilter(items) {
+      const articles = new Map();
+      items.forEach((item) => {
+        item.asociaciones.forEach((association) => {
+          articles.set(association.producto_id, `${association.articulo_codigo} · ${association.articulo_nombre}`);
+        });
+      });
+      Array.from(articles.entries())
+        .sort((left, right) => left[1].localeCompare(right[1], "es"))
+        .forEach(([id, label]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = label;
+          articleFilter.append(option);
+        });
+      articleFilter.disabled = articles.size === 0;
+    }
+
+    function updateDetails(item) {
+      detailTitle.textContent = item.articulos_texto;
+      detailMeta.textContent = `Plano ${item.numero_plano} · ${item.archivo}`;
+      description.textContent = item.descripcion;
+    }
+
+    function renderMetadata(metadata) {
+      metadataList.replaceChildren();
+      Object.entries(metadataLabels).forEach(([key, label]) => {
+        const value = metadata[key];
+        if (!value) return;
+        const entry = document.createElement("div");
+        const term = document.createElement("dt");
+        const detail = document.createElement("dd");
+        term.textContent = label;
+        detail.textContent = value;
+        detail.title = value;
+        entry.append(term, detail);
+        metadataList.append(entry);
+      });
+      metadataList.classList.toggle("hidden", metadataList.childElementCount === 0);
+    }
+
+    async function loadMetadata(item) {
+      if (metadataRequestPlan === item.numero_plano) return;
+      metadataRequestController?.abort();
+      metadataRequestController = new AbortController();
+      metadataRequestPlan = item.numero_plano;
+      metadataList.replaceChildren();
+      metadataList.classList.add("hidden");
+      metadataStatus.textContent = `Leyendo metadatos de ${item.archivo}...`;
+
+      if (metadataCache.has(item.numero_plano)) {
+        const metadata = metadataCache.get(item.numero_plano);
+        renderMetadata(metadata);
+        metadataStatus.textContent = Object.keys(metadata).length
+          ? "Metadatos del archivo:"
+          : "Este PDF no contiene metadatos descriptivos.";
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/productos/planos/${encodeURIComponent(item.numero_plano)}/metadatos`,
+          { credentials: "same-origin", signal: metadataRequestController.signal },
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || `Error ${response.status}`);
+        if (metadataRequestPlan !== item.numero_plano) return;
+        const metadata = data.metadatos || {};
+        metadataCache.set(item.numero_plano, metadata);
+        renderMetadata(metadata);
+        metadataStatus.textContent = data.tiene_metadatos
+          ? "Metadatos del archivo:"
+          : "Este PDF no contiene metadatos descriptivos.";
+      } catch (error) {
+        if (error.name === "AbortError") return;
+        if (metadataRequestPlan !== item.numero_plano) return;
+        metadataStatus.textContent = `No se pudieron leer los metadatos: ${error.message}`;
+      }
+    }
+
+    function showEmptyPreview(title, message) {
+      frame.removeAttribute("src");
+      frame.classList.add("hidden");
+      emptyPreview.classList.remove("hidden");
+      emptyPreview.querySelector("strong").textContent = title;
+      emptyPreview.querySelector("span").textContent = message;
+      openLink.removeAttribute("href");
+      openLink.classList.add("hidden");
+    }
+
+    function focusItem(item) {
+      updateDetails(item);
+      loadMetadata(item);
+      if (selectedPlan === item.numero_plano) return;
+      showEmptyPreview(
+        "Plano seleccionado",
+        "Usá el botón del número para cargar la vista previa.",
+      );
+    }
+
+    function selectItem(item, row) {
+      selectedPlan = item.numero_plano;
+      rows.querySelectorAll("tr").forEach((result) => result.classList.remove("is-selected"));
+      row.classList.add("is-selected");
+      updateDetails(item);
+
+      frame.src = item.pdf_url;
+      frame.classList.remove("hidden");
+      emptyPreview.classList.add("hidden");
+      openLink.href = item.pdf_url;
+      openLink.classList.remove("hidden");
+    }
+
+    function renderResults(items) {
+      rows.replaceChildren();
+      count.textContent = `${items.length} ${items.length === 1 ? "resultado" : "resultados"}`;
+      if (!items.length) {
+        status.textContent = "";
+        const emptyRow = document.createElement("tr");
+        const emptyCell = document.createElement("td");
+        emptyCell.colSpan = 6;
+        emptyCell.className = "plano-empty-results";
+        emptyCell.textContent = "No hay planos que coincidan con los filtros.";
+        emptyRow.append(emptyCell);
+        rows.append(emptyRow);
+        selectedPlan = null;
+        detailTitle.textContent = "Sin resultados";
+        detailMeta.textContent = "Modificá los filtros para buscar otros planos.";
+        description.textContent =
+          "No se encontró una descripción para mostrar.";
+        showEmptyPreview(
+          "Sin resultados",
+          "Modificá la búsqueda para encontrar otros planos.",
+        );
+        return;
+      }
+
+      status.textContent = "";
+      items.forEach((item) => {
+        const row = document.createElement("tr");
+        row.tabIndex = 0;
+        row.setAttribute("aria-label", `Plano ${item.numero_plano}, artículo ${item.articulos_texto}`);
+        const numberCell = document.createElement("td");
+        const openPlanLink = document.createElement("a");
+        openPlanLink.className = "planos-grid-number";
+        openPlanLink.href = item.pdf_url;
+        openPlanLink.target = "_blank";
+        openPlanLink.rel = "noopener noreferrer";
+        openPlanLink.textContent = item.numero_plano;
+        openPlanLink.setAttribute("aria-label", `Abrir PDF del plano ${item.numero_plano} en una pestaña nueva`);
+        openPlanLink.title = `Abrir ${item.archivo}`;
+        openPlanLink.addEventListener("focus", () => focusItem(item));
+        numberCell.append(openPlanLink);
+
+        const articleCell = document.createElement("td");
+        articleCell.textContent = item.codigos_articulo?.join(", ") || "—";
+        if (!item.asociado) articleCell.className = "planos-cell-muted";
+        const articleNameCell = document.createElement("td");
+        articleNameCell.textContent = item.nombres_articulo?.join(", ") || "Sin artículo asociado";
+        articleNameCell.title = articleNameCell.textContent;
+        if (!item.asociado) articleNameCell.className = "planos-cell-muted";
+        const revisionCell = document.createElement("td");
+        revisionCell.textContent = item.revision;
+        const statusCell = document.createElement("td");
+        statusCell.className = item.asociado ? "planos-status-linked" : "planos-status-unlinked";
+        statusCell.textContent = item.asociado ? "Asociado" : "Sin asociación";
+        const mbomCell = document.createElement("td");
+        if (item.usado_en_mbom) {
+          const wipCodes = item.asociaciones
+            .filter((association) => association.tipo_producto === "WIP")
+            .map((association) => association.articulo_codigo);
+          mbomCell.textContent = `${wipCodes.join(", ")} → ${item.mbom_padres_texto}`;
+          mbomCell.title = mbomCell.textContent;
+          mbomCell.className = "planos-status-linked";
+        } else if (item.es_semielaborado) {
+          mbomCell.textContent = "WIP · Sin MBOM activa";
+          mbomCell.className = "planos-status-unlinked";
+        } else {
+          mbomCell.textContent = "—";
+          mbomCell.className = "planos-cell-muted";
+        }
+
+        row.append(numberCell, articleCell, articleNameCell, revisionCell, statusCell, mbomCell);
+        row.addEventListener("focus", () => focusItem(item));
+        row.addEventListener("mouseenter", () => focusItem(item));
+        row.addEventListener("click", (event) => {
+          if (!event.target.closest("a, button")) selectItem(item, row);
+        });
+        rows.append(row);
+      });
+    }
+
+    async function loadResults() {
+      requestController?.abort();
+      requestController = new AbortController();
+      status.textContent = "Buscando...";
+
+      try {
+        const response = await fetch("/api/productos/planos", {
+          credentials: "same-origin",
+          signal: requestController.signal,
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || `Error ${response.status}`);
+        }
+        allPlans = await response.json();
+        populateArticleFilter(allPlans);
+        applyFilters();
+      } catch (error) {
+        if (error.name === "AbortError") return;
+        rows.replaceChildren();
+        count.textContent = "";
+        status.textContent = `No se pudo cargar el catálogo: ${error.message}`;
+      }
+    }
+
+    searchInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(
+        applyFilters,
+        220,
+      );
+    });
+
+    revisionFilter.addEventListener("change", applyFilters);
+    associationFilter.addEventListener("change", applyFilters);
+    articleFilter.addEventListener("change", applyFilters);
+    mbomFilter.addEventListener("change", applyFilters);
+    loadResults();
+  })();
+</script>
+{% endblock %}

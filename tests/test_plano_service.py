@@ -1,7 +1,8 @@
 import pytest
 
 from app.api import recepcion_api
-from app.services.plano_service import obtener_plano_pdf
+from app.services.plano_service import obtener_metadatos_plano, obtener_plano_pdf
+from pypdf import PdfWriter
 
 
 def test_obtener_plano_pdf_selecciona_la_revision_mas_alta(tmp_path):
@@ -22,6 +23,44 @@ def test_obtener_plano_pdf_rechaza_codigo_invalido(tmp_path, numero_plano):
 def test_obtener_plano_pdf_informa_si_no_existe(tmp_path):
     with pytest.raises(FileNotFoundError):
         obtener_plano_pdf("1234", str(tmp_path))
+
+
+def test_obtener_metadatos_plano_lee_campos_pdf(tmp_path):
+    path = tmp_path / "1234-A.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    writer.add_metadata(
+        {
+            "/Title": "Plano de prueba",
+            "/Author": "Ingeniería",
+            "/Subject": "Conjunto soporte",
+            "/Keywords": "soporte, prueba",
+        }
+    )
+    with path.open("wb") as pdf_file:
+        writer.write(pdf_file)
+
+    metadata = obtener_metadatos_plano("1234-A", str(tmp_path))
+
+    assert metadata == {
+        "titulo": "Plano de prueba",
+        "autor": "Ingeniería",
+        "asunto": "Conjunto soporte",
+        "palabras_clave": "soporte, prueba",
+        "productor_pdf": "pypdf",
+    }
+
+
+def test_obtener_metadatos_plano_sin_metadatos_devuelve_vacio(tmp_path):
+    path = tmp_path / "5678.pdf"
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    with path.open("wb") as pdf_file:
+        writer.write(pdf_file)
+
+    assert obtener_metadatos_plano("5678", str(tmp_path)) == {
+        "productor_pdf": "pypdf",
+    }
 
 
 def test_abrir_plano_pdf_responde_inline(monkeypatch, tmp_path):
