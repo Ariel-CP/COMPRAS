@@ -5,6 +5,21 @@ from sqlalchemy.orm import Session
 from app.models.rubro import Rubro
 
 
+def _fix_mojibake_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    text_value = value.strip()
+    if not text_value:
+        return None
+    if not any(marker in text_value for marker in ("Ã", "Â", "â")):
+        return text_value
+    try:
+        repaired = text_value.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text_value
+    return repaired.strip() or text_value
+
+
 def listar_rubros(db: Session, only_active: bool = False) -> List[dict]:
     query = db.query(Rubro)
     if only_active:
@@ -13,7 +28,7 @@ def listar_rubros(db: Session, only_active: bool = False) -> List[dict]:
     return [
         {
             "id": r.id,
-            "nombre": r.nombre,
+            "nombre": _fix_mojibake_text(r.nombre),
             "activo": r.activo,
             "creado_en": r.creado_en,
             "actualizado_en": r.actualizado_en,
@@ -23,7 +38,7 @@ def listar_rubros(db: Session, only_active: bool = False) -> List[dict]:
 
 
 def _normalize_nombre(nombre: str) -> str:
-    return nombre.strip()
+    return _fix_mojibake_text(nombre) or ""
 
 
 def crear_rubro(db: Session, nombre: str) -> Rubro:
@@ -38,7 +53,7 @@ def crear_rubro(db: Session, nombre: str) -> Rubro:
 def obtener_rubro_por_id(db: Session, rubro_id: int) -> Optional[dict]:
     rubro = db.query(Rubro).filter(Rubro.id == rubro_id).first()
     if rubro:
-        return {"id": rubro.id, "nombre": rubro.nombre}
+        return {"id": rubro.id, "nombre": _fix_mojibake_text(rubro.nombre)}
     return None
 
 

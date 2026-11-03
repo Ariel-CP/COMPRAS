@@ -8,7 +8,7 @@ class ProveedorBase(BaseModel):
     codigo: str = Field(..., max_length=64)
     nombre: str = Field(..., max_length=160)
     contacto_nombre: Optional[str] = Field(default=None, max_length=128)
-    email: Optional[str] = Field(default=None, max_length=128)
+    email: Optional[str] = Field(default=None, max_length=512)
     telefono: Optional[str] = Field(default=None, max_length=64)
     cuit: Optional[str] = Field(default=None, max_length=20, description="Formato: XX-XXXXXXXX-X")
     direccion: Optional[str] = Field(default=None, max_length=255)
@@ -26,7 +26,7 @@ class ProveedorUpdate(BaseModel):
     codigo: Optional[str] = Field(default=None, max_length=64)
     nombre: Optional[str] = Field(default=None, max_length=160)
     contacto_nombre: Optional[str] = Field(default=None, max_length=128)
-    email: Optional[str] = Field(default=None, max_length=128)
+    email: Optional[str] = Field(default=None, max_length=512)
     telefono: Optional[str] = Field(default=None, max_length=64)
     notas: Optional[str] = Field(default=None, max_length=255)
     activo: Optional[bool] = None

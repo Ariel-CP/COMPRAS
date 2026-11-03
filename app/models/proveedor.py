@@ -10,7 +10,7 @@ class Proveedor(Base):
     codigo = Column(String(64), unique=True, nullable=False)
     nombre = Column(String(160), nullable=False)
     contacto_nombre = Column(String(128), nullable=True)
-    email = Column(String(128), nullable=True)
+    email = Column(String(512), nullable=True)
     telefono = Column(String(64), nullable=True)
     cuit = Column(String(20), nullable=True)
     direccion = Column(String(255), nullable=True)

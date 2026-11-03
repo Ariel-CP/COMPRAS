@@ -1,5 +1,7 @@
 import csv
+import hashlib
 import io
+import json
 import logging
 import re
 from datetime import date, datetime
@@ -13,6 +15,21 @@ from sqlalchemy.orm import Session
 from ..schemas.precio import PrecioImportResult
 
 
+def _fix_mojibake_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    if not any(marker in text_value for marker in ("Ã", "Â", "â")):
+        return text_value
+    try:
+        repaired = text_value.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text_value
+    return repaired.strip() or text_value
+
+
 def _row_to_precio(row: Any) -> Dict[str, Any]:
     return {
         "id": row.id,
@@ -20,16 +37,175 @@ def _row_to_precio(row: Any) -> Dict[str, Any]:
         "producto_codigo": row.producto_codigo,
         "producto_nombre": row.producto_nombre,
         "proveedor_codigo": row.proveedor_codigo,
-        "proveedor_nombre": row.proveedor_nombre,
+        "proveedor_nombre": _fix_mojibake_text(row.proveedor_nombre),
         "fecha_precio": (
             row.fecha_precio.isoformat() if row.fecha_precio else None
         ),
         "precio_unitario": float(row.precio_unitario),
         "moneda": row.moneda,
         "origen": row.origen,
-        "referencia_doc": row.referencia_doc,
-        "notas": row.notas,
+        "referencia_doc": _fix_mojibake_text(row.referencia_doc),
+        "notas": _fix_mojibake_text(row.notas),
     }
+
+
+def _safe_user_id(current_user_id: Optional[int]) -> Optional[int]:
+    if current_user_id is None:
+        return None
+    try:
+        value = int(current_user_id)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _json_dump(value: Dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _build_precio_snapshot(
+    *,
+    precio_unitario: float,
+    proveedor_nombre: Optional[str],
+    origen: str,
+    referencia_doc: Optional[str],
+    notas: Optional[str],
+) -> Dict[str, Any]:
+    return {
+        "precio_unitario": float(precio_unitario),
+        "proveedor_nombre": proveedor_nombre,
+        "origen": origen,
+        "referencia_doc": referencia_doc,
+        "notas": notas,
+    }
+
+
+def _crear_import_lote(
+    db: Session,
+    *,
+    archivo_nombre: str,
+    archivo_hash: Optional[str],
+    formato: str,
+    usuario_id: Optional[int],
+    total_registros: int,
+) -> int:
+    db.execute(
+        text(
+            """
+            INSERT INTO precio_compra_import_lote
+            (archivo_nombre, archivo_hash, formato, usuario_id, total_registros, estado)
+            VALUES (:archivo_nombre, :archivo_hash, :formato, :usuario_id, :total_registros, 'ERROR')
+            """
+        ),
+        {
+            "archivo_nombre": archivo_nombre or None,
+            "archivo_hash": archivo_hash,
+            "formato": formato,
+            "usuario_id": usuario_id,
+            "total_registros": total_registros,
+        },
+    )
+    return int(db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar() or 0)
+
+
+def _cerrar_import_lote(
+    db: Session,
+    *,
+    lote_id: int,
+    insertados: int,
+    actualizados: int,
+    rechazados: int,
+    estado: str,
+    mensaje_error: Optional[str] = None,
+) -> None:
+    db.execute(
+        text(
+            """
+            UPDATE precio_compra_import_lote
+            SET fecha_fin = CURRENT_TIMESTAMP,
+                insertados = :insertados,
+                actualizados = :actualizados,
+                rechazados = :rechazados,
+                estado = :estado,
+                mensaje_error = :mensaje_error
+            WHERE id = :id
+            """
+        ),
+        {
+            "id": lote_id,
+            "insertados": insertados,
+            "actualizados": actualizados,
+            "rechazados": rechazados,
+            "estado": estado,
+            "mensaje_error": mensaje_error,
+        },
+    )
+
+
+def _registrar_auditoria_precio(
+    db: Session,
+    *,
+    precio_compra_hist_id: int,
+    import_lote_id: Optional[int],
+    usuario_id: Optional[int],
+    operacion: str,
+    origen_cambio: str,
+    producto_id: int,
+    proveedor_codigo: str,
+    fecha_precio: date,
+    moneda: str,
+    valores_nuevos: Dict[str, Any],
+    valores_anteriores: Optional[Dict[str, Any]] = None,
+) -> None:
+    db.execute(
+        text(
+            """
+            INSERT INTO precio_compra_hist_audit
+            (
+                precio_compra_hist_id,
+                import_lote_id,
+                usuario_id,
+                operacion,
+                origen_cambio,
+                producto_id,
+                proveedor_codigo,
+                fecha_precio,
+                moneda,
+                valores_anteriores,
+                valores_nuevos
+            ) VALUES (
+                :precio_compra_hist_id,
+                :import_lote_id,
+                :usuario_id,
+                :operacion,
+                :origen_cambio,
+                :producto_id,
+                :proveedor_codigo,
+                :fecha_precio,
+                :moneda,
+                :valores_anteriores,
+                :valores_nuevos
+            )
+            """
+        ),
+        {
+            "precio_compra_hist_id": precio_compra_hist_id,
+            "import_lote_id": import_lote_id,
+            "usuario_id": usuario_id,
+            "operacion": operacion,
+            "origen_cambio": origen_cambio,
+            "producto_id": producto_id,
+            "proveedor_codigo": proveedor_codigo,
+            "fecha_precio": fecha_precio,
+            "moneda": moneda,
+            "valores_anteriores": (
+                _json_dump(valores_anteriores)
+                if valores_anteriores is not None
+                else None
+            ),
+            "valores_nuevos": _json_dump(valores_nuevos),
+        },
+    )
 
 
 def listar_precios_compra(
@@ -100,6 +276,7 @@ def crear_precio_compra_manual(
     moneda: str,
     referencia_doc: Optional[str],
     notas: Optional[str],
+    current_user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     producto = db.execute(
         text("SELECT id, codigo, nombre FROM producto WHERE id = :id LIMIT 1"),
@@ -124,13 +301,18 @@ def crear_precio_compra_manual(
     if not moneda_value:
         raise ValueError("Moneda invalida")
 
-    proveedor_nombre_value = (proveedor_nombre or "").strip() or proveedor_codigo_value
-    referencia_value = (referencia_doc or "").strip() or None
-    notas_value = (notas or "").strip() or None
+    proveedor_nombre_value = (
+        _fix_mojibake_text(proveedor_nombre) or proveedor_codigo_value
+    )
+    referencia_value = _fix_mojibake_text(referencia_doc)
+    notas_value = _fix_mojibake_text(notas)
+
+    usuario_id = _safe_user_id(current_user_id)
 
     existing = db.execute(
         text(
-            "SELECT id FROM precio_compra_hist "
+            "SELECT id, precio_unitario, proveedor_nombre, origen, referencia_doc, notas "
+            "FROM precio_compra_hist "
             "WHERE producto_id=:pid AND proveedor_codigo=:prov "
             "AND fecha_precio=:fecha AND moneda=:moneda"
         ),
@@ -143,6 +325,20 @@ def crear_precio_compra_manual(
     ).first()
 
     if existing:
+        before_snapshot = _build_precio_snapshot(
+            precio_unitario=float(existing[1]),
+            proveedor_nombre=existing[2],
+            origen=existing[3],
+            referencia_doc=existing[4],
+            notas=existing[5],
+        )
+        after_snapshot = _build_precio_snapshot(
+            precio_unitario=precio_value,
+            proveedor_nombre=proveedor_nombre_value,
+            origen="MANUAL",
+            referencia_doc=referencia_value,
+            notas=notas_value,
+        )
         db.execute(
             text(
                 "UPDATE precio_compra_hist SET "
@@ -159,6 +355,20 @@ def crear_precio_compra_manual(
             },
         )
         target_id = int(existing[0])
+        _registrar_auditoria_precio(
+            db,
+            precio_compra_hist_id=target_id,
+            import_lote_id=None,
+            usuario_id=usuario_id,
+            operacion="UPDATE",
+            origen_cambio="MANUAL",
+            producto_id=producto_id,
+            proveedor_codigo=proveedor_codigo_value,
+            fecha_precio=fecha_precio,
+            moneda=moneda_value,
+            valores_anteriores=before_snapshot,
+            valores_nuevos=after_snapshot,
+        )
     else:
         db.execute(
             text(
@@ -179,6 +389,25 @@ def crear_precio_compra_manual(
             },
         )
         target_id = int(db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar() or 0)
+        _registrar_auditoria_precio(
+            db,
+            precio_compra_hist_id=target_id,
+            import_lote_id=None,
+            usuario_id=usuario_id,
+            operacion="INSERT",
+            origen_cambio="MANUAL",
+            producto_id=producto_id,
+            proveedor_codigo=proveedor_codigo_value,
+            fecha_precio=fecha_precio,
+            moneda=moneda_value,
+            valores_nuevos=_build_precio_snapshot(
+                precio_unitario=precio_value,
+                proveedor_nombre=proveedor_nombre_value,
+                origen="MANUAL",
+                referencia_doc=referencia_value,
+                notas=notas_value,
+            ),
+        )
 
     db.commit()
 
@@ -313,7 +542,7 @@ def _normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
             continue
         norm_key = str(key).strip().lower()
         if isinstance(value, str):
-            normalized[norm_key] = value.strip()
+            normalized[norm_key] = _fix_mojibake_text(value)
         else:
             normalized[norm_key] = value
     return normalized
@@ -418,7 +647,9 @@ def generar_template_precios() -> io.BytesIO:
 
 
 def importar_precios_desde_archivo(
-    db: Session, archivo: UploadFile
+    db: Session,
+    archivo: UploadFile,
+    current_user_id: Optional[int] = None,
 ) -> PrecioImportResult:
     filename = archivo.filename or ""
     content = archivo.file.read()
@@ -459,6 +690,20 @@ def importar_precios_desde_archivo(
     insertados = actualizados = rechazados = 0
     errores: List[str] = []
     cache: Dict[str, Optional[int]] = {}
+    lote_id = 0
+    usuario_id = _safe_user_id(current_user_id)
+
+    formato = "XLSX" if filename.lower().endswith(".xlsx") else "CSV"
+    archivo_hash = hashlib.sha256(content).hexdigest()
+    lote_id = _crear_import_lote(
+        db,
+        archivo_nombre=filename,
+        archivo_hash=archivo_hash,
+        formato=formato,
+        usuario_id=usuario_id,
+        total_registros=len(rows),
+    )
+    db.commit()
 
     try:
         for idx, raw_row in enumerate(rows, start=2):
@@ -511,15 +756,16 @@ def importar_precios_desde_archivo(
                 errores.append(f"Fila {idx}: origen inválido ({origen})")
                 continue
 
-            prov_nombre = (
+            prov_nombre = _fix_mojibake_text(
                 row.get("proveedor_nombre") or DEFAULT_PROVEEDOR_NOMBRE
-            )
-            referencia = row.get("referencia_doc") or None
-            notas = row.get("notas") or None
+            ) or DEFAULT_PROVEEDOR_NOMBRE
+            referencia = _fix_mojibake_text(row.get("referencia_doc"))
+            notas = _fix_mojibake_text(row.get("notas"))
 
             existing = db.execute(
                 text(
-                    "SELECT id FROM precio_compra_hist "
+                    "SELECT id, precio_unitario, proveedor_nombre, origen, referencia_doc, notas "
+                    "FROM precio_compra_hist "
                     "WHERE producto_id=:pid AND proveedor_codigo=:prov "
                     "AND fecha_precio=:fecha AND moneda=:moneda"
                 ),
@@ -532,6 +778,20 @@ def importar_precios_desde_archivo(
             ).first()
 
             if existing:
+                before_snapshot = _build_precio_snapshot(
+                    precio_unitario=float(existing[1]),
+                    proveedor_nombre=existing[2],
+                    origen=existing[3],
+                    referencia_doc=existing[4],
+                    notas=existing[5],
+                )
+                after_snapshot = _build_precio_snapshot(
+                    precio_unitario=precio,
+                    proveedor_nombre=prov_nombre,
+                    origen=origen,
+                    referencia_doc=referencia,
+                    notas=notas,
+                )
                 db.execute(
                     text(
                         "UPDATE precio_compra_hist SET "
@@ -547,6 +807,20 @@ def importar_precios_desde_archivo(
                         "notas": notas,
                         "id": existing[0],
                     },
+                )
+                _registrar_auditoria_precio(
+                    db,
+                    precio_compra_hist_id=int(existing[0]),
+                    import_lote_id=lote_id,
+                    usuario_id=usuario_id,
+                    operacion="UPDATE",
+                    origen_cambio="IMPORT",
+                    producto_id=int(prod_id),
+                    proveedor_codigo=prov_codigo,
+                    fecha_precio=fecha_precio,
+                    moneda=moneda,
+                    valores_anteriores=before_snapshot,
+                    valores_nuevos=after_snapshot,
                 )
                 actualizados += 1
             else:
@@ -571,23 +845,412 @@ def importar_precios_desde_archivo(
                         "notas": notas,
                     },
                 )
+                inserted_id = int(
+                    db.execute(text("SELECT LAST_INSERT_ID() AS id")).scalar() or 0
+                )
+                _registrar_auditoria_precio(
+                    db,
+                    precio_compra_hist_id=inserted_id,
+                    import_lote_id=lote_id,
+                    usuario_id=usuario_id,
+                    operacion="INSERT",
+                    origen_cambio="IMPORT",
+                    producto_id=int(prod_id),
+                    proveedor_codigo=prov_codigo,
+                    fecha_precio=fecha_precio,
+                    moneda=moneda,
+                    valores_nuevos=_build_precio_snapshot(
+                        precio_unitario=precio,
+                        proveedor_nombre=prov_nombre,
+                        origen=origen,
+                        referencia_doc=referencia,
+                        notas=notas,
+                    ),
+                )
                 insertados += 1
 
+        estado = "EXITOSA" if rechazados == 0 else "PARCIAL"
+        _cerrar_import_lote(
+            db,
+            lote_id=lote_id,
+            insertados=insertados,
+            actualizados=actualizados,
+            rechazados=rechazados,
+            estado=estado,
+            mensaje_error=("\n".join(errores[:20]) if errores else None),
+        )
         db.commit()
     except HTTPException:
         db.rollback()
+        if lote_id:
+            try:
+                _cerrar_import_lote(
+                    db,
+                    lote_id=lote_id,
+                    insertados=insertados,
+                    actualizados=actualizados,
+                    rechazados=rechazados,
+                    estado="ERROR",
+                    mensaje_error="Error HTTP durante importación",
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
         raise
     except Exception as exc:
         db.rollback()
         logging.exception("Error importando precios")
+        if lote_id:
+            try:
+                _cerrar_import_lote(
+                    db,
+                    lote_id=lote_id,
+                    insertados=insertados,
+                    actualizados=actualizados,
+                    rechazados=rechazados,
+                    estado="ERROR",
+                    mensaje_error=str(exc),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Error importando precios: {exc}",
         ) from exc
 
     return PrecioImportResult(
+        importacion_id=lote_id,
         insertados=insertados,
         actualizados=actualizados,
         rechazados=rechazados,
         errores=errores,
     )
+
+
+def listar_importaciones_precios(
+    db: Session,
+    *,
+    desde: Optional[date] = None,
+    hasta: Optional[date] = None,
+    estado: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
+    where = ["1=1"]
+    params: Dict[str, Any] = {"limit": limit, "offset": offset}
+
+    if desde is not None:
+        where.append("DATE(l.fecha_inicio) >= :desde")
+        params["desde"] = desde
+    if hasta is not None:
+        where.append("DATE(l.fecha_inicio) <= :hasta")
+        params["hasta"] = hasta
+    if estado:
+        where.append("l.estado = :estado")
+        params["estado"] = estado.upper()
+
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                l.id,
+                l.archivo_nombre,
+                l.archivo_hash,
+                l.formato,
+                l.fecha_inicio,
+                l.fecha_fin,
+                l.total_registros,
+                l.insertados,
+                l.actualizados,
+                l.rechazados,
+                l.estado,
+                l.mensaje_error,
+                l.usuario_id,
+                u.nombre AS usuario_nombre,
+                u.email AS usuario_email
+            FROM precio_compra_import_lote l
+            LEFT JOIN usuario u ON u.id = l.usuario_id
+            WHERE """
+            + " AND ".join(where)
+            + " ORDER BY l.fecha_inicio DESC, l.id DESC LIMIT :limit OFFSET :offset"
+        ),
+        params,
+    ).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+def _query_historial_variaciones(
+    db: Session,
+    *,
+    producto_id: Optional[int],
+    proveedor: Optional[str],
+    desde: Optional[date],
+    hasta: Optional[date],
+) -> List[Dict[str, Any]]:
+    where = ["1=1"]
+    params: Dict[str, Any] = {}
+
+    if producto_id is not None:
+        where.append("h.producto_id = :producto_id")
+        params["producto_id"] = producto_id
+    if proveedor:
+        where.append(
+            "(h.proveedor_codigo LIKE :proveedor OR h.proveedor_nombre LIKE :proveedor)"
+        )
+        params["proveedor"] = f"%{proveedor}%"
+    if desde is not None:
+        where.append("h.fecha_precio >= :desde")
+        params["desde"] = desde
+    if hasta is not None:
+        where.append("h.fecha_precio <= :hasta")
+        params["hasta"] = hasta
+
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                h.id,
+                h.producto_id,
+                p.codigo AS producto_codigo,
+                p.nombre AS producto_nombre,
+                h.proveedor_codigo,
+                h.proveedor_nombre,
+                h.fecha_precio,
+                h.precio_unitario,
+                h.moneda,
+                h.origen
+            FROM precio_compra_hist h
+            JOIN producto p ON p.id = h.producto_id
+            WHERE """
+            + " AND ".join(where)
+            + " ORDER BY h.producto_id, h.proveedor_codigo, h.moneda, h.fecha_precio, h.id"
+        ),
+        params,
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def _variacion_payload(
+    *,
+    base_row: Dict[str, Any],
+    comp_row: Dict[str, Any],
+    modo: str,
+) -> Dict[str, Any]:
+    precio_base = float(base_row["precio_unitario"])
+    precio_nuevo = float(comp_row["precio_unitario"])
+    variacion_abs = precio_nuevo - precio_base
+    variacion_pct = None
+    if precio_base != 0:
+        variacion_pct = (variacion_abs / precio_base) * 100
+
+    return {
+        "modo": modo,
+        "producto_id": int(comp_row["producto_id"]),
+        "producto_codigo": comp_row["producto_codigo"],
+        "producto_nombre": comp_row["producto_nombre"],
+        "proveedor_codigo": comp_row["proveedor_codigo"],
+        "proveedor_nombre": comp_row["proveedor_nombre"],
+        "moneda": comp_row["moneda"],
+        "fecha_base": base_row["fecha_precio"],
+        "fecha_nueva": comp_row["fecha_precio"],
+        "precio_base": precio_base,
+        "precio_nuevo": precio_nuevo,
+        "variacion_abs": variacion_abs,
+        "variacion_pct": variacion_pct,
+    }
+
+
+def listar_variaciones_precios(
+    db: Session,
+    *,
+    modo: str = "ultima_vs_anterior",
+    producto_id: Optional[int] = None,
+    proveedor: Optional[str] = None,
+    desde: Optional[date] = None,
+    hasta: Optional[date] = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
+    modo_normalizado = (modo or "ultima_vs_anterior").lower().strip()
+    if modo_normalizado not in {"ultima_vs_anterior", "mensual", "entre_fechas"}:
+        raise ValueError(
+            "Modo inválido. Use: ultima_vs_anterior, mensual o entre_fechas"
+        )
+    if modo_normalizado == "entre_fechas" and (desde is None or hasta is None):
+        raise ValueError("El modo entre_fechas requiere completar desde y hasta")
+
+    rows = _query_historial_variaciones(
+        db,
+        producto_id=producto_id,
+        proveedor=proveedor,
+        desde=desde,
+        hasta=hasta,
+    )
+
+    grouped: Dict[tuple, List[Dict[str, Any]]] = {}
+    for row in rows:
+        key = (row["producto_id"], row["proveedor_codigo"], row["moneda"])
+        grouped.setdefault(key, []).append(row)
+
+    variaciones: List[Dict[str, Any]] = []
+
+    if modo_normalizado == "ultima_vs_anterior":
+        for values in grouped.values():
+            if len(values) < 2:
+                continue
+            base_row = values[-2]
+            comp_row = values[-1]
+            variaciones.append(
+                _variacion_payload(
+                    base_row=base_row,
+                    comp_row=comp_row,
+                    modo=modo_normalizado,
+                )
+            )
+    elif modo_normalizado == "mensual":
+        for values in grouped.values():
+            monthly_latest: Dict[tuple, Dict[str, Any]] = {}
+            for row in values:
+                month_key = (row["fecha_precio"].year, row["fecha_precio"].month)
+                prev = monthly_latest.get(month_key)
+                if prev is None or row["fecha_precio"] > prev["fecha_precio"] or (
+                    row["fecha_precio"] == prev["fecha_precio"]
+                    and int(row["id"]) > int(prev["id"])
+                ):
+                    monthly_latest[month_key] = row
+
+            ordered_months = sorted(monthly_latest.keys())
+            for index in range(1, len(ordered_months)):
+                base_row = monthly_latest[ordered_months[index - 1]]
+                comp_row = monthly_latest[ordered_months[index]]
+                variaciones.append(
+                    _variacion_payload(
+                        base_row=base_row,
+                        comp_row=comp_row,
+                        modo=modo_normalizado,
+                    )
+                )
+    else:
+        for values in grouped.values():
+            rows_by_date: Dict[date, Dict[str, Any]] = {}
+            for row in values:
+                current = rows_by_date.get(row["fecha_precio"])
+                if current is None or int(row["id"]) > int(current["id"]):
+                    rows_by_date[row["fecha_precio"]] = row
+
+            base_row = rows_by_date.get(desde)
+            comp_row = rows_by_date.get(hasta)
+            if base_row is None or comp_row is None:
+                continue
+            variaciones.append(
+                _variacion_payload(
+                    base_row=base_row,
+                    comp_row=comp_row,
+                    modo=modo_normalizado,
+                )
+            )
+
+    variaciones.sort(
+        key=lambda item: (
+            item["fecha_nueva"],
+            abs(item["variacion_abs"]),
+            item["producto_codigo"],
+            item["proveedor_codigo"],
+        ),
+        reverse=True,
+    )
+    return variaciones[offset : offset + limit]
+
+
+def exportar_variaciones_csv(rows: List[Dict[str, Any]]) -> io.BytesIO:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "modo",
+            "producto_id",
+            "producto_codigo",
+            "producto_nombre",
+            "proveedor_codigo",
+            "proveedor_nombre",
+            "moneda",
+            "fecha_base",
+            "fecha_nueva",
+            "precio_base",
+            "precio_nuevo",
+            "variacion_abs",
+            "variacion_pct",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row["modo"],
+                row["producto_id"],
+                row["producto_codigo"],
+                row["producto_nombre"],
+                row["proveedor_codigo"],
+                row.get("proveedor_nombre") or "",
+                row["moneda"],
+                row["fecha_base"],
+                row["fecha_nueva"],
+                row["precio_base"],
+                row["precio_nuevo"],
+                row["variacion_abs"],
+                row["variacion_pct"],
+            ]
+        )
+    data = io.BytesIO()
+    data.write(output.getvalue().encode("utf-8-sig"))
+    data.seek(0)
+    return data
+
+
+def exportar_variaciones_xlsx(rows: List[Dict[str, Any]]) -> io.BytesIO:
+    wb = Workbook()
+    ws = wb.active
+    if ws is None:
+        raise RuntimeError("No se pudo crear la hoja activa")
+    ws.title = "variaciones"
+    ws.append(
+        [
+            "modo",
+            "producto_id",
+            "producto_codigo",
+            "producto_nombre",
+            "proveedor_codigo",
+            "proveedor_nombre",
+            "moneda",
+            "fecha_base",
+            "fecha_nueva",
+            "precio_base",
+            "precio_nuevo",
+            "variacion_abs",
+            "variacion_pct",
+        ]
+    )
+    for row in rows:
+        ws.append(
+            [
+                row["modo"],
+                row["producto_id"],
+                row["producto_codigo"],
+                row["producto_nombre"],
+                row["proveedor_codigo"],
+                row.get("proveedor_nombre") or "",
+                row["moneda"],
+                row["fecha_base"],
+                row["fecha_nueva"],
+                row["precio_base"],
+                row["precio_nuevo"],
+                row["variacion_abs"],
+                row["variacion_pct"],
+            ]
+        )
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    return stream

@@ -15,18 +15,60 @@ def _clean_str(value: Optional[str]) -> Optional[str]:
     return cleaned or None
 
 
+def _fix_mojibake_text(value: Optional[str]) -> Optional[str]:
+    cleaned = _clean_str(value)
+    if cleaned is None:
+        return None
+    if not any(marker in cleaned for marker in ("Ã", "Â", "â")):
+        return cleaned
+    try:
+        repaired = cleaned.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return cleaned
+    return repaired.strip() or cleaned
+
+
+def _to_mojibake_variant(value: Optional[str]) -> Optional[str]:
+    cleaned = _clean_str(value)
+    if cleaned is None:
+        return None
+    try:
+        variant = cleaned.encode("utf-8").decode("latin-1")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return None
+    return variant if variant != cleaned else None
+
+
+def _normalize_output(row: dict) -> dict:
+    normalized = dict(row)
+    for field in (
+        "codigo",
+        "nombre",
+        "contacto_nombre",
+        "email",
+        "telefono",
+        "cuit",
+        "direccion",
+        "localidad",
+        "provincia",
+        "notas",
+    ):
+        normalized[field] = _fix_mojibake_text(normalized.get(field))
+    return normalized
+
+
 def _normalize_payload(payload: dict) -> dict:
     normalized = dict(payload)
     normalized["codigo"] = _clean_str(normalized.get("codigo"))
-    normalized["nombre"] = _clean_str(normalized.get("nombre"))
-    normalized["contacto_nombre"] = _clean_str(normalized.get("contacto_nombre"))
-    normalized["email"] = _clean_str(normalized.get("email"))
-    normalized["telefono"] = _clean_str(normalized.get("telefono"))
-    normalized["cuit"] = _clean_str(normalized.get("cuit"))
-    normalized["direccion"] = _clean_str(normalized.get("direccion"))
-    normalized["localidad"] = _clean_str(normalized.get("localidad"))
-    normalized["provincia"] = _clean_str(normalized.get("provincia"))
-    normalized["notas"] = _clean_str(normalized.get("notas"))
+    normalized["nombre"] = _fix_mojibake_text(normalized.get("nombre"))
+    normalized["contacto_nombre"] = _fix_mojibake_text(normalized.get("contacto_nombre"))
+    normalized["email"] = _fix_mojibake_text(normalized.get("email"))
+    normalized["telefono"] = _fix_mojibake_text(normalized.get("telefono"))
+    normalized["cuit"] = _fix_mojibake_text(normalized.get("cuit"))
+    normalized["direccion"] = _fix_mojibake_text(normalized.get("direccion"))
+    normalized["localidad"] = _fix_mojibake_text(normalized.get("localidad"))
+    normalized["provincia"] = _fix_mojibake_text(normalized.get("provincia"))
+    normalized["notas"] = _fix_mojibake_text(normalized.get("notas"))
     return normalized
 
 
@@ -41,8 +83,16 @@ def listar_proveedores(
     params: dict = {"limit": limit, "offset": offset}
 
     if q:
-        filtros.append("(p.codigo LIKE :q OR p.nombre LIKE :q OR p.contacto_nombre LIKE :q)")
-        params["q"] = f"%{q.strip()}%"
+        q_clean = q.strip()
+        q_variant = _to_mojibake_variant(q_clean)
+        if q_variant:
+            filtros.append(
+                "(p.codigo LIKE :q OR p.nombre LIKE :q OR p.contacto_nombre LIKE :q OR p.nombre LIKE :q_variant OR p.contacto_nombre LIKE :q_variant)"
+            )
+            params["q_variant"] = f"%{q_variant}%"
+        else:
+            filtros.append("(p.codigo LIKE :q OR p.nombre LIKE :q OR p.contacto_nombre LIKE :q)")
+        params["q"] = f"%{q_clean}%"
 
     if activo is not None:
         filtros.append("p.activo = :activo")
@@ -71,7 +121,7 @@ def listar_proveedores(
         LIMIT :limit OFFSET :offset
     """
     rows = db.execute(text(sql), params).mappings().all()
-    return [dict(r) for r in rows]
+    return [_normalize_output(dict(r)) for r in rows]
 
 
 def obtener_proveedor(db: Session, proveedor_id: int) -> Optional[dict]:
@@ -99,7 +149,7 @@ def obtener_proveedor(db: Session, proveedor_id: int) -> Optional[dict]:
         ),
         {"id": proveedor_id},
     ).mappings().first()
-    return dict(row) if row else None
+    return _normalize_output(dict(row)) if row else None
 
 
 def existe_codigo(

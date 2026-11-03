@@ -29,10 +29,16 @@ class Settings:
     openai_model: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     anthropic_model: Optional[str] = None
-    bcra_api_base_url: str = "https://api.estadisticasbcra.com"
+    bcra_api_base_url: str = "https://api.bcra.gob.ar"
     bcra_api_token: Optional[str] = None
     bcra_sync_days: int = 5
+    bcra_historico_desde: Optional[str] = None
     sync_job_token: Optional[str] = None
+    access_db_path: Optional[str] = None
+    access_table_name: str = "CONTROL DE RECEPCION"
+    planos_dir: str = (
+        r"\\192.168.1.5\id\01 DISEÑOS EN INVENTOR ECOTERMO\03-PLANOS"
+    )
 
 
 def _load_json_config() -> dict:
@@ -126,7 +132,7 @@ def get_settings() -> Settings:
     bcra_api_base_url = (
         os.environ.get("BCRA_API_BASE_URL")
         or cfg.get("bcra_api_base_url")
-        or "https://api.estadisticasbcra.com"
+        or "https://api.bcra.gob.ar"
     )
     bcra_api_token = (
         os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
@@ -134,8 +140,22 @@ def get_settings() -> Settings:
     bcra_sync_days = int(
         os.environ.get("BCRA_SYNC_DAYS", cfg.get("bcra_sync_days", 5))
     )
+    bcra_historico_desde = (
+        os.environ.get("BCRA_HISTORICO_DESDE") or cfg.get("bcra_historico_desde")
+    )
     sync_job_token = (
         os.environ.get("SYNC_JOB_TOKEN") or cfg.get("sync_job_token")
+    )
+    access_db_path = os.environ.get("ACCESS_DB_PATH") or cfg.get("access_db_path")
+    access_table_name = (
+        os.environ.get("ACCESS_TABLE_NAME")
+        or cfg.get("access_table_name")
+        or "CONTROL DE RECEPCION"
+    )
+    planos_dir = (
+        os.environ.get("PLANOS_DIR")
+        or cfg.get("planos_dir")
+        or r"\\192.168.1.5\id\01 DISEÑOS EN INVENTOR ECOTERMO\03-PLANOS"
     )
     auth_remember_days = int(
         os.environ.get("AUTH_REMEMBER_DAYS", cfg.get("auth_remember_days", 30))
@@ -161,5 +181,9 @@ def get_settings() -> Settings:
         bcra_api_base_url=bcra_api_base_url,
         bcra_api_token=bcra_api_token,
         bcra_sync_days=bcra_sync_days,
+        bcra_historico_desde=bcra_historico_desde,
         sync_job_token=sync_job_token,
+        access_db_path=access_db_path,
+        access_table_name=access_table_name,
+        planos_dir=planos_dir,
     )

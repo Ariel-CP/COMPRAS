@@ -4,6 +4,24 @@
 
 Sistema que discrimina costos de **Materiales** y **Procesos** en la estructura de MBOM.
 
+## Regla actual de costo y divisas
+
+El cálculo del costo en MBOM evita usar una cotización futura cuando hay una anterior disponible. La política real del sistema es:
+
+1. Si el dato base está en USD, se busca la tasa histórica del mismo día en el tipo `PROMEDIO`; si no existe, se toma la última anterior disponible.
+2. Si el dato base está en USD_MAY, la prioridad es `VENTA`, luego `PROMEDIO` y luego `COMPRA`, siempre buscando primero la fecha exacta y después la última anterior.
+3. Si el costo viene en otra moneda y hay que expresarlo en ARS, se usa la tasa más cercana a la fecha del precio de origen, no la cotización del día actual.
+4. La merma se normaliza antes del cálculo: valores como `3` se tratan como `0.03`, y valores negativos o fuera de rango se corrigen o descartan según la regla del servicio.
+
+En la práctica, el flujo es:
+
+- precio origen -> moneda de origen
+- buscar tasa histórica según moneda y fecha
+- convertir a la base del cálculo
+- aplicar merma y consolidar costo final
+
+Esto mantiene consistencia histórica y evita que un costo de un período se revalorice con una cotización posterior al momento del precio base.
+
 ## Cambios Realizados
 
 ### 1. Base de Datos

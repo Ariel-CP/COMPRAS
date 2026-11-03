@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Iterable, List, Optional
+from decimal import Decimal
+from typing import List, Optional
 
 import httpx
 
@@ -13,7 +14,7 @@ class FxRate:
     fecha: date
     moneda: str
     tipo: str
-    tasa: float
+    tasa: Decimal
     origen: str
     notas: Optional[str] = None
 
@@ -23,43 +24,23 @@ class FxProviderError(RuntimeError):
 
 
 class BcraFxProvider:
-    """Cliente mínimo para el API oficial del BCRA (estadisticasbcra).
+    """Cliente para la serie minorista de Estadísticas Monetarias v4 del BCRA.
 
-    La API expone series identificadas por endpoints como ``usd_of``
-    (dólar oficial) y ``usd_mayorista``. Cada serie devuelve registros
-    con claves ``d`` (fecha) y ``v`` (valor). Este cliente obtiene ambas
-    series y normaliza el resultado a ``FxRate``.
+    Este cliente no requiere token ni autorización. Realiza una llamada
+    a la variable 4 (promedio vendedor minorista) y mapea los resultados
+    a `FxRate` usando `Decimal` para la tasa.
     """
 
-    _SERIES_DEF = (
-        {
-            "endpoint": "usd_of",
-            "moneda": "USD",
-            "tipo": "VENTA",
-            "notas": "Serie oficial BCRA usd_of",
-        },
-        {
-            "endpoint": "usd_mayorista",
-            "moneda": "USD_MAY",
-            "tipo": "PROMEDIO",
-            "notas": "Serie mayorista BCRA usd_mayorista",
-        },
-    )
+    _ENDPOINT_USD = "/estadisticas/v4.0/monetarias/4"
 
     def __init__(
         self,
-        base_url: str,
-        token: str,
+        base_url: str = "https://api.bcra.gob.ar",
         *,
-        timeout: float = 10.0,
+        timeout: float = 15.0,
         client: Optional[httpx.Client] = None,
     ) -> None:
-        if not token:
-            raise ValueError(
-                "Se requiere token BCRA para inicializar el cliente"
-            )
         self._base_url = base_url.rstrip("/")
-        self._token = token
         self._timeout = timeout
         self._client = client
 
@@ -68,60 +49,86 @@ class BcraFxProvider:
             self._client = httpx.Client(timeout=self._timeout)
         return self._client
 
-    def _request_series(self, endpoint: str) -> Iterable[dict]:
-        url = f"{self._base_url}/{endpoint.lstrip('/')}"
-        headers = {"Authorization": f"BEARER {self._token}"}
+    def _request_usd(
+        self, desde: Optional[date] = None, hasta: Optional[date] = None
+    ) -> dict:
+        """Obtiene cotizaciones minoristas USD del BCRA.
+
+        Si desde/hasta se omiten, el BCRA aplica sus valores predeterminados.
+        """
+
+        url = f"{self._base_url}{self._ENDPOINT_USD}"
+        headers = {"Accept": "application/json", "Accept-Language": "es-AR"}
+        params: dict[str, str] = {}
+        if desde is not None:
+            params["desde"] = desde.isoformat()
+        if hasta is not None:
+            params["hasta"] = hasta.isoformat()
         try:
-            resp = self._http_client().get(url, headers=headers)
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:  # pragma: no cover - requests path
-            raise FxProviderError(f"Error consultando {url}: {exc}") from exc
-        data = resp.json()
-        if not isinstance(data, list):
-            raise FxProviderError(
-                f"Respuesta inesperada en {endpoint}: se esperaba lista"
+            resp = self._http_client().get(
+                url, headers=headers, params=params if params else None
             )
+            resp.raise_for_status()
+        except httpx.RequestError as exc:
+            raise FxProviderError(f"Error de conexión a BCRA {url}: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            msg = f"HTTP {exc.response.status_code} al consultar {url}"
+            raise FxProviderError(msg) from exc
+        try:
+            data = resp.json()
+        except Exception as exc:
+            raise FxProviderError(f"Respuesta JSON inválida desde BCRA: {exc}") from exc
         return data
 
     @staticmethod
-    def _map_item(
-        item: dict,
-        *,
-        moneda: str,
-        tipo: str,
-        notas: Optional[str],
-    ) -> FxRate:
+    def _map_record(record: dict) -> FxRate:
         try:
-            fecha = date.fromisoformat(item["d"])
-            tasa = float(item["v"])
-        except (KeyError, ValueError, TypeError) as exc:
-            raise FxProviderError(
-                f"Registro BCRA inválido para {moneda}: {item}"
-            ) from exc
+            fecha = date.fromisoformat(str(record["fecha"]))
+            tasa = Decimal(str(record["valor"]))
+        except (KeyError, ValueError, TypeError, ArithmeticError) as exc:
+            raise FxProviderError(f"Registro BCRA inválido: {record}") from exc
+
         return FxRate(
             fecha=fecha,
-            moneda=moneda,
-            tipo=tipo,
+            moneda="USD",
+            tipo="VENTA",
             tasa=tasa,
             origen="OTRO",
-            notas=notas,
+            notas=None,
         )
 
     def fetch_range(self, desde: date, hasta: date) -> List[FxRate]:
         if desde > hasta:
             raise ValueError("La fecha 'desde' no puede ser mayor a 'hasta'")
-        resultados: List[FxRate] = []
-        for serie in self._SERIES_DEF:
-            items = self._request_series(serie["endpoint"])
-            for item in items:
-                rate = self._map_item(
-                    item,
-                    moneda=serie["moneda"],
-                    tipo=serie["tipo"],
-                    notas=serie.get("notas"),
+        data = self._request_usd(desde=desde, hasta=hasta)
+        if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+            raise FxProviderError("Respuesta BCRA minorista sin resultados válidos")
+
+        records: List[dict] = []
+        for result in data["results"]:
+            if not isinstance(result, dict):
+                raise FxProviderError(
+                    "Respuesta BCRA minorista contiene una serie inválida"
                 )
-                if desde <= rate.fecha <= hasta:
-                    resultados.append(rate)
+            detalle = result.get("detalle")
+            if not isinstance(detalle, list):
+                raise FxProviderError("Respuesta BCRA minorista sin detalle válido")
+            records.extend(item for item in detalle if isinstance(item, dict))
+
+        if not records:
+            raise FxProviderError("Respuesta BCRA: no se encontraron registros para USD")
+
+        resultados: List[FxRate] = []
+        for rec in records:
+            rate = self._map_record(rec)
+            if desde <= rate.fecha <= hasta:
+                resultados.append(rate)
+
+        if not resultados:
+            raise FxProviderError(
+                "Respuesta BCRA: no se encontraron registros para USD en el rango "
+                f"{desde.isoformat()} a {hasta.isoformat()}"
+            )
         return resultados
 
     def close(self) -> None:

@@ -28,7 +28,7 @@ except ImportError as exc:  # pragma: no cover - optional dependency guard
     ) from exc
 
 # Ensure repository root is on sys.path so we can import app.*
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -161,12 +161,31 @@ def _read_xlsx(path: Path) -> List[RowDict]:
         ]
     except StopIteration:
         return []
+
+    is_flexxus_last_purchase_layout = (
+        len(headers) >= 11
+        and headers[0] == "codigo"
+        and headers[1] == "articulo"
+        and headers[6] == "stock_actual"
+        and headers[7] == "precio_compra"
+        and headers[10] == "fecha_compra"
+    )
     rows: List[RowDict] = []
     for xl_row in ws.iter_rows(min_row=2, values_only=True):
         row_dict: RowDict = {}
         for idx, cell in enumerate(xl_row):
             key = headers[idx] if idx < len(headers) else f"col_{idx}"
             row_dict[key] = cell
+        if is_flexxus_last_purchase_layout:
+            # Flexxus desplaza los encabezados: moneda queda en I y fecha en J.
+            row_dict.update(
+                {
+                    "producto_codigo": xl_row[0],
+                    "precio_unitario": xl_row[7],
+                    "moneda": xl_row[8],
+                    "fecha_precio": xl_row[9],
+                }
+            )
         rows.append(_lower_keys(row_dict))
     return rows
 
@@ -199,7 +218,7 @@ def _normalize_datetime_text(raw: str) -> str:
     normalized = raw.replace("\xa0", " ").strip()
     normalized = " ".join(normalized.split())
     return re.sub(
-        r"(?i)\b([ap])\.?\s*m\.?\b",
+        r"(?i)\b([ap])\s*\.?\s*m\s*\.?",
         lambda match: match.group(1).upper() + "M",
         normalized,
     )

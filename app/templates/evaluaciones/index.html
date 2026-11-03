@@ -8,6 +8,7 @@
   <div class="tabla-controles" style="justify-content:flex-start;gap:10px;margin-bottom:12px;">
     <a class="btn-accion" href="/ui/proveedores">Ir a Proveedores</a>
     <a class="btn-accion" href="/ui/evaluaciones/ranking" style="background:#0b5cab;">📊 Ver Ranking</a>
+    <a class="btn-accion" href="/ui/evaluaciones/evolucion" style="background:#198754;">📈 Evolución por Proveedor</a>
     <button type="button" class="btn-accion" id="btnImportar"
             onclick="importarHistorial()"
             style="background:#6c757d;"
@@ -16,11 +17,15 @@
     </button>
     <label class="btn-accion" id="lblImportarCSV"
            style="background:#5a7d9a;cursor:pointer;padding:6px 14px;border-radius:4px;"
-           title="Importar CSV exportado de Power BI (CONTROL DE RECEPCION)">
-      📂 Importar CSV
-      <input type="file" id="inputCSV" accept=".csv" style="display:none;"
+         title="Importar CSV o XLSX exportado de Power BI (CONTROL DE RECEPCION)">
+       📂 Importar CSV/XLSX
+       <input type="file" id="inputCSV" accept=".csv,.xlsx" style="display:none;"
              onchange="importarCSV(this)" />
     </label>
+    <button type="button" class="btn-accion" onclick="limpiarImportados()" style="background:#b02a37;"
+            title="Borra evaluaciones importadas para cargar nuevamente en limpio">
+      🧹 Limpiar Importados
+    </button>
     <span id="msgImportar" style="font-size:0.9em;color:#555;"></span>
   </div>
 
@@ -204,6 +209,24 @@
   </div>
 </div>
 
+<div id="modalConfirmacion" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;padding:24px;overflow:auto;">
+  <div style="max-width:760px;margin:0 auto;background:#fff;border-radius:10px;padding:16px 18px;box-shadow:0 12px 34px rgba(0,0,0,.18);">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;">
+      <h3 id="modalConfirmacionTitulo" style="margin:0;color:#0b5cab;">Confirmación</h3>
+      <button type="button" class="btn-secundario" style="padding:6px 12px;" onclick="cerrarModalConfirmacion(false)">Cerrar</button>
+    </div>
+    <div id="modalConfirmacionBody" style="font-size:0.95em;color:#333;max-height:52vh;overflow:auto;"></div>
+    <label id="modalConfirmacionLegacyWrap" style="display:none;align-items:center;gap:8px;margin-top:12px;">
+      <input type="checkbox" id="modalConfirmacionLegacy" />
+      <span id="modalConfirmacionLegacyLabel"></span>
+    </label>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+      <button type="button" class="btn-secundario" id="modalConfirmacionCancelar" style="padding:7px 14px;">Cancelar</button>
+      <button type="button" class="btn-accion" id="modalConfirmacionAceptar" style="padding:7px 14px;">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <style>
   .campo-lbl {
     font-size: 0.8em;
@@ -218,10 +241,90 @@
   .badge-no-apto         { background:#f8d7da; color:#721c24; padding:3px 10px; border-radius:12px; font-weight:600; white-space:nowrap; }
   .badge-sin-eval        { background:#e2e3e5; color:#383d41; padding:3px 10px; border-radius:12px; white-space:nowrap; }
   .mt-3 { margin-top: 20px; }
+  .tabla-prevalidacion {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 0.92em;
+  }
+  .tabla-prevalidacion th,
+  .tabla-prevalidacion td {
+    border: 1px solid #d0d7de;
+    padding: 6px 8px;
+  }
+  .tabla-prevalidacion th {
+    background: #f4f6f8;
+    text-align: left;
+  }
+  .estado-ok { color: #155724; font-weight: 600; }
+  .estado-warn { color: #856404; font-weight: 600; }
+  .estado-error { color: #721c24; font-weight: 600; }
 </style>
 
 <script>
   const PERIODO_LABELS = { 0:'Anual', 1:'1er Cuatri', 2:'2do Cuatri', 3:'3er Cuatri' };
+  let resolverModalConfirmacion = null;
+
+  function escHtml(txt) {
+    if (txt == null) return '';
+    return String(txt)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function abrirModalConfirmacion(opciones) {
+    const modal = document.getElementById('modalConfirmacion');
+    const titulo = document.getElementById('modalConfirmacionTitulo');
+    const body = document.getElementById('modalConfirmacionBody');
+    const btnCancelar = document.getElementById('modalConfirmacionCancelar');
+    const btnAceptar = document.getElementById('modalConfirmacionAceptar');
+    const legacyWrap = document.getElementById('modalConfirmacionLegacyWrap');
+    const legacyChk = document.getElementById('modalConfirmacionLegacy');
+    const legacyLabel = document.getElementById('modalConfirmacionLegacyLabel');
+
+    titulo.textContent = opciones.titulo || 'Confirmación';
+    body.innerHTML = opciones.bodyHtml || '';
+    btnAceptar.textContent = opciones.aceptarTexto || 'Confirmar';
+    btnAceptar.style.background = opciones.aceptarColor || '#0b5cab';
+    btnCancelar.textContent = opciones.cancelarTexto || 'Cancelar';
+
+    if (opciones.mostrarLegacy) {
+      legacyWrap.style.display = 'flex';
+      legacyChk.checked = false;
+      legacyLabel.textContent = opciones.legacyLabel || 'Incluir legacy';
+    } else {
+      legacyWrap.style.display = 'none';
+      legacyChk.checked = false;
+      legacyLabel.textContent = '';
+    }
+
+    modal.style.display = 'block';
+
+    return new Promise((resolve) => {
+      resolverModalConfirmacion = resolve;
+    });
+  }
+
+  function cerrarModalConfirmacion(confirmado) {
+    const modal = document.getElementById('modalConfirmacion');
+    const legacyChk = document.getElementById('modalConfirmacionLegacy');
+    modal.style.display = 'none';
+    if (resolverModalConfirmacion) {
+      resolverModalConfirmacion({ confirmado, incluirLegacy: legacyChk.checked });
+      resolverModalConfirmacion = null;
+    }
+  }
+
+  document.getElementById('modalConfirmacionAceptar').addEventListener('click', () => cerrarModalConfirmacion(true));
+  document.getElementById('modalConfirmacionCancelar').addEventListener('click', () => cerrarModalConfirmacion(false));
+  document.getElementById('modalConfirmacion').addEventListener('click', (ev) => {
+    if (ev.target && ev.target.id === 'modalConfirmacion') {
+      cerrarModalConfirmacion(false);
+    }
+  });
 
   function badgeResultado(r) {
     if (!r) return '<span class="badge-sin-eval">Sin evaluar</span>';
@@ -505,6 +608,11 @@
       if (modal && modal.style.display === 'block') {
         cerrarDetalleEvaluacion();
       }
+
+      const modalConfirm = document.getElementById('modalConfirmacion');
+      if (modalConfirm && modalConfirm.style.display === 'block') {
+        cerrarModalConfirmacion(false);
+      }
     }
   });
 
@@ -560,6 +668,20 @@
     if (!archivo) return;
     const msg = document.getElementById('msgImportar');
     const lbl = document.getElementById('lblImportarCSV');
+    const nombre = (archivo.name || '').toLowerCase();
+    const endpoint = nombre.endsWith('.xlsx')
+      ? '/api/evaluaciones/importar-xlsx'
+      : nombre.endsWith('.csv')
+        ? '/api/evaluaciones/importar-csv'
+        : null;
+
+    if (!endpoint) {
+      msg.textContent = '❌ Formato no soportado. Usa .csv o .xlsx';
+      msg.style.color = '#721c24';
+      input.value = '';
+      return;
+    }
+
     lbl.style.pointerEvents = 'none';
     msg.textContent = `⏳ Importando "${archivo.name}"…`;
     msg.style.color = '#555';
@@ -568,7 +690,60 @@
     fd.append('archivo', archivo);
 
     try {
-      const r = await fetch('/api/evaluaciones/importar-csv', { method: 'POST', body: fd });
+      const rv = await fetch('/api/evaluaciones/importar-validar', { method: 'POST', body: fd });
+      const validacion = await rv.json();
+      if (!rv.ok) {
+        const det = validacion.detail || validacion;
+        const falt = det.faltantes_requeridas || [];
+        msg.textContent = `❌ Validación fallida. Faltan columnas requeridas: ${falt.join(', ') || 'desconocido'}`;
+        msg.style.color = '#721c24';
+        return;
+      }
+
+      const faltantesRecomendadas = validacion.faltantes_recomendadas || [];
+      const mapeo = validacion.mapeo || {};
+      const tablaMapeo = Object.entries(mapeo).map(([k, v]) => {
+        const estado = v ? '<span class="estado-ok">Detectada</span>' : '<span class="estado-warn">No detectada</span>';
+        return `
+          <tr>
+            <td>${escHtml(k)}</td>
+            <td>${v ? escHtml(v) : '<em>NO DETECTADA</em>'}</td>
+            <td>${estado}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const bodyHtml = `
+        <p><strong>Archivo:</strong> ${escHtml(archivo.name)}</p>
+        <p><strong>Filas detectadas:</strong> ${Number(validacion.filas_archivo || 0).toLocaleString('es-AR')}</p>
+        ${faltantesRecomendadas.length
+          ? `<p class="estado-warn"><strong>Aviso:</strong> faltan columnas recomendadas: ${escHtml(faltantesRecomendadas.join(', '))}</p>`
+          : '<p class="estado-ok"><strong>Columnas recomendadas:</strong> completas.</p>'}
+        <table class="tabla-prevalidacion">
+          <thead>
+            <tr><th>Campo</th><th>Columna detectada</th><th>Estado</th></tr>
+          </thead>
+          <tbody>${tablaMapeo}</tbody>
+        </table>
+        <p style="margin-top:10px;">¿Deseas continuar con la importación?</p>
+      `;
+
+      const confirmacionImport = await abrirModalConfirmacion({
+        titulo: 'Prevalidación de Archivo',
+        bodyHtml,
+        aceptarTexto: 'Importar ahora',
+        aceptarColor: '#0b5cab',
+      });
+
+      if (!confirmacionImport.confirmado) {
+        msg.textContent = 'Importación cancelada por el usuario.';
+        msg.style.color = '#856404';
+        return;
+      }
+
+      const fdImport = new FormData();
+      fdImport.append('archivo', archivo);
+      const r = await fetch(endpoint, { method: 'POST', body: fdImport });
       const data = await r.json();
 
       if (!r.ok) {
@@ -592,6 +767,56 @@
     } finally {
       lbl.style.pointerEvents = '';
       input.value = '';   // Permite re-seleccionar el mismo archivo
+    }
+  }
+
+  async function limpiarImportados() {
+    const msg = document.getElementById('msgImportar');
+
+    const confirmacionLimpieza = await abrirModalConfirmacion({
+      titulo: 'Limpiar Evaluaciones Importadas',
+      bodyHtml: `
+        <p>Se eliminarán evaluaciones importadas marcadas por el sistema (CSV/XLSX).</p>
+        <p class="estado-error"><strong>Acción irreversible:</strong> usa esta opción para recargar en limpio.</p>
+      `,
+      aceptarTexto: 'Limpiar ahora',
+      aceptarColor: '#b02a37',
+      mostrarLegacy: true,
+      legacyLabel: 'Incluir también importaciones legacy detectadas por heurística (más agresivo).',
+    });
+    if (!confirmacionLimpieza.confirmado) return;
+
+    const incluirLegacy = !!confirmacionLimpieza.incluirLegacy;
+
+    msg.textContent = '⏳ Limpiando evaluaciones importadas...';
+    msg.style.color = '#555';
+
+    try {
+      const qs = new URLSearchParams({
+        confirmar: 'LIMPIAR',
+        incluir_legacy: String(incluirLegacy),
+      });
+      const r = await fetch('/api/evaluaciones/limpiar-importados?' + qs.toString(), {
+        method: 'POST',
+      });
+      const data = await r.json();
+
+      if (!r.ok) {
+        msg.textContent = '❌ Error: ' + (data.detail || r.status);
+        msg.style.color = '#721c24';
+        return;
+      }
+
+      msg.textContent =
+        `✅ Limpieza completa: ${data.eliminadas_total} eliminadas ` +
+        `(${data.eliminadas_marcadas} marcadas, ${data.eliminadas_legacy} legacy) · ` +
+        `${data.proveedores_afectados} proveedores ajustados.`;
+      msg.style.color = '#155724';
+
+      await cargarEvaluaciones();
+    } catch (ex) {
+      msg.textContent = '❌ Error de red: ' + ex;
+      msg.style.color = '#721c24';
     }
   }
 

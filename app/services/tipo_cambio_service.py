@@ -1,24 +1,25 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, List, Optional, Sequence, Tuple, Union
-from sqlalchemy import text
+
+from sqlalchemy import Numeric, bindparam, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from app.schemas.tipo_cambio import (
     TipoCambioCreate,
-    TipoCambioUpdate,
     TipoCambioFiltro,
+    TipoCambioUpdate,
 )
-
 
 SQLConn = Union[Connection, Session]
 
 
 def listar_tipos_cambio(
-    conn: SQLConn, filtro: TipoCambioFiltro
+    conn: SQLConn, filtro: TipoCambioFiltro, limite: int = 200
 ) -> List[dict]:
     """Lista tipos de cambio con filtros opcionales."""
-    clauses = []
+    clauses = ["tipo <> 'COMPRA'"]
     params: dict[str, object] = {}
     if filtro.moneda:
         clauses.append("moneda = :moneda")
@@ -39,7 +40,9 @@ def listar_tipos_cambio(
     FROM tipo_cambio_hist
     {where_sql}
     ORDER BY fecha DESC, moneda, tipo
+    LIMIT :limite
     """.strip()
+    params["limite"] = limite
     result = conn.execute(text(sql), params).mappings()
     rows = []
     for r in result:
@@ -57,21 +60,21 @@ def listar_tipos_cambio(
 
 def obtener_resumen_ultimas_tasas(conn: SQLConn) -> List[dict]:
     """Devuelve la última fecha y tasa por moneda/tipo."""
-    sql = text(
-        """
+    sql = text("""
         SELECT t.moneda, t.tipo, t.fecha, t.tasa
         FROM tipo_cambio_hist t
         INNER JOIN (
             SELECT moneda, tipo, MAX(fecha) AS max_fecha
             FROM tipo_cambio_hist
+            WHERE tipo IN ('VENTA', 'PROMEDIO')
             GROUP BY moneda, tipo
         ) ult
             ON ult.moneda = t.moneda
             AND ult.tipo = t.tipo
             AND ult.max_fecha = t.fecha
+        WHERE t.tipo IN ('VENTA', 'PROMEDIO')
         ORDER BY t.moneda, t.tipo
-        """
-    )
+        """)
     result = conn.execute(sql).mappings()
     resumen: List[dict] = []
     for row in result:
@@ -126,6 +129,51 @@ def upsert_tipo_cambio(
         "notas": data.notas,
     })
     return True, res.lastrowid  # type: ignore[attr-defined]
+
+
+def upsert_tipo_cambio_mayorista(
+    conn: SQLConn,
+    *,
+    fecha: date,
+    tasa: Decimal,
+    notas: Optional[str] = None,
+) -> Tuple[bool, int]:
+    """Persiste una tasa mayorista BCRA sin convertir Decimal a float."""
+    params = {"fecha": fecha, "moneda": "USD", "tipo": "MAYORISTA"}
+    existing = (
+        conn.execute(
+            text("""
+            SELECT id, tasa
+            FROM tipo_cambio_hist
+            WHERE moneda=:moneda AND fecha=:fecha AND tipo=:tipo
+            """),
+            params,
+        )
+        .mappings()
+        .first()
+    )
+    if existing:
+        if Decimal(str(existing["tasa"])) == tasa:
+            return False, int(existing["id"])
+        conn.execute(
+            text("""
+                UPDATE tipo_cambio_hist
+                SET tasa=:tasa, origen='BCRA_A3500', notas=:notas
+                WHERE id=:id
+                """).bindparams(bindparam("tasa", type_=Numeric(18, 6))),
+            {"id": existing["id"], "tasa": tasa, "notas": notas},
+        )
+        return False, int(existing["id"])
+
+    result = conn.execute(
+        text("""
+            INSERT INTO tipo_cambio_hist
+                (fecha, moneda, tipo, tasa, origen, notas)
+            VALUES (:fecha, 'USD', 'MAYORISTA', :tasa, 'BCRA_A3500', :notas)
+            """).bindparams(bindparam("tasa", type_=Numeric(18, 6))),
+        {"fecha": fecha, "tasa": tasa, "notas": notas},
+    )
+    return True, int(result.lastrowid)  # type: ignore[arg-type]
 
 
 def actualizar_tipo_cambio(
@@ -368,13 +416,14 @@ def obtener_tasa_cercana(
     moneda: str,
     fecha: date,
     tipo: str = "PROMEDIO",
+    permitir_futuras: bool = False,
 ) -> Optional[dict]:
-    """Obtiene la tasa exacta o la más cercana a la fecha indicada.
+    """Obtiene la última tasa disponible para la fecha solicitada.
 
-    - Prioriza coincidencia exacta.
-    - Si no existe, busca la última anterior.
-    - Finalmente, intenta con la siguiente posterior.
-    Devuelve None si no hay datos para la moneda/tipo.
+    La regla de negocio principal es usar la cotización más cercana pero no
+    futura. Primero busca exacta, luego la última anterior disponible. Solo si
+    se habilita explícitamente `permitir_futuras` se contempla un fallback hacia
+    adelante.
     """
 
     params = {"moneda": moneda, "tipo": tipo, "fecha": fecha}
@@ -390,7 +439,8 @@ def obtener_tasa_cercana(
     if exact:
         row = dict(exact)
         row["tasa"] = float(row["tasa"])
-        row["fecha"] = row["fecha"]
+        if isinstance(row.get("fecha"), str):
+            row["fecha"] = date.fromisoformat(row["fecha"])
         row["es_estimativa"] = False
         row["origen_busqueda"] = "exacta"
         return row
@@ -404,22 +454,27 @@ def obtener_tasa_cercana(
     if prev:
         row = dict(prev)
         row["tasa"] = float(row["tasa"])
+        if isinstance(row.get("fecha"), str):
+            row["fecha"] = date.fromisoformat(row["fecha"])
         row["es_estimativa"] = True
         row["origen_busqueda"] = "anterior"
         return row
 
-    nxt = conn.execute(
-        text(
-            f"{base_sql} AND fecha > :fecha ORDER BY fecha ASC LIMIT 1"
-        ),
-        params,
-    ).mappings().first()
-    if nxt:
-        row = dict(nxt)
-        row["tasa"] = float(row["tasa"])
-        row["es_estimativa"] = True
-        row["origen_busqueda"] = "posterior"
-        return row
+    if permitir_futuras:
+        nxt = conn.execute(
+            text(
+                f"{base_sql} AND fecha > :fecha ORDER BY fecha ASC LIMIT 1"
+            ),
+            params,
+        ).mappings().first()
+        if nxt:
+            row = dict(nxt)
+            row["tasa"] = float(row["tasa"])
+            if isinstance(row.get("fecha"), str):
+                row["fecha"] = date.fromisoformat(row["fecha"])
+            row["es_estimativa"] = True
+            row["origen_busqueda"] = "posterior"
+            return row
 
     return None
 
@@ -429,11 +484,18 @@ def obtener_tasa_cercana_flexible(
     moneda: str,
     fecha: date,
     tipos_prioridad: Sequence[str] | None = None,
+    permitir_futuras: bool = False,
 ) -> Optional[dict]:
     """Intenta obtener la tasa más cercana probando varios tipos (ordenados)."""
-    tipos = tipos_prioridad or ("PROMEDIO", "VENTA", "COMPRA")
+    tipos = tipos_prioridad or ("PROMEDIO", "VENTA")
     for tipo in tipos:
-        tasa = obtener_tasa_cercana(conn, moneda, fecha, tipo)
+        tasa = obtener_tasa_cercana(
+            conn,
+            moneda,
+            fecha,
+            tipo,
+            permitir_futuras=permitir_futuras,
+        )
         if tasa:
             tasa["tipo_sugerido"] = tipo
             return tasa

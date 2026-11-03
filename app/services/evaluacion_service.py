@@ -321,17 +321,38 @@ def actualizar_evaluacion(
 # Historial del proveedor (útil para el panel lateral)
 # ---------------------------------------------------------------------------
 
-def historial_proveedor(db: Session, proveedor_id: int) -> list[dict]:
-    rows = db.execute(text("""
+def historial_proveedor(
+    db: Session,
+    proveedor_id: int,
+    desde: Optional[date] = None,
+    hasta: Optional[date] = None,
+) -> list[dict]:
+    filtros = ["proveedor_id = :pid"]
+    params: dict = {"pid": proveedor_id}
+
+    if desde is not None:
+        filtros.append(
+            "COALESCE(fecha_evaluacion, STR_TO_DATE(CONCAT(anno, '-01-01'), '%Y-%m-%d')) >= :desde"
+        )
+        params["desde"] = desde
+    if hasta is not None:
+        filtros.append(
+            "COALESCE(fecha_evaluacion, STR_TO_DATE(CONCAT(anno, '-01-01'), '%Y-%m-%d')) <= :hasta"
+        )
+        params["hasta"] = hasta
+
+    where_clause = " AND ".join(filtros)
+
+    rows = db.execute(text(f"""
         SELECT
             id, anno, periodo, tipo_evaluacion,
             puntaje_calidad, puntaje_servicio, puntaje_embalaje, puntaje_total,
             resultado, evaluador_nombre, sector_evaluador,
             fecha_evaluacion, proxima_evaluacion, observaciones
         FROM evaluacion_proveedor_anual
-        WHERE proveedor_id = :pid
+        WHERE {where_clause}
         ORDER BY anno DESC, periodo DESC
-    """), {"pid": proveedor_id}).fetchall()
+    """), params).fetchall()
 
     return [
         {
@@ -401,10 +422,20 @@ def ranking_proveedores_periodo(db: Session, desde: date, hasta: date) -> dict:
         key=lambda x: (x["puntaje_promedio"] if x["puntaje_promedio"] is not None else 999),
     )[:20]
 
+    total_evaluaciones = sum(i["cantidad_evaluaciones"] for i in items)
+    if total_evaluaciones > 0:
+        sumatoria_ponderada = sum(
+            (i["puntaje_promedio"] or 0.0) * i["cantidad_evaluaciones"] for i in items
+        )
+        promedio_general = round(sumatoria_ponderada / total_evaluaciones, 2)
+    else:
+        promedio_general = None
+
     return {
         "desde": str(desde),
         "hasta": str(hasta),
         "total_proveedores": len(items),
+        "promedio_general": promedio_general,
         "mejores_10": mejores_10,
         "peores_20": peores_20,
     }

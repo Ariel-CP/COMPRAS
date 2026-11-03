@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.deps_auth import require_permission
-from app.services import backup_service
-from app.services import user_service
+from app.services import backup_service, user_service
 from app.utils.health import db_status
 
 router = APIRouter()
@@ -130,3 +129,20 @@ async def admin_logo(
             "current_user": current_user,
         },
     )
+
+
+    @router.get("/admin/settings", response_class=HTMLResponse)
+    async def admin_settings(
+        request: Request,
+        db: Session = Depends(get_db),
+        current_user=Depends(require_permission("admin_sistema", False)),
+    ):
+        status = db_status(db)
+        return templates.TemplateResponse(
+            "admin/settings.html",
+            {
+                "request": request,
+                "db_status": status,
+                "current_user": current_user,
+            },
+        )

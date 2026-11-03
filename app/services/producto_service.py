@@ -7,13 +7,83 @@ from sqlalchemy.orm import Session
 TIPO_VALUES = {"PT", "WIP", "MP", "EMB", "SERV", "HERR"}
 
 
+def _repair_mixed_mojibake(value: str) -> str:
+    repaired: list[str] = []
+    index = 0
+    while index < len(value):
+        if value[index] in {"Ã", "Â", "â"}:
+            for width in (3, 2):
+                segment = value[index : index + width]
+                if len(segment) != width:
+                    continue
+                raw = bytearray()
+                try:
+                    for character in segment:
+                        codepoint = ord(character)
+                        if 0x80 <= codepoint <= 0x9F:
+                            raw.append(codepoint)
+                        else:
+                            raw.extend(character.encode("cp1252"))
+                    decoded = bytes(raw).decode("utf-8")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    continue
+                if decoded != segment:
+                    repaired.append(decoded)
+                    index += width
+                    break
+            else:
+                repaired.append(value[index])
+                index += 1
+            continue
+        repaired.append(value[index])
+        index += 1
+    return "".join(repaired)
+
+
+def _fix_mojibake_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    if not any(marker in text_value for marker in ("Ã", "Â", "â")):
+        return text_value
+    for encoding in ("cp1252", "latin-1"):
+        try:
+            repaired = text_value.encode(encoding).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if repaired != text_value and not any(
+            marker in repaired for marker in ("Ã", "Â", "â")
+        ):
+            return repaired.strip() or text_value
+    repaired = _repair_mixed_mojibake(text_value)
+    return repaired.strip() or text_value
+
+
+def _to_mojibake_variant(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    for encoding in ("cp1252", "latin-1"):
+        try:
+            variant = normalized.encode("utf-8").decode(encoding)
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if variant != normalized:
+            return variant
+    return None
+
+
 def _row_to_producto(row: Any) -> Dict[str, Any]:
     return {
         "id": row.id,
         "codigo": row.codigo,
-        "nombre": row.nombre,
+        "nombre": _fix_mojibake_text(row.nombre),
         "tipo_producto": row.tipo_producto,
-        "rubro": getattr(row, "rubro", None),
+        "rubro": _fix_mojibake_text(getattr(row, "rubro", None)),
         "unidad_medida_id": row.unidad_medida_id,
         "activo": bool(row.activo),
     }
@@ -40,7 +110,12 @@ def listar_productos(
     where = ["1=1"]
     params: Dict[str, Any] = {"limit": limit, "offset": offset}
     if q:
-        where.append("(codigo LIKE :q OR nombre LIKE :q)")
+        q_variant = _to_mojibake_variant(q)
+        if q_variant:
+            where.append("(codigo LIKE :q OR nombre LIKE :q OR nombre LIKE :q_variant)")
+            params["q_variant"] = f"%{q_variant}%"
+        else:
+            where.append("(codigo LIKE :q OR nombre LIKE :q)")
         params["q"] = f"%{q}%"
     if tipo:
         if tipo not in TIPO_VALUES:
@@ -84,6 +159,9 @@ def crear_producto(
     unidad_medida_id: int,
     activo: bool = True,
 ) -> Dict[str, Any]:
+    codigo = (codigo or "").strip()
+    nombre = _fix_mojibake_text(nombre) or ""
+    rubro = _fix_mojibake_text(rubro)
     if tipo_producto not in TIPO_VALUES:
         raise ValueError("tipo_producto inválido")
     _ensure_um_exists(db, unidad_medida_id)
@@ -130,6 +208,9 @@ def actualizar_producto(
     unidad_medida_id: int,
     activo: bool,
 ) -> Dict[str, Any]:
+    codigo = (codigo or "").strip()
+    nombre = _fix_mojibake_text(nombre) or ""
+    rubro = _fix_mojibake_text(rubro)
     if tipo_producto not in TIPO_VALUES:
         raise ValueError("tipo_producto inválido")
     _ensure_um_exists(db, unidad_medida_id)
