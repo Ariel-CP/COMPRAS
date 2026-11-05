@@ -1,665 +1,278 @@
+![Compras: planificación, trazabilidad y calidad](docs/assets/readme-cover.svg)
+
 # Sistema de Compras y Planificación
 
-Proyecto orientado a la gestión de estructuras de producto (MBOM), planificación mensual de producción, cálculo de requerimientos de materiales, seguimiento de costos y soporte para análisis con IA.
+**Del catálogo de artículos al control de recepción.**
 
-## Tecnologías
+Gestión de estructuras MBOM, producción, materiales y proveedores en una aplicación web. Integra stock, precios, inspección de calidad, históricos de Access y planos PDF.
 
-- Backend: Python 3 + FastAPI
-- Base de datos: MariaDB/MySQL (`database/schema.sql`)
-- ORM ligero / acceso: SQLAlchemy (uso de `Session` + sentencias `text()` parametrizadas)
-- Frontend: Plantillas Jinja2 + JavaScript vanilla (fetch API)
-- Gestión de dependencias: `requirements.txt`
+**FastAPI** · **MariaDB / MySQL** · **Jinja2** · **Microsoft Access**
 
-## Estructura del Proyecto
-
-```
-app/
-  main.py              # Punto de entrada FastAPI + middleware de auth
-  db.py                # Conexión y dependencia de sesión
-  api/                 # Routers (endpoints REST y vistas UI)
-    auth.py            # Login / logout / me
-    mbom_api.py        # Endpoints MBOM (estructura, costos, revisión)
-    productos.py       # CRUD productos
-    proveedores.py     # CRUD proveedores
-    evaluacion_api.py  # Evaluación de proveedores
-    recepcion_api.py   # Recepciones de materiales
-    plan.py            # Plan producción mensual
-    stock.py           # Stock disponible
-    precios.py         # Historial de precios
-    tipo_cambio.py     # Tipo de cambio
-    rubros.py          # Catálogo de rubros
-    informes.py        # Informes y costos
-    backups.py         # Gestión de backups
-    system_api.py      # Estado y actualización remota
-    roles.py / users.py # Administración de usuarios y roles
-    ui_*.py            # Vistas HTML (una por módulo)
-  services/            # Lógica de negocio
-    mbom_service.py / mbom_costos.py / mbom_operacion_service.py
-    proveedor_service.py / proveedor_import_service.py
-    evaluacion_service.py / evaluacion_csv_recepcion_service.py
-    recepcion_sync_service.py / recepcion_access_import_service.py
-    recepcion_normalization_service.py / recepcion_metrics_service.py
-    plan_service.py / plan_produccion_service.py
-    stock_service.py / stock_import_service.py
-    precio_service.py
-    tipo_cambio_service.py / tipo_cambio_sync_service.py / fx_provider.py
-    auth_service.py / user_service.py
-    backup_service.py / backup_scheduler.py
-    system_service.py
-    informe_costos_service.py
-    operacion_service.py / ruta_operacion_base_service.py
-    rubro_service.py / unidad_service.py / producto_service.py
-  schemas/             # Modelos Pydantic (serialización / validación)
-  templates/           # HTML Jinja2 (una carpeta por módulo)
-  static/              # CSS / JS estáticos
-database/
-  schema.sql           # Definición completa del schema
-  migrations/          # Migraciones SQL numeradas (001–013)
-scripts/
-  ops/                 # Scripts operativos (migraciones, deploy, update)
-  dev/                 # Scripts de desarrollo y prueba
-import/                # Plantillas CSV para importaciones
-```
-
-## Principales Tablas (según `schema.sql`)
-
-- `producto`: catálogo maestro (tipos: PT, WIP, MP, EMB, SERV, HERR)
-- `unidad_medida`: unidades base (kg, un, m, etc.)
-- `mbom_cabecera`: revisiones de la estructura (estado: BORRADOR, ACTIVO, ARCHIVADO)
-- `mbom_detalle`: componentes de la estructura con cantidad, UM, merma y renglón
-- `operacion`: catálogo de operaciones/procesos con tiempo estándar y costo por hora
-- `mbom_operacion`: secuencia de operaciones (ruta) asociada a cada MBOM
-- `costo_producto`: historial de costos unitarios vigentes por producto
-- `plan_produccion_mensual`: cantidades planificadas de PT/WIP por mes
-- `requerimiento_material_mensual`: cálculo consolidado de necesidades de componentes
-- `stock_disponible_mes`: stock histórico / importado por mes
-- `sugerencia_compra`: resultado del análisis de faltantes vs disponibilidad
-- `precio_compra_hist`: historial de precios de compra por proveedor
-- `reporte_ia`: almacenamiento de reportes generados vía integración IA
-
-## Flujo MBOM (Manufacturing BOM)
-
-1. Seleccionar o crear producto padre (tipo PT o WIP) desde la vista `mbom/estructura`.
-2. Si no existe MBOM ACTIVO para el producto, se crea BORRADOR inicial.
-3. Agregar líneas (componentes) mediante el selector modal.
-4. Guardar cada línea (valida cantidad > 0, merma [0,1), UM y componente válido).
-5. Calcular costos: endpoint obtiene costos unitarios vigentes de cada componente.
-6. Activar revisión (BORRADOR -> ACTIVO archiva anteriores activas).
-7. Clonar revisión ACTIVA para generar un nuevo BORRADOR editable (incrementa `revision`: A, B, C...).
-8. Archivar manualmente si se desea retirar una revisión de uso.
-
-## Endpoints Clave (Resumen)
-
-Ruta base API: `/api`
-
-MBOM:
-
-- `GET /api/mbom/{producto_padre_id}?estado=ACTIVO|BORRADOR` → Estructura preferida.
-- `POST /api/mbom/{producto_padre_id}` → Upsert de líneas en BORRADOR (crea si falta).
-- `PUT /api/mbom/{mbom_id}` → Actualizar cabecera + líneas.
-- `DELETE /api/mbom/detalle/{detalle_id}` → Borrar línea.
-- `GET /api/mbom/{mbom_id}/costos` → Cálculo de costos discriminados (materiales + procesos).
-- `POST /api/mbom/{mbom_id}/activar` → Activa revisión (archiva anterior ACTIVO).
-- `POST /api/mbom/{mbom_id}/clonar` → Clona revisión a nuevo BORRADOR.
-- `POST /api/mbom/demo/{codigo}` → Genera demo de MBOM con componentes MP.
-
-Operaciones (Ruta de Procesos):
-
-- `GET /api/operaciones/?activo=true` → Lista catálogo de operaciones.
-- `POST /api/operaciones/` → Crear nueva operación.
-- `PUT /api/operaciones/{id}` → Actualizar operación existente.
-- `DELETE /api/operaciones/{id}` → Eliminar operación.
-- `GET /api/mbom/{mbom_id}/operaciones` → Listar operaciones de una ruta MBOM.
-- `POST /api/mbom/{mbom_id}/operaciones` → Agregar operación a ruta (secuencia + operacion_id).
-- `DELETE /api/mbom/operaciones/{id}` → Eliminar operación de ruta.
-
-Productos / Unidades:
-
-- `GET /api/productos/?q=...&tipo=...&activo=...` → Listado filtrado.
-- `POST /api/productos/` → Crear producto.
-- `GET /api/unidades/` → Listar unidades.
-
-(Planificación, stock y compras tendrán endpoints adicionales en próximas iteraciones.)
-
-## Modelo de Costos Discriminados
-
-El sistema calcula costos discriminados en dos componentes principales:
-
-### Costos de Materiales
-
-- Se toma el costo vigente por componente (`costo_producto` con `vigencia_desde <= hoy` y `vigencia_hasta` nula o futura).
-- Costo total línea = `cantidad * costo_unitario * (1 + factor_merma)`
-- Suma total materiales = agregación de todas las líneas de componentes.
-
-### Costos de Procesos (Operaciones)
-
-- Tabla `operacion`: catálogo de operaciones con `costo_hora` y `tiempo_estandar_minutos`
-- Tabla `mbom_operacion`: secuencia de operaciones asociadas a cada MBOM
-- Costo operación = `(tiempo_estandar_minutos / 60) * costo_hora`
-- Suma total procesos = agregación de todas las operaciones en la ruta
-
-### Estructura de Respuesta de Costos
-
-```json
-{
-  "materiales": {
-    "componentes": [...],
-    "total": 0.00
-  },
-  "procesos": {
-    "operaciones": [...],
-    "total": 0.00
-  },
-  "total": 0.00,
-  "desglose": {
-    "materiales_pct": 0.00,
-    "procesos_pct": 0.00
-  }
-}
-```
-
-## Requerimientos y Sugerencias de Compra (Futuro)
-
-1. A partir del `plan_produccion_mensual` + MBOM ACTIVA → explotar cantidades de componentes.
-2. Consolidar necesidades mensuales → `requerimiento_material_mensual`.
-3. Cruzar con `stock_disponible_mes` → calcular faltantes.
-4. Generar `sugerencia_compra` (cantidad necesaria - stock disponible) con estados gestionables.
-
-## Integración ERP Externo (Pendiente)
-
-- Importar CSV/Excel de stock y precios.
-- Mapear códigos externos a `producto.codigo` (validación y reporte de diferencias).
-- Registrar origen definido en el schema (valor enum correspondiente) en tablas de stock y precios históricos.
-
-## Integración IA (Pendiente)
-
-- Resúmenes de variación de costos, tendencias de precios, análisis de cobertura de stock.
-- Generar reportes y almacenar texto en `reporte_ia`.
-- Servicio encargado de: preparar dataset → prompt → llamada API OpenAI → persistencia.
-
-## Instalación
-
-Prerrequisitos:
-
-- Python 3.11+
-- MariaDB 11.x
-
-MariaDB (crear base y usuario):
-
-```sql
-CREATE DATABASE compras_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'compras'@'%' IDENTIFIED BY 'TU_PASSWORD_SEGURA';
-GRANT ALL PRIVILEGES ON compras_db.* TO 'compras'@'%';
-FLUSH PRIVILEGES;
-```
-
-Aplicar el schema:
-
-```bash
-mysql -u compras -p compras_db < database/schema.sql
-```
-
-Backend:
-
-```powershell
-# Crear entorno virtual
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-# Variables de entorno (ejemplo)
-setx DB_HOST 127.0.0.1
-setx DB_NAME compras_db
-setx DB_USER compras
-setx DB_PASS TU_PASSWORD_SEGURA
-```
-
-### Instalador Automático para Raspberry Pi
-
-Se incluye un instalador para dejar listo entorno, base de datos y servicio `systemd` en un solo paso.
-
-Archivo: `scripts/install_raspberry.sh`
-
-Uso rápido (modo schema):
-
-```bash
-cd ~/COMPRAS
-chmod +x scripts/install_raspberry.sh
-DB_USER=acepeda DB_PASS=2211 DB_INIT_MODE=schema DB_RESET=true ./scripts/install_raspberry.sh
-```
-
-Uso con clon completo de datos (dump):
-
-```bash
-cd ~/COMPRAS
-chmod +x scripts/install_raspberry.sh
-DB_USER=acepeda DB_PASS=2211 DB_INIT_MODE=dump DB_RESET=true DUMP_FILE=~/COMPRAS/backups_local_dump.clean.sql ./scripts/install_raspberry.sh
-```
-
-Variables soportadas:
-
-- `APP_USER` (default: usuario actual)
-- `DB_NAME` (default: `compras_db`)
-- `DB_USER` (default: `acepeda`)
-- `DB_PASS` (default: `2211`)
-- `DB_HOST` (default: `127.0.0.1`)
-- `DB_PORT` (default: `3306`)
-- `DB_INIT_MODE` (`schema` o `dump`, default: `schema`)
-- `DB_RESET` (`true`/`false`, default: `false`)
-- `DUMP_FILE` (ruta del dump cuando `DB_INIT_MODE=dump`)
-- `CREATE_SERVICE` (`true`/`false`, default: `true`)
-- `WRITE_ENV` (`true`/`false`, default: `true`)
-- `INSTALL_PACKAGES` (`true`/`false`, default: `true`)
-
-Comandos de control del servicio:
-
-```bash
-sudo systemctl status compras-api
-sudo systemctl restart compras-api
-sudo journalctl -u compras-api -f
-```
-
-### Deploy rápido desde Windows a Raspberry
-
-Para actualizar código en una Raspberry y reiniciar el servicio sin entrar archivo por archivo:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\deploy_raspberry.ps1 -Host compras-dev
-```
-
-Opciones útiles:
-
-```powershell
-# Incluir carpeta database en el deploy
-powershell -ExecutionPolicy Bypass -File .\scripts\deploy_raspberry.ps1 -Host compras-dev -IncludeDatabase
-
-# Ejecutar también el instalador remoto luego de copiar archivos
-powershell -ExecutionPolicy Bypass -File .\scripts\deploy_raspberry.ps1 -Host compras-dev -RunInstaller
-```
-
-El script:
-
-- empaqueta `app/`, `requirements.txt`, `requirements-dev.txt` y `scripts/install_raspberry.sh`
-- copia el paquete a la Raspberry por `scp`
-- descomprime en el proyecto remoto
-- reinicia `compras-api`
-- valida que `/ui/login` responda `200`
-
-## Actualización remota del sistema
-
-El sistema incluye un mecanismo de actualización remota pensado para instalaciones en Raspberry Pi, con verificación de cambios pendientes desde la UI y ejecución de actualización desde el servidor.
-
-### Cómo funciona
-
-Cuando un usuario con permiso `admin_sistema` accede a la aplicación, el sistema consulta el estado del repositorio remoto y determina si existen cambios pendientes para instalar.
-
-Comportamiento actual:
-
-- Si el sistema está actualizado, se muestra solo el mensaje de estado.
-- Si hay una actualización pendiente, se muestra el botón `Actualizar ahora`.
-- Si hay cambios pendientes, también se muestra un textbox de solo lectura con un resumen de mejoras detectadas.
-- Si no se puede consultar Git o el remoto, el sistema informa que no pudo verificar actualizaciones.
-
-### Origen de la actualización
-
-La actualización remota se realiza desde el repositorio Git configurado en la instalación.
-
-Por defecto, el script de actualización usa:
-
-- Repositorio: `https://github.com/Ariel-CP/COMPRAS.git`
-- Rama: `master`
-
-Archivo relacionado:
-
-- `scripts/ops/update.sh`
-
-### Flujo de actualización en Raspberry
-
-Cuando se ejecuta la actualización:
-
-1. Se consulta el remoto `origin` para la rama configurada.
-2. Si el proyecto ya es un repositorio Git, se ejecuta `fetch` y luego `reset` contra `origin/master`.
-3. Si no existe el repositorio Git en destino, se clona el proyecto desde GitHub.
-4. Se reinstalan dependencias Python desde `requirements.txt`.
-5. Se reinicia el servicio `compras-api`.
-6. Se valida que la aplicación vuelva a responder por HTTP.
-
-### Endpoint de estado de actualización
-
-El backend expone dos endpoints para este flujo:
-
-- `GET /api/system/update-status`
-- `POST /api/system/update`
-
-Archivos relacionados:
-
-- `app/api/system_api.py`
-- `app/services/system_service.py`
-
-El endpoint de estado informa:
-
-- Si hay actualización disponible
-- Commit local
-- Commit remoto
-- Versión actual de la aplicación
-- Si Git está disponible
-- Si el script de actualización está disponible
-- Lista resumida de mejoras pendientes
-- Cantidad total de mejoras detectadas
-
-### Resumen visual de mejoras pendientes
-
-La UI muestra un resumen más legible de los cambios pendientes cuando detecta actualizaciones remotas.
-
-Características actuales:
-
-- Toma los títulos de commits pendientes entre la versión local y la remota.
-- Intenta humanizar prefijos comunes como `fix`, `feat`, `add`, `update`, `refactor` y `docs`.
-- Elimina duplicados simples.
-- Muestra hasta 5 mejoras visibles en un textbox `readonly`.
-- Si hay más cambios, informa la cantidad total pendiente.
-
-Archivo relacionado:
-
-- `app/templates/base.html`
-
-### Permisos requeridos
-
-Para visualizar el banner de actualización y ejecutar la acción desde la interfaz, el usuario debe tener habilitado el permiso:
-
-- `admin_sistema`
-
-## Ejecución
-
-```powershell
-.\.venv\Scripts\activate
-uvicorn app.main:app --reload --port 8000
-```
-
-Acceso UI: `http://localhost:8000/ui/mbom`
-
-## Seguridad y Buenas Prácticas
-
-- No almacenar credenciales en el código (usar `.env` / variables entorno).
-- Consultas SQL parametrizadas (`text()` + dict) para evitar inyección.
-- Validaciones en servicio antes de persistir (ej.: cantidades > 0, merma < 1).
-- Estados controlados por enumeraciones del schema (evitar valores mágicos).
-
-## Flujo Típico de Usuario (MBOM)
-
-1. Abrir vista MBOM.
-2. Buscar producto PT existente o crear nuevo rápido.
-3. Cargar estructura; si no hay ACTIVO se crea BORRADOR.
-4. Agregar componentes mediante modal → ajustar cantidades/UM/merma.
-5. Guardar líneas y verificar costos.
-6. Grabar todo y activar revisión para uso en cálculos.
-7. Clonar cuando se requiera nueva modificación sin tocar la activa.
-
-## Funcionalidades Implementadas
-
-✅ **Gestión de MBOM (Bill of Materials)**
-
-- CRUD completo de estructuras de producto con revisiones
-- Estados: BORRADOR → ACTIVO → ARCHIVADO
-- Clonación de revisiones para nuevas versiones
-- Selector modal de componentes con búsqueda
-
-✅ **Cálculo de Costos Discriminados**
-
-- Costos de materiales (componentes + merma)
-- Costos de procesos (operaciones × tiempo × costo/hora)
-- Desglose porcentual materiales vs procesos
-- Panel con tabs: Materiales | Procesos | Total
-
-✅ **Gestión de Operaciones (Rutas de Proceso)**
-
-- Catálogo de operaciones con tiempo estándar y costo/hora
-- Asignación de secuencia de operaciones a cada MBOM
-- Cálculo automático de costos de proceso
-- UI integrada con selector modal y CRUD en línea
-- Plantillas reutilizables de rutas de operación (guardar, listar y aplicar)
-- Aplicación masiva de rutas con modo reemplazo/apéndice y control de secuencias
-
-✅ **Interfaz de Usuario Optimizada**
-
-- Tabla responsive con ajuste dinámico de altura
-- Columnas redimensionables manualmente
-- Sticky headers para mejor navegación
-- Búsqueda y filtrado de productos (hasta 500 registros)
-- Creación rápida de productos desde la UI
-- Mensajes persistentes y seleccionables para operaciones y costos
-- Resaltado automático en amarillo de materiales sin costo cargado
-
-✅ **Módulo de Proveedores**
-
-- ABM completo de proveedores con estado activo/inactivo
-- Campos: razón social, CUIT, email, teléfono, rubro, condición pago, dirección, notas
-- Importación masiva desde CSV (`proveedor_import_service.py`) con validaciones de CUIT, email y teléfono
-- Evaluación de proveedores por año (`evaluacion_proveedor_anual`) con puntaje ponderado
-- Vista UI: `/ui/proveedores`
-
-✅ **Módulo de Recepciones**
-
-- Registro de recepciones de materiales con estado, cantidad recibida y observaciones
-- Importación desde base de datos Access (`recepcion_access_import_service.py`) y CSV Power BI (`evaluacion_csv_recepcion_service.py`)
-- Normalización de datos (`recepcion_normalization_service.py`) y sincronización periódica (`recepcion_sync_service.py`)
-- Métricas de recepción por proveedor/período (`recepcion_metrics_service.py`)
-- Log de sincronización (`sincronizacion_log`) para auditoría
-
-✅ **Módulo de Evaluación de Proveedores**
-
-- Evaluación anual con criterios ponderados
-- Importación de datos desde fuentes externas (Access/CSV)
-- Vista UI: `/ui/evaluaciones`
-
-✅ **Tipo de Cambio**
-
-- Historial de tipos de cambio con vigencia
-- Sincronización automática configurable (`tipo_cambio_sync_service.py`)
-- Proveedor externo de tasas (`fx_provider.py`)
-- Vista UI: `/ui/tipo-cambio`
-
-✅ **Módulo de Rubros**
-
-- Catálogo de rubros/categorías para productos y proveedores
-- Vista UI: `/ui/rubros`
-
-## Avances recientes
-
-### Mayo 2026
-
-- **Calidad de código**: limpieza completa con `ruff` (43 errores corregidos, 30 automáticos y 13 manuales) y `black` para normalización de formato.
-- **Type hints / Mypy**: tipos de retorno corregidos en `proveedor_import_service.py` (`_validate_email`, `_validate_telefono`, `_validate_cuit`). Supresión correcta de errores de `pyodbc` (no tipado) y `pandas` (import diferido con `TYPE_CHECKING`).
-- **Scripts de migración**: `apply_012.py` y `apply_013.py` con docstrings de módulo y `# noqa: E402` en imports post-`sys.path`.
-- **cSpell**: archivo `.cspell.json` con vocabulario del dominio en español (`codigo`, `cuit`, `telefono`, `proveedor`, `recepcion`, etc.) para evitar falsos positivos del corrector ortográfico.
-- **Tests**: suite existente (`tests/`) mantiene 2 passed sin regresiones.
-
-### Abril 2026
-
-- **Actualización remota desde Git**: se agregó verificación visual de cambios pendientes, botón de actualización desde la UI para usuarios con permiso `admin_sistema` y resumen de mejoras detectadas antes de aplicar la actualización.
-
-### Diciembre 2025
-
-- **Plan de Producción Mensual**: ahora editable en tabla completa, con navegación por Enter y edición rápida de cantidades para todos los productos terminados (PT) activos.
-- **Importación/Exportación masiva**: soporte para cargar y descargar el plan mensual en formato Excel/CSV, con plantilla de ejemplo y validación de datos.
-- **Análisis de variación**: resumen de diferencias entre plan actual y anterior, con visualización de variaciones por producto y totales.
-- **Mejoras de usabilidad**:
-  - Navegación con Enter entre celdas de la tabla.
-  - Al enfocar la celda de cantidad, si el valor es 0, se limpia automáticamente para agilizar la carga.
-  - Feedback visual tras guardar/importar/exportar.
-- **Refactor backend**:
-  - Endpoints para resumen, edición masiva, importación y descarga de plantilla.
-  - Validaciones robustas y mensajes claros de error.
-  - Alineación estricta con el schema de base de datos.
-- **Documentación**: actualización de este README y plantillas de importación.
-
-### Anteriores
-
-- Integración de IA (OpenAI) para generación de reportes y análisis automáticos.
-- Importación de stock y precios desde ERP Flexxus (CSV/Excel).
-- Limpieza de archivos y refactorización de servicios no utilizados.
-- Mejoras en la interfaz: feedback visual tras guardar, editar o eliminar planes, y autocompletado de productos por código/nombre.
-- Validaciones robustas: no duplicar producto+mes+año, cantidad > 0, mensajes claros de error.
-- Documentación y estructura del proyecto actualizada.
-
-## Próximos Pasos
-
-- Explotación MBOM + plan mensual para requerimientos de materiales automáticos.
-- Generación de sugerencias de compra desde requerimientos vs stock.
-- Endpoints de reportes IA y summaries comparativos de costos.
-- Manejo de alternativas (`mbom_alternativa`) y efectividad (`mbom_detalle_efectividad`).
-- Historial de costos de operaciones (similar a `costo_producto`).
-- Ampliar cobertura de tests unitarios (cálculo de costos, activación/clonado, validación de cantidades, importaciones).
-
-## Git / Versionado
-
-Inicializado repositorio local. Para publicar remoto:
-
-```powershell
-git remote add origin https://github.com/ORG/REPO.git
-git push -u origin master   # o main si se renombra
-```
-
-Renombrar branch si se desea:
-
-```powershell
-git branch -m master main
-git push -u origin main
-```
-
-## Convenciones
-
-- `snake_case` para funciones/variables.
-- `PascalCase` modelos Pydantic y clases.
-- Revisiones MBOM: secuencia alfabética simple (A, B, C...).
-- Renglones: múltiplos de 10 para permitir inserciones futuras.
-
-## Contacto / Mantenimiento
-
-Documentar cambios relevantes en este README y mantener sincronizados los scripts de migración si se altera el schema.
+[Instalación](#instalacion) · [Ejecutar](#ejecucion) · [Módulos](#modulos) · [Validación](#validacion) · [Operación](#operacion)
 
 ---
 
-**Última actualización:** 5 de mayo de 2026  
-**Versión:** 0.2.0 — Módulos de proveedores, recepciones, evaluación, tipo de cambio, backups y actualización remota
+## Qué podés gestionar
 
-## Cambios recientes (13 de febrero de 2026)
+| Producción y materiales | Compras y proveedores | Recepción y calidad |
+| --- | --- | --- |
+| Estructuras MBOM y costos | Catálogo de artículos y planos | Ingreso e inspección de materiales |
+| Planificación mensual | Stock e historial de precios | Muestreo y pendientes de calidad |
+| Requerimientos de materiales | Evaluación de proveedores | Consulta histórica de Access |
 
-Resumen de cambios aplicados en esta sesión de desarrollo:
+> **Para empezar:** prepará el entorno, configurá la base y ejecutá la API. Si el sistema ya está instalado, continuá en [Ejecución y comprobación](#ejecucion).
 
-- Autenticación y autorización:
-  - Añadido soporte para usuarios, roles, sesiones y permisos por formulario.
-  - Endpoints: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`.
-  - Script de semilla: `scripts/seed_admin.py` para crear usuario administrador y permisos iniciales.
-  - Archivo de migración inicial para auth (ver `database/migrations/`).
+## Tecnologías y estructura
 
-- Protección de endpoints (guards):
-  - Se aplicó la dependencia `require_permission` en routers clave para forzar permisos por formulario:
-    - `app/api/stock.py`, `app/api/precios.py`, `app/api/tipo_cambio.py`, `app/api/unidades.py`, `app/api/mbom_api.py`, `app/api/informes.py`, `app/api/plan.py`.
+- Python + FastAPI, Pydantic y SQLAlchemy con consultas parametrizadas.
+- MariaDB/MySQL.
+- Jinja2, JavaScript con `fetch` y CSS compartido.
+- Microsoft Access mediante `pyodbc`, con lectura de archivos en modo `ReadOnly=1`.
 
-- Frontend / UX:
-  - Plantilla de login actualizada en `app/templates/auth/login.html` para mostrar mensajes de error legibles (evita "[object Object]").
+<details>
+<summary><strong>Explorar la estructura del repositorio</strong></summary>
 
-- Servicios y utilidades:
-  - Nuevo servicio de autenticación en `app/services/auth_service.py` (hashing, JWT, sesiones).
-  - Dependencias y esquemas añadidos en `app/schemas` y `app/api/deps_auth.py`.
-
-- Dependencias:
-  - Actualizado `requirements.txt` para incluir `passlib[bcrypt]`, `PyJWT`, `email-validator` y mantener compatibilidad con `bcrypt`.
-
-## Cambios recientes (02 de marzo de 2026)
-
-En esta sesión se completaron ajustes de permisos y la interfaz para respetar roles y privilegios de escritura/lectura.
-
-- Frontend: controles y botones de acción deshabilitados cuando el usuario no tiene permiso de escritura. Plantillas actualizadas:
-  - `app/templates/productos/index.html`
-  - `app/templates/rubros/list.html`
-  - `app/templates/mbom/estructura.html`
-  - `app/templates/precios/historial.html`
-  - `app/templates/stock/index.html`
-  - `app/templates/plan/plan_mensual.html`
-
-- UI: se añadió verificación en plantillas para evitar que usuarios con solo permiso de lectura vean o usen botones Crear/Editar/Importar/Guardar.
-
-- Nota técnica: la verificación se realiza leyendo `current_user.permissions["<form_key>"]` (tupla `[leer, escribir]`) expuesta por la dependencia de autenticación en la capa de renderizado de plantillas.
-
-- Mantenimiento: se dejó preparado un macro Jinja2 (por implementar) para centralizar esta lógica si se desea limpiar duplicación en múltiples plantillas.
-
-Pruebas sugeridas:
-
-1. Iniciar servidor y loguear como `admin@example.com` (o el admin creado con `scripts/seed_admin.py`). Verificar que los botones de creación/edición/importación estén habilitados.
-2. Crear un usuario con permisos solo de lectura sobre `productos` y loguear: verificar que el formulario de alta y botones de edición estén deshabilitados.
-3. Revisar la consola del navegador para asegurarse de que no se envían peticiones mutantes desde botones deshabilitados.
-
-Si quieres, puedo (1) convertir la verificación en un macro Jinja2 reutilizable y aplicarlo automáticamente a las plantillas restantes, y (2) crear pruebas automáticas básicas para la autorización.
-Archivos modificados (ejemplos):
-
-- `app/templates/auth/login.html`
-- `app/api/deps_auth.py`
-- `app/services/auth_service.py`
-- `app/api/auth.py`
-- `scripts/seed_admin.py`
-- `app/api/stock.py`, `app/api/precios.py`, `app/api/tipo_cambio.py`, `app/api/unidades.py`, `app/api/mbom_api.py`, `app/api/informes.py`, `app/api/plan.py`
-
-Comandos rápidos para probar localmente:
-
-```powershell
-# (desde la raíz del proyecto, con venv activado)
-python scripts/seed_admin.py --email admin@example.com --password admin123 --nombre "Admin"
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-
-# Probar login (dev):
-curl -i -c cookies.txt -H "Content-Type: application/json" -d '{"email":"admin@example.com","password":"admin123"}' http://127.0.0.1:8000/api/auth/login
-
-# Probar endpoint protegido usando la cookie recibida:
-curl -b cookies.txt http://127.0.0.1:8000/api/stock/2025/01
+```text
+app/
+  main.py              # Aplicación, middleware y compatibilidad de plantillas
+  core/config.py       # Configuración desde entorno, .env y app/config.json
+  db.py                # Motor y sesiones de base de datos
+  api/                 # Endpoints JSON y routers UI
+  services/            # Lógica de negocio
+  schemas/             # Modelos Pydantic
+  templates/           # Vistas Jinja2
+  static/              # CSS y JavaScript
+database/
+  schema.sql           # Dump base en UTF-16; revisar junto con las migraciones
+  migrations/          # Cambios incrementales del modelo
+scripts/
+  ops/                 # Administración, migraciones, importaciones y despliegue
+  dev/                 # Diagnóstico y herramientas de desarrollo
+tests/                 # Pruebas por módulo
+import/                # Plantillas de importación
 ```
 
-Notas y recomendaciones:
+</details>
 
-- Asegúrate de aplicar las migraciones SQL que crean las tablas de `usuario`, `rol`, `usuario_rol`, `permiso_form` antes de ejecutar el `seed_admin.py`.
-- Reinicia `uvicorn` cuando actualices plantillas para evitar caché de reloader en algunos entornos.
-- Considerar agregar CSRF y rate-limiting para endpoints de autenticación y de importación de archivos en producción.
 
-## Cambios recientes (13 de marzo de 2026)
+El modelo se documenta en [database/schema.sql](database/schema.sql) y [database/migrations](database/migrations). El dump puede no incluir migraciones posteriores. Antes de operar sobre una instalación existente, comprobar su esquema real y las migraciones aplicadas.
 
-### Módulo de administración de backups
+<a id="instalacion"></a>
 
-Se agregó un módulo específico para administrar backups de base de datos desde UI y API.
+## Instalación local en Windows
 
-- Vista UI (requiere permiso):
-  - `GET /ui/admin/backups`
+Requisitos: Python 3.11 o posterior, MariaDB/MySQL accesible y Git para operaciones de versionado. Las consultas a Access requieren el controlador ODBC de Microsoft Access compatible con la arquitectura de Python y acceso al archivo configurado.
 
-- Endpoints API:
-  - `GET /api/backups/` → lista backups disponibles
-  - `POST /api/backups/` → genera nuevo backup SQL
-  - `GET /api/backups/{filename}/download` → descarga backup
-  - `DELETE /api/backups/{filename}` → elimina backup
-  - `POST /api/backups/restore` → sube archivo `.sql` y restaura la base actual
+### 1. Preparar el entorno
 
-- Configuración:
-  - `BACKUP_DIR` (opcional): directorio destino para los `.sql` (default `backups/`)
-  - `MYSQLDUMP_PATH` (opcional): ruta explícita de `mysqldump` si no está en `PATH`
-  - `MYSQL_CLIENT_PATH` (opcional): ruta explícita de `mysql` para restauración si no está en `PATH`
-  - Desde la UI de backups también se puede elegir un directorio puntual por operación (incluye rutas de pendrive como `E:\Backups`).
-  - La UI permite guardar directorios favoritos y programar backup automático por hora y días seleccionados.
-
-- Permisos:
-  - Nuevo `form_key`: `admin_backups`
-  - Se muestra como opción en **Configuración** del menú superior para usuarios con acceso.
-
-Ejemplo (Windows PowerShell):
+Ejecutar desde la raíz del repositorio en PowerShell:
 
 ```powershell
-$env:BACKUP_DIR = "backups"
-$env:MYSQLDUMP_PATH = "C:\\Program Files\\MariaDB 11.4\\bin\\mysqldump.exe"
-$env:MYSQL_CLIENT_PATH = "C:\\Program Files\\MariaDB 11.4\\bin\\mysql.exe"
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt pytest
 ```
 
-Notas:
+Seleccionar `.venv\Scripts\python.exe` como intérprete del workspace. No es necesario activar el entorno si se invoca ese ejecutable directamente.
 
-- El directorio `backups/` está excluido de git en `.gitignore`.
-- La pantalla `/ui/admin/backups` informa si `mysqldump` está disponible antes de permitir generar backups.
-- La restauración es una operación destructiva: puede sobrescribir datos y causar pérdida de información posterior al backup.
-- La UI exige confirmaciones explícitas de sobreescritura/pérdida de datos y el texto `RESTAURAR` antes de ejecutar.
-- Programación automática: la app ejecuta un backup en los días seleccionados a la hora configurada en la pantalla de backups (se guarda en `parametro_sistema`).
+### 2. Configurar la aplicación
 
+La API usa [app/core/config.py](app/core/config.py). Las variables de entorno tienen prioridad sobre `app/config.json`; también se carga `.env` desde la raíz. Hay una referencia en [.env.example](.env.example).
+
+Ejemplo de `.env`, reemplazando los valores de muestra:
+
+```dotenv
+DATABASE_URL="mysql+pymysql://USUARIO:CLAVE@127.0.0.1:3306/compras_db?charset=utf8mb4"
+AUTH_SECRET_KEY="REEMPLAZAR_POR_UN_SECRETO_PROPIO"
+AUTH_COOKIE_SECURE=false
+ACCESS_DB_PATH="R:/ruta/al/Control.accdb"
+PLANOS_DIR="R:/ruta/a/planos/pdf"
+```
+
+Codificar en formato URL los caracteres especiales del usuario o la contraseña en `DATABASE_URL`. La API no construye esta URL a partir de `DB_HOST`, `DB_NAME`, `DB_USER` y `DB_PASS`; algunos scripts operativos sí usan esas variables y tienen su propia configuración.
+
+| Variable | Uso |
+| --- | --- |
+| `DATABASE_URL` | Conexión SQLAlchemy a MariaDB/MySQL |
+| `MYSQL_POOL_SIZE`, `MYSQL_MAX_OVERFLOW` | Límites del pool de conexiones |
+| `AUTH_SECRET_KEY` | Firma de tokens de sesión |
+| `AUTH_COOKIE_SECURE` | Cookie HTTPS; usar `false` para desarrollo HTTP local |
+| `AUTH_ACCESS_TOKEN_MINUTES`, `AUTH_REMEMBER_DAYS` | Duración de sesión |
+| `ACCESS_DB_PATH`, `ACCESS_TABLE_NAME` | Archivo y tabla de origen de Access |
+| `PLANOS_DIR` | Carpeta de planos PDF |
+| `BACKUP_DIR`, `MYSQLDUMP_PATH`, `MYSQL_CLIENT_PATH` | Backups y clientes de base de datos |
+| `BCRA_API_BASE_URL`, `BCRA_SYNC_DAYS`, `SYNC_JOB_TOKEN` | Configuración de tipo de cambio y sincronización |
+
+No publicar archivos de configuración con credenciales, tokens o rutas privadas.
+
+### 3. Preparar la base de datos
+
+Crear la base y configurar un usuario con los permisos necesarios para la instalación. Para inicializarla, revisar el dump y las migraciones que correspondan a la versión elegida.
+
+- `database/schema.sql` está en UTF-16. Convertirlo a UTF-8 antes de usar un cliente que no acepte ese encoding.
+- El dump contiene `DROP TABLE`; no restaurarlo sobre una base con datos que se deban conservar.
+- En instalaciones existentes, aplicar únicamente las migraciones pendientes, revisando dependencias. Hay migraciones históricas con prefijos repetidos: no ejecutar toda la carpeta mediante un bucle indiscriminado.
+- Guardar un respaldo antes de modificar el esquema.
+
+Ejemplo de ejecución de una migración pendiente, después de revisar su contenido y los requisitos:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/ops/apply_migration.py database/migrations/025_permisos_por_pantalla.sql
+```
+
+Para administración y permisos iniciales, revisar [scripts/ops/seed_admin.py](scripts/ops/seed_admin.py), [scripts/ops/seed_roles.py](scripts/ops/seed_roles.py) y las migraciones de autenticación y permisos por pantalla.
+
+<a id="ejecucion"></a>
+
+## Ejecución y comprobación
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Para desarrollo con recarga automática, agregar `--reload` o usar la task **Run API (uvicorn)** de VS Code.
+
+- Inicio de sesión: [http://localhost:8000/ui/login](http://localhost:8000/ui/login).
+- Inicio de la aplicación: [http://localhost:8000/ui/](http://localhost:8000/ui/).
+- Estado del proceso: `GET /health`.
+- Estado de la base de datos: `GET /api/health/db`.
+- Documentación de endpoints: [http://localhost:8000/docs](http://localhost:8000/docs).
+
+Las vistas `/ui/*` requieren sesión salvo login/logout. El acceso a pantallas y operaciones depende de los permisos del usuario; los controles se implementan en [app/main.py](app/main.py) y [app/api/deps_auth.py](app/api/deps_auth.py).
+
+Antes de iniciar otra instancia, comprobar si el puerto 8000 está ocupado. Si una recarga queda pendiente, revisar los logs y reiniciar solo la instancia del proyecto. Comprobar también el endpoint modificado: que responda el login o un archivo estático no demuestra que la API haya cargado el código nuevo.
+
+<a id="modulos"></a>
+
+## Módulos y flujos
+
+### Artículos y planos
+
+El catálogo de artículos está en `producto`: el código se guarda en `codigo` y el nombre en `nombre`.
+
+La vista [Planos de artículos](http://localhost:8000/ui/planos-articulos) consulta `GET /api/productos/planos`. La asociación se resuelve en [articulo_plano_service.py](app/services/articulo_plano_service.py):
+
+- Relaciona los cuatro dígitos finales del código del artículo con el número base del plano disponible en el catálogo PDF.
+- Admite varios artículos por plano y varias revisiones de un mismo PDF.
+- Incluye código, nombre, descripción disponible y relaciones con productos mediante MBOM.
+- El historial de Access reutiliza estas asociaciones; no obtiene el nombre de las observaciones ni usa un catálogo alternativo.
+
+El plano `539` de Access se normaliza a `0539` para la búsqueda y la visualización. Los números de cinco dígitos se conservan sin truncarlos; no se deben asociar a un plano diferente tomando solo sus últimas cifras.
+
+### Recepción e inspección de materiales
+
+| Pantalla | Ruta |
+| --- | --- |
+| Nueva recepción | `/ui/recepcion` |
+| Controles recientes | `/ui/recepcion/controles` |
+| Pendientes de calidad | `/ui/recepcion/calidad` |
+| Historial de Access | `/ui/recepcion/historial-access` |
+
+La recepción operativa registra ingresos e inspecciones en MariaDB/MySQL mediante [recepcion_operativa_service.py](app/services/recepcion_operativa_service.py). Incluye control de calidad, muestreo e intentos de inspección; revisar las migraciones asociadas antes de habilitar estas funciones en otra instalación.
+
+El historial consulta Access en modo solo lectura mediante [access_read_service.py](app/services/access_read_service.py). Es un recorrido distinto de la recepción operativa y del staging de importación.
+
+| Campo de Access | Significado |
+| --- | --- |
+| `ID_INT` | Identificador del control, usado para abrir su detalle |
+| `N_interno` | Número de inspección mostrado en el listado |
+| `PLANO` | Número de plano usado para asociar artículos |
+| `Lote` | Cantidad ingresada |
+| `Material` | Material informado en origen |
+| `NOTA` | Observaciones; no es el nombre del artículo |
+
+El listado muestra la fecha de control sin hora, código y nombre del artículo, cantidad, OC/remito y estado. Las columnas se pueden reordenar y redimensionar; las preferencias se guardan en el navegador y se pueden restablecer con **Restablecer columnas**. Las consultas históricas tienen caché breve y pueden tardar por la conexión ODBC.
+
+### Importaciones de Access y evaluación
+
+Hay recorridos separados para importar datos a staging, normalizarlos, calcular métricas y evaluar proveedores. El servicio [recepcion_access_snapshot_service.py](app/services/recepcion_access_snapshot_service.py) también permite guardar versiones de origen de `CONTROL DE RECEPCION`, `CRD` y `CRD-ORI`, conservando identidad y contenido original; un snapshot no equivale a crear recepciones canónicas.
+
+Para validar recepción y evaluación, consultar [la guía del flujo](docs/VALIDACION_EVALUACION_PROVEEDORES.md) y contrastar sus ejemplos con los endpoints actuales de `/docs`. Para el importador de snapshots, revisar [scripts/ops/importar_snapshot_access.py](scripts/ops/importar_snapshot_access.py).
+
+### MBOM y costos
+
+El flujo permite crear una revisión BORRADOR, cargar componentes y operaciones, calcular costos, activar la revisión y clonar una revisión activa para continuar editando. La activación archiva revisiones activas anteriores.
+
+El cálculo distingue materiales y procesos. Las reglas y ejemplos se documentan en [Modelo de costos discriminados](docs/costos_discriminados.md); la lógica se encuentra en `app/services/mbom_service.py`, `mbom_costos.py` y `mbom_operacion_service.py`.
+
+### Planificación, stock, precios y administración
+
+El repositorio incluye planificación mensual y variaciones, importación de stock, historial e importación de precios, proveedores, evaluación, informes y tipo de cambio. También incluye usuarios, roles, permisos por pantalla, backups y actualización remota. Consultar los endpoints disponibles en `/docs` y [app/api/router.py](app/api/router.py), en lugar de asumir que estos módulos están pendientes.
+
+<a id="csv"></a>
+
+## Corrección de nombres desde CSV
+
+El script [corregir_nombres_articulos_csv.py](scripts/ops/corregir_nombres_articulos_csv.py) compara `Código;Descripción` con el catálogo local. Lee UTF-8 o CP1252, valida nombres y códigos duplicados y genera un reporte JSON con valores anteriores y nuevos.
+
+Primero comparar:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/ops/corregir_nombres_articulos_csv.py TEMP/Articulos.csv
+```
+
+Después de revisar el reporte, aplicar las correcciones:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/ops/corregir_nombres_articulos_csv.py TEMP/Articulos.csv --apply
+```
+
+La aplicación usa una transacción y verifica los nombres tras guardar. Los reportes se escriben por defecto en `TEMP/correccion_nombres/`. Los códigos inexistentes quedan informados; no se crean artículos ni se modifican códigos. Cuando un código tiene mojibake, solo se utiliza su variante corregida para buscar una coincidencia inequívoca.
+
+<a id="validacion"></a>
+
+## Validación y desarrollo
+
+Ejecutar desde la raíz con el entorno del repositorio:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check app/services/access_read_service.py app/services/articulo_plano_service.py
+.\.venv\Scripts\python.exe -m pytest tests/test_access_article_names.py tests/test_articulo_plano_service.py tests/test_access_read_service.py -q
+node --check app/static/js/recepcion_access_history.js
+```
+
+Son ejemplos para el flujo de historial y planos. Elegir las pruebas según el módulo modificado. La suite también cubre permisos, auth, recepción operativa, importaciones, snapshots, muestreo y tipo de cambio. Para ejecutar todas las pruebas: `.venv\Scripts\python.exe -m pytest`.
+
+Las tasks de VS Code incluyen **Run API (uvicorn)**, **Lint (ruff)**, **Format (black)** y **Test (pytest)**. Evitar reformatear archivos ajenos al cambio. Mantener el flujo `endpoint -> service -> database`, consultas parametrizadas y validaciones de negocio en servicios.
+
+Los archivos de código y documentación usan UTF-8. En PowerShell, configurar `$OutputEncoding` en UTF-8 antes de enviar texto con acentos a otro proceso por un pipe. Para antecedentes de caracteres dañados, revisar [producto_service.py](app/services/producto_service.py) y [sus pruebas de mojibake](tests/test_producto_mojibake.py).
+
+<a id="operacion"></a>
+
+## Operación y despliegue
+
+La organización de herramientas está en [scripts/README.md](scripts/README.md) y la referencia operativa en [scripts/ops/README.md](scripts/ops/README.md).
+
+- Instalación de Raspberry Pi: [scripts/ops/install_raspberry.sh](scripts/ops/install_raspberry.sh).
+- Despliegue desde Windows: [scripts/ops/deploy_raspberry.ps1](scripts/ops/deploy_raspberry.ps1).
+- Actualización desde Git: [scripts/ops/update.sh](scripts/ops/update.sh).
+- Migraciones y comprobaciones posteriores: [scripts/ops/post_deploy_raspberry.sh](scripts/ops/post_deploy_raspberry.sh).
+
+Antes de usar scripts históricos de instalación o despliegue, revisar las rutas calculadas y referencias internas tras su traslado a `scripts/ops`, las variables exigidas y la configuración del destino. No usar credenciales de ejemplo ni reinicializar una base existente para actualizar código.
+
+El servicio de Raspberry se consulta con:
+
+```bash
+sudo systemctl status compras-api
+sudo journalctl -u compras-api -f
+```
+
+La API expone `GET /api/system/update-status` y `POST /api/system/update` para consultar y ejecutar actualizaciones, sujetos a permisos. El actualizador puede ejecutar `git reset --hard` contra la rama configurada: preservar los cambios locales antes de utilizarlo. Comprobar el proceso, la base de datos y el flujo afectado después de desplegar.
+
+<a id="documentacion"></a>
+
+## Documentación relacionada
+
+| Guía | Contenido |
+| --- | --- |
+| [Instrucciones para agentes](agents.md) | Convenciones, arquitectura y reglas del workspace |
+| [Modelo de costos MBOM](docs/costos_discriminados.md) | Cálculos de materiales y procesos |
+| [Recepción y evaluación](docs/VALIDACION_EVALUACION_PROVEEDORES.md) | Validación del flujo de proveedores |
+| [Organización de scripts](scripts/README.md) | Separación entre operación y desarrollo |
+| [Operación y mantenimiento](scripts/ops/README.md) | Administración y herramientas de despliegue |
+
+---
+
+[Volver al inicio](#sistema-de-compras-y-planificación)
+
+Última actualización: **5 de noviembre de 2026**. Versión: [VERSION](VERSION), leída por [app/core/version.py](app/core/version.py).
