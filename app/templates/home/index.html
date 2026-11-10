@@ -1,15 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}Seleccionar formulario{% endblock %}
+{% block title %}Inicio{% endblock %}
 {% block content %}
-<h2>Seleccioná un formulario</h2>
-<section class="grid">
-  {% for form in form_options %}
-  <a class="card" href="{{ form.url }}">
-    <h3>{{ form.name }}</h3>
-    <p>{{ form.description }}</p>
-  </a>
-  {% else %}
-  <p>No tenés formularios habilitados. Contactá al administrador del sistema.</p>
-  {% endfor %}
-</section>
+<h2>Bienvenido{% if current_user and current_user.nombre %}, {{ current_user.nombre }}{% endif %}</h2>
+<p>Usá el menú lateral para navegar por el sistema.</p>
 {% endblock %}

@@ -10,7 +10,12 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.api.deps_auth import get_current_user
+from app.api.deps_auth import (
+    get_current_user,
+    require_api_screen_permission,
+    resolve_ui_permission,
+    user_has_permission,
+)
 
 from .api import (
     ui_admin,
@@ -111,7 +116,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    application.include_router(api_router, prefix="/api")
+    application.include_router(
+        api_router,
+        prefix="/api",
+        dependencies=[Depends(require_api_screen_permission)],
+    )
     # UI routers directamente en /ui
     application.include_router(ui_home.router, prefix="/ui")
     application.include_router(ui_auth.router, prefix="/ui")
@@ -162,7 +171,7 @@ def create_app() -> FastAPI:
                 return await call_next(request)
 
             # comprobar token/usuario
-            from fastapi.responses import JSONResponse, RedirectResponse
+            from fastapi.responses import JSONResponse
 
             from app.db import SessionLocal
 
@@ -179,8 +188,21 @@ def create_app() -> FastAPI:
 
             if not user:
                 if request.method in ("GET", "HEAD"):
-                    return RedirectResponse(url=f"/ui/login?next={request.url.path}", status_code=302)
-                return JSONResponse(status_code=401, content={"detail": "No autenticado"})
+                    return RedirectResponse(
+                        url=f"/ui/login?next={request.url.path}",
+                        status_code=302,
+                    )
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "No autenticado"},
+                )
+
+            ui_permission = resolve_ui_permission(path, request.method)
+            if ui_permission and not user_has_permission(user, *ui_permission):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Permiso insuficiente"},
+                )
 
         return await call_next(request)
 

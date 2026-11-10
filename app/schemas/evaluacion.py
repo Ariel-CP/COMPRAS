@@ -103,3 +103,23 @@ class EvaluacionListItem(BaseModel):
     proxima_evaluacion: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EvaluacionRankingOperativoItem(BaseModel):
+    proveedor_id: int
+    proveedor_codigo: Optional[str] = None
+    proveedor_nombre: Optional[str] = None
+    cantidad_recepciones: int
+    cantidad_lineas: int
+    cantidad_lineas_aceptadas: int
+    cantidad_lineas_rechazadas: int
+    porcentaje_calidad: float
+    porcentaje_entrega_a_tiempo: Optional[float] = None
+    cantidad_no_conformidades: int
+    no_conformidades_abiertas: int
+    promedio_dias_respuesta_nc: Optional[float] = None
+    puntaje_calidad: float
+    puntaje_entrega: Optional[float] = None
+    puntaje_respuesta_nc: float
+    puntaje_general: Optional[float] = None
+    estado: str

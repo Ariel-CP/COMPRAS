@@ -18,7 +18,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.api.deps_auth import require_permission
+from app.api.deps_auth import require_permission, user_has_any_permission
+from app.services.ai_policy_service import (
+    ExternalAIDisabled,
+    external_ai_status,
+    require_external_ai,
+)
 from app.services.plan_produccion_service import (
     calcular_asistente_oc,
     calcular_faltantes_y_capacidad,
@@ -198,13 +203,13 @@ def requerimientos_valuados(
 def faltantes_capacidad(
     mes: int = Query(..., ge=1, le=12),
     anio: int = Query(..., ge=2000, le=2100),
-    persistir_sugerencias: bool = Query(True),
+    persistir_sugerencias: bool = Query(False),
     db: Session = Depends(get_db),
     _current_user: dict = Depends(require_permission("plan", False)),
 ):
-    permisos = _current_user.get("permissions", {}) if _current_user else {}
-    permiso_plan = permisos.get("plan", (False, False))
-    puede_escribir = bool(permiso_plan[1]) if isinstance(permiso_plan, (tuple, list)) else False
+    puede_escribir = user_has_any_permission(
+        _current_user, ("ui_plan_mensual", "ui_plan_requerimientos"), True,
+    )
 
     if persistir_sugerencias and not puede_escribir:
         raise HTTPException(
@@ -230,9 +235,9 @@ def asistente_oc_calcular(
     db: Session = Depends(get_db),
     _current_user: dict = Depends(require_permission("plan", False)),
 ):
-    permisos = _current_user.get("permissions", {}) if _current_user else {}
-    permiso_plan = permisos.get("plan", (False, False))
-    puede_escribir = bool(permiso_plan[1]) if isinstance(permiso_plan, (tuple, list)) else False
+    puede_escribir = user_has_any_permission(
+        _current_user, ("ui_plan_asistente_oc",), True,
+    )
 
     if persistir_sugerencias and not puede_escribir:
         raise HTTPException(
@@ -258,7 +263,7 @@ def asistente_oc_calcular(
     usuario_id = int(_current_user.get("id") or 0)
     usuario_email = str(_current_user.get("email") or "")
     usuario_nombre = _current_user.get("nombre")
-    if usuario_id > 0 and usuario_email:
+    if persistir_sugerencias and usuario_id > 0 and usuario_email:
         try:
             corrida_id = registrar_corrida_asistente_oc(
                 db,
@@ -934,3 +939,23 @@ def plantilla_xlsx(
         ),
         headers=headers_resp,
     )
+
+
+@router.get("/asistente-oc/ia/estado", response_model=dict)
+def asistente_oc_ia_estado(
+    _current_user: dict = Depends(require_permission("plan", False)),
+):
+    return external_ai_status()
+
+
+@router.post("/asistente-oc/ia", response_model=dict)
+def asistente_oc_ia_bloqueada(
+    _current_user: dict = Depends(require_permission("plan", False)),
+):
+    try:
+        require_external_ai()
+    except ExternalAIDisabled:
+        raise HTTPException(
+            status_code=403,
+            detail="IA externa deshabilitada. No se envió información a ningún proveedor.",
+        ) from None

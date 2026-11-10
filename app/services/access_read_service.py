@@ -3,14 +3,31 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.db import SessionLocal
+from app.services.articulo_plano_service import obtener_asociaciones_por_plano
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Caché en memoria para el listado de controles Access. La conexión ODBC al
+# .accdb tarda varios segundos; cachear evita reabrirla en requests seguidos.
+_CONTROLES_CACHE_TTL_SECONDS = 30.0
+_controles_cache_lock = threading.Lock()
+_controles_cache: dict[tuple, tuple[float, list[dict[str, Any]]]] = {}
+
+# Serializa el acceso ODBC a Access: el driver no tolera bien conexiones
+# concurrentes sobre el mismo .accdb y se degrada o cuelga.
+_access_connection_lock = threading.Lock()
 
 ALLOWED_TABLES = frozenset({"CONTROL DE RECEPCION", "Listado Planos"})
 HISTORIC_RECEIPTION_COLUMNS = (
@@ -280,6 +297,48 @@ def _access_read_connection(path: str | None = None):
         raise AccessReadError("No se pudo conectar a la base Access") from exc
 
 
+def _agregar_nombres_articulos(rows: list[dict[str, Any]]) -> None:
+    """Usa la misma relacion plano/articulo que la pantalla Planos de articulos."""
+    numeros = [str(row.get("PLANO", "")).strip() for row in rows]
+    if not any(numero.isdigit() for numero in numeros):
+        return
+    try:
+        with SessionLocal() as db:
+            por_plano = obtener_asociaciones_por_plano(db, numeros)
+    except (SQLAlchemyError, OSError):
+        logger.exception(
+            "No se pudieron consultar las asociaciones de planos y articulos"
+        )
+        por_plano = {}
+    for row, numero in zip(rows, numeros):
+        asociaciones = por_plano.get(numero.zfill(4), []) if numero.isdigit() else []
+        row["articulo_asociaciones"] = asociaciones
+        row["articulo_codigo"] = (
+            ", ".join(
+                sorted(
+                    {
+                        str(item["articulo_codigo"])
+                        for item in asociaciones
+                        if item["articulo_codigo"]
+                    }
+                )
+            )
+            or None
+        )
+        row["articulo_nombre"] = (
+            ", ".join(
+                sorted(
+                    {
+                        str(item["articulo_nombre"])
+                        for item in asociaciones
+                        if item["articulo_nombre"]
+                    }
+                )
+            )
+            or None
+        )
+
+
 def listar_controles_access(
     *,
     q: str | None = None,
@@ -325,17 +384,108 @@ def listar_controles_access(
         f"SELECT TOP {safe_limit} {columns} FROM [CONTROL DE RECEPCION]"
         f"{where_sql} ORDER BY [ID_INT] DESC"
     )
+
+    cache_key = (
+        q.strip() if q else None,
+        proveedor_codigo.strip() if proveedor_codigo else None,
+        desde,
+        hasta,
+        before_id,
+        safe_limit,
+        path,
+    )
+    now = time.monotonic()
+    with _controles_cache_lock:
+        cached = _controles_cache.get(cache_key)
+        if cached is not None and now - cached[0] < _CONTROLES_CACHE_TTL_SECONDS:
+            return [dict(row) for row in cached[1]]
+
+    with _access_connection_lock:
+        connection = _access_read_connection(path)
+        try:
+            cursor = connection.cursor()
+            cursor.execute(query, params)
+            names = [description[0] for description in cursor.description or []]
+            rows = [dict(zip(names, row)) for row in cursor.fetchall()]
+        except Exception as exc:
+            logger.exception("Error consultando histórico de controles Access")
+            raise AccessReadError(
+                "No se pudo consultar el historial de Access"
+            ) from exc
+        finally:
+            connection.close()
+
+    _agregar_nombres_articulos(rows)
+    with _controles_cache_lock:
+        _controles_cache[cache_key] = (time.monotonic(), rows)
+        # Evita crecimiento indefinido del caché.
+        if len(_controles_cache) > 64:
+            oldest = min(_controles_cache, key=lambda k: _controles_cache[k][0])
+            _controles_cache.pop(oldest, None)
+    return [dict(row) for row in rows]
+
+
+def resumir_desempeno_proveedor_access(
+    proveedor_codigo: str,
+    *,
+    desde: date,
+    hasta: date,
+    path: str | None = None,
+) -> dict[str, Any]:
+    """Suma lotes aceptados/rechazados de un proveedor sin limitar filas."""
+    if not proveedor_codigo.strip():
+        raise ValueError("El código de proveedor es obligatorio")
+    if desde > hasta:
+        raise ValueError("La fecha Desde no puede ser posterior a la fecha Hasta")
+
+    query = (
+        "SELECT [Lote], [Estado] FROM [CONTROL DE RECEPCION] "
+        "WHERE [Codigo Proveedor] = ? AND [Fecha Control] >= ? "
+        "AND [Fecha Control] < ?"
+    )
     connection = _access_read_connection(path)
     try:
         cursor = connection.cursor()
-        cursor.execute(query, params)
-        names = [description[0] for description in cursor.description or []]
-        return [dict(zip(names, row)) for row in cursor.fetchall()]
+        cursor.execute(
+            query, [proveedor_codigo.strip(), desde, hasta + timedelta(days=1)]
+        )
+        filas = cursor.fetchall()
     except Exception as exc:
-        logger.exception("Error consultando histórico de controles Access")
-        raise AccessReadError("No se pudo consultar el historial de Access") from exc
+        logger.exception("Error agregando desempeño histórico de Access")
+        raise AccessReadError(
+            "No se pudo consultar el desempeño histórico del proveedor"
+        ) from exc
     finally:
         connection.close()
+
+    aceptados = Decimal("0")
+    rechazados = Decimal("0")
+    registros = 0
+    for lote, estado in filas:
+        estado_normalizado = str(estado or "").strip().casefold()
+        if estado_normalizado not in {"aceptado", "rechazado"}:
+            continue
+        try:
+            cantidad_lote = Decimal(str(lote or 0))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise AccessReadError(
+                "El historial contiene un tamaño de lote no numérico"
+            ) from exc
+        if not cantidad_lote.is_finite() or cantidad_lote < 0:
+            raise AccessReadError("El historial contiene un tamaño de lote inválido")
+        registros += 1
+        if estado_normalizado == "aceptado":
+            aceptados += cantidad_lote
+        else:
+            rechazados += cantidad_lote
+
+    return {
+        "aceptados": aceptados,
+        "rechazados": rechazados,
+        "registros": registros,
+        "desde": desde,
+        "hasta": hasta,
+    }
 
 
 def listar_recepciones_recientes_access(
@@ -375,7 +525,9 @@ def listar_recepciones_recientes_access(
         return [dict(zip(names, row)) for row in cursor.fetchall()]
     except Exception as exc:
         logger.exception("Error consultando recepciones recientes de Access")
-        raise AccessReadError("No se pudieron consultar las recepciones de Access") from exc
+        raise AccessReadError(
+            "No se pudieron consultar las recepciones de Access"
+        ) from exc
     finally:
         connection.close()
 
@@ -407,9 +559,14 @@ def obtener_control_access(
         receipt["controles"] = [
             dict(zip(inspection_names, inspection)) for inspection in cursor.fetchall()
         ]
+        _agregar_nombres_articulos([receipt])
         return receipt
     except Exception as exc:
-        logger.exception("Error consultando detalle histórico Access ID_INT=%s", access_id)
-        raise AccessReadError("No se pudo consultar el detalle del control Access") from exc
+        logger.exception(
+            "Error consultando detalle histórico Access ID_INT=%s", access_id
+        )
+        raise AccessReadError(
+            "No se pudo consultar el detalle del control Access"
+        ) from exc
     finally:
         connection.close()

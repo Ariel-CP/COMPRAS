@@ -17,7 +17,7 @@ class RecepcionLineaBase(BaseModel):
     """Base para línea de recepción."""
     numero_linea: int
     producto_id: int
-    cantidad_solicitada: Decimal
+    cantidad_solicitada: Optional[Decimal] = None
     cantidad_recibida: Optional[Decimal] = None
     unidad_medida_id: Optional[int] = None
     lote_numero: Optional[str] = None
@@ -99,17 +99,19 @@ class RecepcionOperativaCreate(BaseModel):
     orden_compra: str = Field(min_length=1, max_length=50)
     remito: Optional[str] = Field(default=None, max_length=100)
     cantidad_solicitada: Decimal = Field(gt=0)
-    cantidad_recibida: Decimal = Field(ge=0)
-    cantidad_lote: Decimal = Field(gt=0)
+    cantidad_recibida: Decimal = Field(gt=0)
+    cantidad_lote: Optional[Decimal] = Field(default=None, gt=0)
     numero_plano: Optional[str] = Field(default=None, max_length=50)
     designacion: Optional[str] = Field(default=None, max_length=255)
     nivel_inspeccion: Optional[str] = Field(default=None, max_length=30)
+    letra_codigo_muestreo: Optional[str] = Field(default=None, min_length=1, max_length=1)
     tamano_muestra: Optional[int] = Field(default=None, ge=0)
     porcentaje_muestreo: Optional[Decimal] = Field(default=None, ge=0, le=100)
     material_utilizado: Optional[str] = Field(default=None, max_length=255)
     terminacion_superficial: Optional[Decimal] = Field(default=None, ge=0, le=100)
     control_dimensional: Optional[Decimal] = Field(default=None, ge=0, le=100)
     embalaje: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    estado_embalaje: Literal["CONFORME", "NO_CONFORME", "NO_APLICA"]
     lote_numero: Optional[str] = Field(default=None, max_length=100)
     notas: Optional[str] = None
     cotas: List[RecepcionCotaCreate] = Field(default_factory=list, max_length=250)
@@ -122,6 +124,21 @@ class RecepcionCalidadCreate(BaseModel):
     terminacion_superficial: Optional[Decimal] = Field(default=None, ge=0, le=100)
     control_dimensional: Optional[Decimal] = Field(default=None, ge=0, le=100)
     embalaje: Optional[Decimal] = Field(default=None, ge=0, le=100)
+
+
+class RecepcionIntentoInspeccionCreate(BaseModel):
+    """Resultado observado de un intento; no calcula reglas normativas."""
+
+    tipo_intento: Literal["INICIAL", "REINSPECCION"]
+    intento_anterior_id: Optional[int] = Field(default=None, gt=0)
+    nivel_inspeccion: Optional[str] = Field(default=None, max_length=30)
+    tamano_muestra_planificado: Optional[int] = Field(default=None, gt=0)
+    unidades_inspeccionadas: int = Field(gt=0)
+    unidades_no_conformes: int = Field(ge=0)
+    decision: Literal["ACEPTADO", "RECHAZADO", "PENDIENTE"]
+    referencia_normativa: Optional[str] = Field(default=None, max_length=100)
+    fecha_inspeccion: Optional[datetime] = None
+    cotas: List[RecepcionCotaCreate] = Field(default_factory=list, max_length=250)
 
 
 class RecepcionOperativaOut(BaseModel):

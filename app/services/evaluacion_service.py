@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -439,6 +439,243 @@ def ranking_proveedores_periodo(db: Session, desde: date, hasta: date) -> dict:
         "mejores_10": mejores_10,
         "peores_20": peores_20,
     }
+
+
+def ranking_operativo_proveedores_periodo(
+    db: Session, desde: date, hasta: date
+) -> list[dict]:
+    """Calcula el desempeño operativo con recepciones normalizadas e históricas."""
+    recepcion_rows = db.execute(
+        text("""
+            SELECT
+                p.id AS proveedor_id,
+                p.codigo AS proveedor_codigo,
+                p.nombre AS proveedor_nombre,
+                COUNT(DISTINCT rc.id) AS cantidad_recepciones,
+                COUNT(rl.id) AS cantidad_lineas,
+                SUM(CASE WHEN rl.estado_inspeccion = 'APROBADO' THEN 1 ELSE 0 END)
+                    AS cantidad_lineas_aceptadas,
+                SUM(CASE WHEN rl.estado_inspeccion IN ('RECHAZADO', 'RECHAZADO_PARCIAL')
+                         THEN 1 ELSE 0 END) AS cantidad_lineas_rechazadas
+            FROM recepcion_cabecera rc
+            JOIN proveedor p ON p.id = rc.proveedor_id
+            LEFT JOIN recepcion_linea rl ON rl.recepcion_cabecera_id = rc.id
+            WHERE rc.fecha_recepcion BETWEEN :desde AND :hasta
+            GROUP BY p.id, p.codigo, p.nombre
+        """),
+        {"desde": desde, "hasta": hasta},
+    ).mappings().all()
+    staging_rows = db.execute(
+        text("""
+            SELECT
+                p.id AS proveedor_id,
+                p.codigo AS proveedor_codigo,
+                p.nombre AS proveedor_nombre,
+                COUNT(*) AS cantidad_recepciones,
+                COUNT(*) AS cantidad_lineas,
+                SUM(CASE WHEN UPPER(TRIM(rs.estado_inspeccion_original))
+                              IN ('ACEPTADO', 'APROBADO')
+                         THEN 1 ELSE 0 END) AS cantidad_lineas_aceptadas,
+                SUM(CASE WHEN UPPER(TRIM(rs.estado_inspeccion_original))
+                              IN ('RECHAZADO', 'RECHAZADO_PARCIAL')
+                         THEN 1 ELSE 0 END) AS cantidad_lineas_rechazadas,
+                SUM(CASE WHEN rs.codigo_no_conformidad IS NOT NULL
+                              AND TRIM(rs.codigo_no_conformidad) <> ''
+                         THEN 1 ELSE 0 END) AS cantidad_no_conformidades
+            FROM recepcion_staging rs
+            JOIN proveedor p
+              ON TRIM(p.codigo) = TRIM(rs.proveedor_codigo)
+            WHERE rs.fecha_recepcion_original BETWEEN :desde AND :hasta
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM recepcion_cabecera rc_staging
+                  WHERE rc_staging.recepcion_staging_id = rs.id
+              )
+            GROUP BY p.id, p.codigo, p.nombre
+        """),
+        {"desde": desde, "hasta": hasta},
+    ).mappings().all()
+
+    por_proveedor = {}
+    for row in recepcion_rows:
+        proveedor_id = int(row["proveedor_id"])
+        por_proveedor[proveedor_id] = {
+            "proveedor_id": proveedor_id,
+            "proveedor_codigo": row["proveedor_codigo"],
+            "proveedor_nombre": row["proveedor_nombre"],
+            "cantidad_recepciones": int(row["cantidad_recepciones"] or 0),
+            "cantidad_lineas": int(row["cantidad_lineas"] or 0),
+            "cantidad_lineas_aceptadas": int(
+                row["cantidad_lineas_aceptadas"] or 0
+            ),
+            "cantidad_lineas_rechazadas": int(
+                row["cantidad_lineas_rechazadas"] or 0
+            ),
+            "cantidad_no_conformidades": 0,
+            "total_con_fecha": 0,
+            "a_tiempo": 0,
+        }
+
+    for row in staging_rows:
+        proveedor_id = int(row["proveedor_id"])
+        actual = por_proveedor.setdefault(
+            proveedor_id,
+            {
+                "proveedor_id": proveedor_id,
+                "proveedor_codigo": row["proveedor_codigo"],
+                "proveedor_nombre": row["proveedor_nombre"],
+                "cantidad_recepciones": 0,
+                "cantidad_lineas": 0,
+                "cantidad_lineas_aceptadas": 0,
+                "cantidad_lineas_rechazadas": 0,
+                "cantidad_no_conformidades": 0,
+                "total_con_fecha": 0,
+                "a_tiempo": 0,
+            },
+        )
+        for campo in (
+            "cantidad_recepciones",
+            "cantidad_lineas",
+            "cantidad_lineas_aceptadas",
+            "cantidad_lineas_rechazadas",
+            "cantidad_no_conformidades",
+        ):
+            actual[campo] += int(row[campo] or 0)
+
+    if not por_proveedor:
+        return []
+
+    proveedor_ids = list(por_proveedor)
+    entregas = db.execute(
+        text("""
+            SELECT
+                proveedor_id,
+                SUM(CASE WHEN fecha_recepcion <= fecha_entrega_esperada
+                         THEN 1 ELSE 0 END) AS a_tiempo,
+                COUNT(*) AS total_con_fecha
+            FROM recepcion_cabecera
+            WHERE proveedor_id IN :proveedor_ids
+              AND fecha_recepcion BETWEEN :desde AND :hasta
+              AND fecha_entrega_esperada IS NOT NULL
+            GROUP BY proveedor_id
+        """).bindparams(bindparam("proveedor_ids", expanding=True)),
+        {"proveedor_ids": proveedor_ids, "desde": desde, "hasta": hasta},
+    ).mappings().all()
+    for row in entregas:
+        actual = por_proveedor[int(row["proveedor_id"])]
+        actual["a_tiempo"] = int(row["a_tiempo"] or 0)
+        actual["total_con_fecha"] = int(row["total_con_fecha"] or 0)
+
+    nc_rows = db.execute(
+        text("""
+            SELECT
+                rc.proveedor_id,
+                COUNT(rnc.id) AS cantidad_no_conformidades,
+                SUM(CASE WHEN rnc.estado_nc = 'ABIERTA' THEN 1 ELSE 0 END)
+                    AS no_conformidades_abiertas,
+                AVG(
+                    CASE
+                        WHEN rnc.fecha_cierre IS NOT NULL
+                        THEN DATEDIFF(rnc.fecha_cierre, rnc.fecha_creacion)
+                    END
+                ) AS promedio_dias_respuesta_nc
+            FROM recepcion_no_conformidad rnc
+            JOIN recepcion_linea rl ON rl.id = rnc.recepcion_linea_id
+            JOIN recepcion_cabecera rc ON rc.id = rl.recepcion_cabecera_id
+            WHERE rc.fecha_recepcion BETWEEN :desde AND :hasta
+              AND rc.proveedor_id IN :proveedor_ids
+            GROUP BY rc.proveedor_id
+        """).bindparams(bindparam("proveedor_ids", expanding=True)),
+        {"proveedor_ids": proveedor_ids, "desde": desde, "hasta": hasta},
+    ).mappings().all()
+    nc_por_proveedor = {int(row["proveedor_id"]): row for row in nc_rows}
+
+    resultado = []
+    for row in por_proveedor.values():
+        proveedor_id = row["proveedor_id"]
+        cantidad_lineas = row["cantidad_lineas"]
+        aceptadas = row["cantidad_lineas_aceptadas"]
+        rechazadas = row["cantidad_lineas_rechazadas"]
+        cantidad_lineas_controladas = aceptadas + rechazadas
+        porcentaje_calidad = (
+            round(aceptadas / cantidad_lineas_controladas * 100, 2)
+            if cantidad_lineas_controladas
+            else 0.0
+        )
+        total_con_fecha = row["total_con_fecha"]
+        porcentaje_entrega = (
+            round(row["a_tiempo"] / total_con_fecha * 100, 2)
+            if total_con_fecha
+            else None
+        )
+        nc = nc_por_proveedor.get(proveedor_id)
+        promedio_nc = (
+            float(nc["promedio_dias_respuesta_nc"])
+            if nc and nc["promedio_dias_respuesta_nc"] is not None
+            else None
+        )
+        if promedio_nc is None:
+            puntaje_respuesta = 100.0
+        elif promedio_nc <= 5:
+            puntaje_respuesta = 100.0
+        elif promedio_nc >= 30:
+            puntaje_respuesta = 0.0
+        else:
+            puntaje_respuesta = round((30 - promedio_nc) / 25 * 100, 2)
+
+        puntaje_general = None
+        estado = "SIN_FECHA_ENTREGA" if porcentaje_entrega is None else "SIN_DATOS"
+        puntaje_entrega = porcentaje_entrega
+        if porcentaje_entrega is not None:
+            puntaje_general = round(
+                porcentaje_calidad * 0.40
+                + porcentaje_entrega * 0.35
+                + puntaje_respuesta * 0.25,
+                2,
+            )
+            estado = (
+                "MUESTRA_INSUFICIENTE"
+                if row["cantidad_recepciones"] < 3
+                else (
+                    "APROBADO"
+                    if puntaje_general >= 70
+                    else "APROB_CONDICIONAL"
+                    if puntaje_general >= 55
+                    else "NO_APTO"
+                )
+            )
+        elif row["cantidad_recepciones"] < 3:
+            estado = "MUESTRA_INSUFICIENTE"
+
+        resultado.append({
+            "proveedor_id": proveedor_id,
+            "proveedor_codigo": row["proveedor_codigo"],
+            "proveedor_nombre": row["proveedor_nombre"],
+            "cantidad_recepciones": row["cantidad_recepciones"],
+            "cantidad_lineas": cantidad_lineas,
+            "cantidad_lineas_aceptadas": aceptadas,
+            "cantidad_lineas_rechazadas": rechazadas,
+            "porcentaje_calidad": porcentaje_calidad,
+            "porcentaje_entrega_a_tiempo": porcentaje_entrega,
+            "cantidad_no_conformidades": row["cantidad_no_conformidades"]
+            + (int(nc["cantidad_no_conformidades"] or 0) if nc else 0),
+            "no_conformidades_abiertas": int(nc["no_conformidades_abiertas"] or 0) if nc else 0,
+            "promedio_dias_respuesta_nc": promedio_nc,
+            "puntaje_calidad": porcentaje_calidad,
+            "puntaje_entrega": puntaje_entrega,
+            "puntaje_respuesta_nc": puntaje_respuesta,
+            "puntaje_general": puntaje_general,
+            "estado": estado,
+        })
+
+    return sorted(
+        resultado,
+        key=lambda item: (
+            item["puntaje_general"] is not None,
+            item["puntaje_general"] if item["puntaje_general"] is not None else -1,
+        ),
+        reverse=True,
+    )
 
 
 # ---------------------------------------------------------------------------

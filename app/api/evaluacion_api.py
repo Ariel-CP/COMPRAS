@@ -11,11 +11,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_db
-from app.api.deps_auth import get_current_user
+from app.api.deps_auth import get_current_user, require_permission
 from app.schemas.evaluacion import (
     EvaluacionCreate,
     EvaluacionListItem,
     EvaluacionOut,
+    EvaluacionRankingOperativoItem,
     EvaluacionUpdate,
 )
 from app.services.evaluacion_access_import_service import (
@@ -33,6 +34,7 @@ from app.services.evaluacion_service import (
     listar_evaluaciones,
     obtener_evaluacion,
     ranking_proveedores_periodo,
+    ranking_operativo_proveedores_periodo,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,7 +46,12 @@ router = APIRouter(
 )
 
 
-@router.post("/", response_model=EvaluacionOut, status_code=201)
+@router.post(
+    "/",
+    response_model=EvaluacionOut,
+    status_code=201,
+    dependencies=[Depends(require_permission("ui_evaluaciones", True))],
+)
 def api_crear_evaluacion(
     payload: EvaluacionCreate,
     db=Depends(get_db),
@@ -72,7 +79,11 @@ def api_crear_evaluacion(
         raise HTTPException(status_code=500, detail=msg) from exc
 
 
-@router.get("/", response_model=list[EvaluacionListItem])
+@router.get(
+    "/",
+    response_model=list[EvaluacionListItem],
+    dependencies=[Depends(require_permission("ui_evaluaciones"))],
+)
 def api_listar_evaluaciones(
     proveedor_id: Optional[int] = Query(default=None),
     anno: Optional[int] = Query(default=None, ge=2000, le=2099),
@@ -88,7 +99,10 @@ def api_listar_evaluaciones(
     return listar_evaluaciones(db, proveedor_id, anno, resultado, limit, offset)
 
 
-@router.get("/proveedor/{proveedor_id}/historial")
+@router.get(
+    "/proveedor/{proveedor_id}/historial",
+    dependencies=[Depends(require_permission("ui_evaluaciones_evolucion"))],
+)
 def api_historial_proveedor(
     proveedor_id: int,
     desde: Optional[date] = Query(default=None, description="Fecha desde (YYYY-MM-DD)"),
@@ -101,7 +115,10 @@ def api_historial_proveedor(
     return historial_proveedor(db, proveedor_id, desde=desde, hasta=hasta)
 
 
-@router.get("/exportar")
+@router.get(
+    "/exportar",
+    dependencies=[Depends(require_permission("ui_evaluaciones"))],
+)
 def api_exportar_evaluaciones(
     proveedor_id: Optional[int] = Query(default=None),
     anno: Optional[int] = Query(default=None, ge=2000, le=2099),
@@ -154,7 +171,10 @@ def api_exportar_evaluaciones(
     )
 
 
-@router.get("/ranking-periodo")
+@router.get(
+    "/ranking-periodo",
+    dependencies=[Depends(require_permission("ui_evaluaciones_ranking"))],
+)
 def api_ranking_proveedores_periodo(
     desde: date = Query(..., description="Fecha desde (YYYY-MM-DD)"),
     hasta: date = Query(..., description="Fecha hasta (YYYY-MM-DD)"),
@@ -166,7 +186,30 @@ def api_ranking_proveedores_periodo(
     return ranking_proveedores_periodo(db, desde, hasta)
 
 
-@router.get("/{evaluacion_id}", response_model=EvaluacionOut)
+@router.get(
+    "/ranking-operativo",
+    response_model=list[EvaluacionRankingOperativoItem],
+    dependencies=[Depends(require_permission("ui_evaluaciones_ranking"))],
+)
+def api_ranking_operativo_proveedores(
+    desde: date = Query(..., description="Fecha desde (YYYY-MM-DD)"),
+    hasta: date = Query(..., description="Fecha hasta (YYYY-MM-DD)"),
+    db=Depends(get_db),
+):
+    """Ranking calculado desde recepciones, calidad, entregas y NC."""
+    if desde > hasta:
+        raise HTTPException(
+            status_code=400,
+            detail="El rango es inválido: desde no puede ser mayor que hasta",
+        )
+    return ranking_operativo_proveedores_periodo(db, desde, hasta)
+
+
+@router.get(
+    "/{evaluacion_id}",
+    response_model=EvaluacionOut,
+    dependencies=[Depends(require_permission("ui_evaluaciones"))],
+)
 def api_obtener_evaluacion(evaluacion_id: int, db=Depends(get_db)):
     """Obtiene una evaluación con sus criterios de detalle."""
     ev = obtener_evaluacion(db, evaluacion_id)
@@ -175,7 +218,11 @@ def api_obtener_evaluacion(evaluacion_id: int, db=Depends(get_db)):
     return ev
 
 
-@router.put("/{evaluacion_id}", response_model=EvaluacionOut)
+@router.put(
+    "/{evaluacion_id}",
+    response_model=EvaluacionOut,
+    dependencies=[Depends(require_permission("ui_evaluaciones", True))],
+)
 def api_actualizar_evaluacion(
     evaluacion_id: int,
     payload: EvaluacionUpdate,
@@ -205,7 +252,11 @@ def api_actualizar_evaluacion(
     return actualizado
 
 
-@router.delete("/{evaluacion_id}", status_code=204)
+@router.delete(
+    "/{evaluacion_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission("ui_evaluaciones", True))],
+)
 def api_eliminar_evaluacion(
     evaluacion_id: int,
     db=Depends(get_db),
@@ -217,7 +268,10 @@ def api_eliminar_evaluacion(
         raise HTTPException(status_code=404, detail="Evaluación no encontrada")
 
 
-@router.post("/importar-historial")
+@router.post(
+    "/importar-historial",
+    dependencies=[Depends(require_permission("ui_evaluaciones", True))],
+)
 def api_importar_historial(
     ruta_archivo: str | None = Query(
         default=None,
@@ -248,7 +302,10 @@ def api_importar_historial(
     return resultado
 
 
-@router.post("/importar-csv")
+@router.post(
+    "/importar-csv",
+    dependencies=[Depends(require_permission("ui_evaluaciones", True))],
+)
 async def api_importar_csv(
     archivo: UploadFile = File(..., description="CSV exportado de Power BI (sep=; decimal=,)"),
     db=Depends(get_db),
@@ -276,7 +333,10 @@ async def api_importar_csv(
     return resultado
 
 
-@router.post("/importar-xlsx")
+@router.post(
+    "/importar-xlsx",
+    dependencies=[Depends(require_permission("ui_evaluaciones", True))],
+)
 async def api_importar_xlsx(
     archivo: UploadFile = File(..., description="XLSX exportado de Power BI"),
     db=Depends(get_db),
@@ -300,7 +360,10 @@ async def api_importar_xlsx(
     return resultado
 
 
-@router.post("/importar-validar")
+@router.post(
+    "/importar-validar",
+    dependencies=[Depends(require_permission("ui_evaluaciones", True))],
+)
 async def api_prevalidar_importacion(
     archivo: UploadFile = File(..., description="Archivo CSV/XLSX para prevalidar"),
     _current_user=Depends(get_current_user),
@@ -321,7 +384,10 @@ async def api_prevalidar_importacion(
     return resultado
 
 
-@router.post("/limpiar-importados")
+@router.post(
+    "/limpiar-importados",
+    dependencies=[Depends(require_permission("evaluaciones", True))],
+)
 def api_limpiar_importados(
     confirmar: str = Query(..., description="Debe ser LIMPIAR para confirmar borrado"),
     incluir_legacy: bool = Query(

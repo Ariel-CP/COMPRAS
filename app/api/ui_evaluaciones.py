@@ -6,13 +6,18 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.api.deps_auth import require_permission
 from app.services.proveedor_service import listar_proveedores
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 
-@router.get("/evaluaciones", response_class=HTMLResponse)
+@router.get(
+    "/evaluaciones",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_permission("evaluaciones"))],
+)
 async def ui_evaluaciones(request: Request, db: Session = Depends(get_db)):
     proveedores = listar_proveedores(db, activo=True, limit=2000, offset=0)
     anno_actual = date.today().year
@@ -31,7 +36,11 @@ async def ui_evaluaciones(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/evaluaciones/ranking", response_class=HTMLResponse)
+@router.get(
+    "/evaluaciones/ranking",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_permission("evaluaciones_ranking"))],
+)
 async def ui_evaluaciones_ranking(request: Request):
     hoy = date.today()
     desde_default = date(hoy.year, 1, 1)
@@ -45,7 +54,11 @@ async def ui_evaluaciones_ranking(request: Request):
     )
 
 
-@router.get("/evaluaciones/ranking-print", response_class=HTMLResponse)
+@router.get(
+    "/evaluaciones/ranking-print",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_permission("evaluaciones_ranking_print"))],
+)
 async def ui_evaluaciones_ranking_print(
     request: Request,
     desde: str | None = None,
@@ -63,7 +76,11 @@ async def ui_evaluaciones_ranking_print(
     )
 
 
-@router.get("/evaluaciones/evolucion", response_class=HTMLResponse)
+@router.get(
+    "/evaluaciones/evolucion",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_permission("evaluaciones_evolucion"))],
+)
 async def ui_evaluaciones_evolucion(
     request: Request,
     db: Session = Depends(get_db),

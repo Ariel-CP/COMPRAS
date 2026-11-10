@@ -9,6 +9,7 @@ Provee dos operaciones:
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 
 from sqlalchemy import text
@@ -81,7 +82,24 @@ def _run(cmd: list[str], timeout: int = 10) -> str:
     return result.stdout.strip()
 
 
+# Cache del estado de actualización: evita que el polling del frontend
+# ejecute `git fetch` (que puede bloquear ~20 s sin conectividad) en cada request.
+_STATUS_CACHE_TTL_SECONDS = 300
+_status_cache: tuple[float, dict] | None = None
+
+
 def get_update_status() -> dict:
+    """Versión cacheada de `_compute_update_status` (TTL de 5 minutos)."""
+    global _status_cache
+    now = time.monotonic()
+    if _status_cache is not None and now - _status_cache[0] < _STATUS_CACHE_TTL_SECONDS:
+        return _status_cache[1]
+    result = _compute_update_status()
+    _status_cache = (now, result)
+    return result
+
+
+def _compute_update_status() -> dict:
     """Compara el commit local HEAD con el remoto origin/master.
 
     Returns:
@@ -111,7 +129,7 @@ def get_update_status() -> dict:
 
     try:
         # Fetch para obtener FETCH_HEAD actualizado con los últimos commits remotos.
-        _run(["git", "fetch", "--quiet", "origin", "HEAD"], timeout=20)
+        _run(["git", "fetch", "--quiet", "origin", "HEAD"], timeout=5)
         remote_full = _run(["git", "rev-parse", "FETCH_HEAD"])
         remote = remote_full[:7] if remote_full else "N/A"
     except (RuntimeError, FileNotFoundError, subprocess.TimeoutExpired) as exc:

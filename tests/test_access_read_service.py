@@ -1,5 +1,6 @@
 import sys
 from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +13,7 @@ from app.services.access_read_service import (
     listar_controles_access,
     listar_recepciones_recientes_access,
     obtener_control_access,
+    resumir_desempeno_proveedor_access,
 )
 
 
@@ -244,7 +246,57 @@ def test_listar_controles_access_parametriza_busqueda_y_cursor(monkeypatch, tmp_
     assert "[Material] LIKE ?" in query
     assert parameters[0] == 1000
     assert parameters[1] == "%\u0025' OR 1=1 --%"
-    assert "SELECT TOP 20" in query
+
+
+def test_resumir_desempeno_proveedor_suma_todos_los_lotes_en_ventana(
+    monkeypatch, tmp_path
+):
+    database_path = tmp_path / "recepciones.accdb"
+    database_path.touch()
+    calls = []
+
+    class FakeCursor:
+        description = [("Lote",), ("Estado",)]
+
+        def execute(self, query, params):
+            calls.append((query, params))
+
+        def fetchall(self):
+            return [
+                (100, "ACEPTADO"),
+                (Decimal("2.5"), "Rechazado"),
+                (50, "ANULADO"),
+                (None, "Aceptado"),
+            ]
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        service,
+        "_access_read_connection",
+        lambda _path=None: FakeConnection(),
+    )
+
+    result = resumir_desempeno_proveedor_access(
+        "P-100",
+        desde=date(2025, 10, 19),
+        hasta=date(2026, 10, 19),
+        path=str(database_path),
+    )
+
+    query, params = calls[0]
+    assert "SELECT TOP" not in query
+    assert "[Codigo Proveedor] = ?" in query
+    assert "[Fecha Control] >= ?" in query
+    assert params == ["P-100", date(2025, 10, 19), date(2026, 10, 20)]
+    assert result["aceptados"] == Decimal("100")
+    assert result["rechazados"] == Decimal("2.5")
+    assert result["registros"] == 3
 
 
 def test_obtener_control_access_consulta_cotas_por_fk_confirmada(monkeypatch, tmp_path):

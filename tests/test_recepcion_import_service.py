@@ -1,4 +1,5 @@
 from app.services import recepcion_access_import_service as service
+from app.services import recepcion_sync_service
 
 
 class FakeResult:
@@ -10,14 +11,15 @@ class FakeResult:
 
 
 class FakeSession:
-    def __init__(self):
+    def __init__(self, existing=False):
         self.executed = []
+        self.existing = existing
 
     def execute(self, statement, params=None):
         self.executed.append((str(statement), params))
         sql = str(statement)
         if "SELECT id FROM recepcion_staging" in sql:
-            return FakeResult(None)
+            return FakeResult((1,) if self.existing else None)
         return FakeResult()
 
     def commit(self):
@@ -60,6 +62,45 @@ def test_import_recepcion_desde_access_uses_sqlalchemy_session(monkeypatch):
     assert result["errores_detalle"] == []
 
 
+def test_import_recepcion_enriquece_duplicada_sin_insertar_otra_fila(monkeypatch):
+    fake_db = FakeSession(existing=True)
+    monkeypatch.setattr(service, "get_db", lambda: iter([fake_db]))
+    monkeypatch.setattr(
+        service,
+        "leer_tabla_access",
+        lambda ruta_accdb, tabla_nombre="CONTROL DE RECEPCION": [
+            {
+                "ID_INT": 1001,
+                "PROVEEDOR": "Proveedor Test",
+                "Codigo Proveedor": "P-1",
+                "Fecha Control": "2026-09-17",
+                "Estado": "ACEPTADO",
+                "Lote": "2000",
+            }
+        ],
+    )
+
+    result = service.importar_recepcion_desde_access(
+        ruta_accdb="C:/tmp/test.accdb",
+        usuario_id=42,
+    )
+
+    statements = [sql for sql, _params in fake_db.executed]
+    update_index = next(
+        index
+        for index, sql in enumerate(statements)
+        if "UPDATE recepcion_staging" in sql
+    )
+    update_params = fake_db.executed[update_index][1]
+    assert result["duplicadas"] == 1
+    assert result["nuevas_insertadas"] == 0
+    assert "proveedor_codigo = COALESCE" in statements[update_index]
+    assert "id_recepcion_original = :id_recepcion_original" in statements[update_index]
+    assert update_params["proveedor_codigo"] == "P-1"
+    assert update_params["fecha_recepcion_original"] == service.date(2026, 9, 17)
+    assert not any(sql.lstrip().startswith("INSERT INTO recepcion_staging") for sql in statements)
+
+
 def test_mapear_campos_access_a_staging_uses_real_access_column_names():
     fila = {
         "ID_INT": 1001,
@@ -89,3 +130,23 @@ def test_mapear_campos_access_a_staging_uses_real_access_column_names():
     assert mapped["lote_numero"] == "2000"
     assert mapped["inspector_nombre"] == "Juan"
     assert "2.5 x 1000 x 2000" in mapped["notas_adicionales"]
+
+
+def test_sincronizador_mapea_codigo_fecha_control_y_id_int_access():
+    mapped = recepcion_sync_service.mapear_fila_a_staging(
+        {
+            "ID_INT": 77,
+            "Codigo Proveedor": "00556",
+            "PROVEEDOR": "Proveedor Test",
+            "Fecha Control": service.date(2026, 10, 18),
+            "Fecha de Entrega": service.date(2026, 10, 25),
+            "Estado": "RECHAZADO",
+            "Lote": 25,
+        }
+    )
+
+    assert mapped["id_recepcion_original"] == "77"
+    assert mapped["proveedor_codigo"] == "00556"
+    assert mapped["fecha_recepcion_original"] == service.date(2026, 10, 18)
+    assert mapped["estado_inspeccion_original"] == "RECHAZADO"
+    assert mapped["lote_numero"] == "25"

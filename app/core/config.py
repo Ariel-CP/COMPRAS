@@ -35,10 +35,9 @@ class Settings:
     bcra_historico_desde: Optional[str] = None
     sync_job_token: Optional[str] = None
     access_db_path: Optional[str] = None
+    access_planos_db_path: Optional[str] = None
     access_table_name: str = "CONTROL DE RECEPCION"
-    planos_dir: str = (
-        r"\\192.168.1.5\id\01 DISEÑOS EN INVENTOR ECOTERMO\03-PLANOS"
-    )
+    planos_dir: str = r"\\192.168.1.5\id\01 DISEÑOS EN INVENTOR ECOTERMO\03-PLANOS"
 
 
 def _load_json_config() -> dict:
@@ -87,9 +86,7 @@ def get_settings() -> Settings:
     mysql_client_path = os.environ.get("MYSQL_CLIENT_PATH") or cfg.get(
         "mysql_client_path"
     )
-    max_upload_mb = int(
-        os.environ.get("MAX_UPLOAD_MB", cfg.get("max_upload_mb", 10))
-    )
+    max_upload_mb = int(os.environ.get("MAX_UPLOAD_MB", cfg.get("max_upload_mb", 10)))
 
     auth_secret_key = (
         os.environ.get("AUTH_SECRET_KEY")
@@ -103,10 +100,12 @@ def get_settings() -> Settings:
         )
     )
     auth_cookie_secure = bool(
-        str(os.environ.get(
-            "AUTH_COOKIE_SECURE",
-            cfg.get("auth_cookie_secure", False),
-        )).lower()
+        str(
+            os.environ.get(
+                "AUTH_COOKIE_SECURE",
+                cfg.get("auth_cookie_secure", False),
+            )
+        ).lower()
         in ("1", "true", "yes")
     )
 
@@ -117,35 +116,25 @@ def get_settings() -> Settings:
 
     ai_provider = os.environ.get("AI_PROVIDER") or cfg.get("ai_provider")
 
-    openai_api_key = (
-        os.environ.get("OPENAI_API_KEY") or cfg.get("openai_api_key")
-    )
+    openai_api_key = os.environ.get("OPENAI_API_KEY") or cfg.get("openai_api_key")
     openai_model = os.environ.get("OPENAI_MODEL") or cfg.get("openai_model")
 
-    anthropic_api_key = (
-        os.environ.get("ANTHROPIC_API_KEY") or cfg.get("anthropic_api_key")
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY") or cfg.get(
+        "anthropic_api_key"
     )
-    anthropic_model = (
-        os.environ.get("ANTHROPIC_MODEL") or cfg.get("anthropic_model")
-    )
+    anthropic_model = os.environ.get("ANTHROPIC_MODEL") or cfg.get("anthropic_model")
 
     bcra_api_base_url = (
         os.environ.get("BCRA_API_BASE_URL")
         or cfg.get("bcra_api_base_url")
         or "https://api.bcra.gob.ar"
     )
-    bcra_api_token = (
-        os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
+    bcra_api_token = os.environ.get("BCRA_API_TOKEN") or cfg.get("bcra_api_token")
+    bcra_sync_days = int(os.environ.get("BCRA_SYNC_DAYS", cfg.get("bcra_sync_days", 5)))
+    bcra_historico_desde = os.environ.get("BCRA_HISTORICO_DESDE") or cfg.get(
+        "bcra_historico_desde"
     )
-    bcra_sync_days = int(
-        os.environ.get("BCRA_SYNC_DAYS", cfg.get("bcra_sync_days", 5))
-    )
-    bcra_historico_desde = (
-        os.environ.get("BCRA_HISTORICO_DESDE") or cfg.get("bcra_historico_desde")
-    )
-    sync_job_token = (
-        os.environ.get("SYNC_JOB_TOKEN") or cfg.get("sync_job_token")
-    )
+    sync_job_token = os.environ.get("SYNC_JOB_TOKEN") or cfg.get("sync_job_token")
     access_db_path = os.environ.get("ACCESS_DB_PATH") or cfg.get("access_db_path")
     access_table_name = (
         os.environ.get("ACCESS_TABLE_NAME")
@@ -184,6 +173,9 @@ def get_settings() -> Settings:
         bcra_historico_desde=bcra_historico_desde,
         sync_job_token=sync_job_token,
         access_db_path=access_db_path,
+        access_planos_db_path=(
+            os.environ.get("ACCESS_PLANOS_DB_PATH") or cfg.get("access_planos_db_path")
+        ),
         access_table_name=access_table_name,
         planos_dir=planos_dir,
     )

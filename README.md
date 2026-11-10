@@ -199,6 +199,29 @@ El cálculo distingue materiales y procesos. Las reglas y ejemplos se documentan
 
 El repositorio incluye planificación mensual y variaciones, importación de stock, historial e importación de precios, proveedores, evaluación, informes y tipo de cambio. También incluye usuarios, roles, permisos por pantalla, backups y actualización remota. Consultar los endpoints disponibles en `/docs` y [app/api/router.py](app/api/router.py), en lugar de asumir que estos módulos están pendientes.
 
+### Wizard OC: estado al 10 de noviembre de 2026
+
+El desarrollo se realiza por lotes pequeños. El detalle técnico y las decisiones están en [Desarrollo incremental de Wizard OC](docs/wizard_oc_desarrollo.md).
+
+- **Integridad del cálculo:** las sugerencias aprobadas se conservan; faltantes y cobertura se muestran por unidad de medida, sin compensar materiales diferentes.
+- **Simulación y guardado:** simular requiere lectura y no guarda sugerencias ni corridas. Guardar requiere escritura y selección explícita.
+- **Configuración de IA:** Administración → IA y controles permite guardar modelo, clave y límites previstos. La clave local se cifra con Windows DPAPI y nunca se devuelve al navegador; el campo vacío después de guardar no significa que se perdió.
+- **Prueba autorizada:** el botón Probar conexión usa la configuración guardada y, tras confirmar, envía únicamente `Respondé OK` a OpenAI. Puede generar costo de API; no envía información comercial ni habilita las consultas de compras.
+- **Privacidad:** la IA comercial permanece bloqueada. Los límites configurados preparan la integración futura; el presupuesto general todavía no controla el costo de la prueba sintética. La configuración privada y su auditoría permanecen en `.local/`, excluida de Git. La configuración general ya no expone credenciales.
+- **Portabilidad:** el cifrado local requiere la cuenta Windows que guardó la clave. No copiar ese archivo como credencial para Raspberry/Linux; en otros sistemas usar el entorno del servidor. No hay nuevas dependencias del SDK de OpenAI.
+
+**Próximo lote para retomar:** saldos LAF cargados manualmente desde Flexxus. Separar cantidad original y saldo pendiente, registrar fecha de corte y autor del ajuste, y revisar fechas de entrega antes de cambiar descuentos del MRP. Primero comprobar el esquema real y presentar la migración para aprobación; no reinterpretar los registros existentes ni ejecutar migraciones automáticamente.
+
+Validación focalizada:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_ai_settings.py tests/test_plan_oc_security.py tests/test_plan_oc_service.py tests/test_screen_permissions.py -q
+```
+
+Cierre validado el 10/11/2026: **208 pruebas aprobadas** con `.venv\Scripts\python.exe -m pytest tests -q`, Ruff correcto en los archivos Python del commit y sintaxis validada en 7 archivos JavaScript. Hay advertencias de deprecación de Pydantic y adaptadores de fecha de SQLite; no impiden la ejecución.
+
+Los ensayos automáticos de conexión utilizan claves ficticias y transporte simulado. No incluir `.env`, `.local/`, bases Access, exportaciones de ERP o planillas internas en commits.
+
 <a id="csv"></a>
 
 ## Corrección de nombres desde CSV

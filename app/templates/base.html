@@ -4,84 +4,45 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Compras{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/estilos.css" />
+  <link rel="stylesheet" href="/static/css/estilos.css?v={{ app_version }}" />
   {% block styles %}{% endblock %}
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
 </head>
-<body>
+{% set _user = current_user or request.state.current_user %}
+<body{% if _user %} class="with-sidebar"{% endif %}>
+  {% if _user %}
+  {% set perms = _user.permissions if _user.permissions is defined else {} %}
+  {% set is_admin = 'admin' in (_user.roles or []) %}
+  {% set show_plan = is_admin or perms.get('ui_plan', (False, False))[0] or perms.get('ui_plan_mensual', (False, False))[0] or perms.get('ui_plan_variaciones', (False, False))[0] or perms.get('ui_plan_requerimientos', (False, False))[0] or perms.get('ui_plan_asistente_oc', (False, False))[0] %}
+  {% set show_inventory = is_admin or perms.get('ui_stock', (False, False))[0] or perms.get('ui_productos', (False, False))[0] or perms.get('ui_planos_articulos', (False, False))[0] or perms.get('ui_mbom', (False, False))[0] or perms.get('ui_rubros', (False, False))[0] %}
+  {% set show_supplier_receipt = is_admin or perms.get('ui_proveedores', (False, False))[0] or perms.get('ui_evaluaciones', (False, False))[0] or perms.get('ui_evaluaciones_ranking', (False, False))[0] or perms.get('ui_evaluaciones_evolucion', (False, False))[0] %}
+  {% set show_costs = is_admin or perms.get('ui_informes_costos_pt', (False, False))[0] or perms.get('ui_precios', (False, False))[0] or perms.get('ui_tipo_cambio', (False, False))[0] %}
+  {% set show_control_recepcion = is_admin or perms.get('ui_recepcion', (False, False))[0] or perms.get('ui_recepcion_calidad', (False, False))[0] or perms.get('ui_recepcion_controles', (False, False))[0] or perms.get('ui_recepcion_historial_access', (False, False))[0] %}
+  {% set show_admin = is_admin or perms.get('ui_admin_usuarios', (False, False))[0] or perms.get('ui_admin_roles', (False, False))[0] or perms.get('ui_admin_permisos', (False, False))[0] or perms.get('ui_admin_backups', (False, False))[0] or perms.get('ui_admin_logo', (False, False))[0] or perms.get('ui_admin_settings', (False, False))[0] %}
+  {% endif %}
   <header>
+    {% if _user %}
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Mostrar u ocultar menú" aria-expanded="true" aria-controls="sidebar">☰</button>
+    {% endif %}
     <div class="brand-wrap">
       <div class="brand-logo-slot">
-        <img id="header-logo" class="brand-logo-img hidden" alt="Logo de la empresa" />
+        <img id="header-logo" class="brand-logo-img" src="/static/uploads/logo_custom.png" alt="Logo de la empresa" />
       </div>
     </div>
-    {% set _user = current_user or request.state.current_user %}
-    {% if _user %}
-    {% set perms = _user.permissions if _user.permissions is defined else {} %}
-    <nav>
-      {% if perms.get('plan', (False, False))[0] %}<a href="/ui/plan">Plan</a>{% endif %}
-      {% if perms.get('plan', (False, False))[0] %}
-      <a href="/ui/plan-asistente-oc" class="wizard-oc-link">
-        <span class="wizard-oc-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" focusable="false">
-            <path d="M3.2 11.7 7.8 7.1l1.1 1.1-4.6 4.6H3.2Zm5-5L9.7 5.2l.9.9-1.5 1.5-.9-.9Zm1.9-1.9 1.8-1.8 1.1 1.1-1.8 1.8-1.1-1.1ZM11.9 7l.7-1.9.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7ZM4.6 3.1l.5-1.3.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5ZM7 1.8l.3-.8.3.8.8.3-.8.3-.3.8-.3-.8-.8-.3.8-.3Z" />
-          </svg>
-        </span>
-        <span>Wizard OC</span>
-      </a>
-      {% endif %}
-      {% if perms.get('stock', (False, False))[0] %}<a href="/ui/stock">Stock</a>{% endif %}
-      {% if perms.get('productos', (False, False))[0] %}<a href="/ui/productos">Artículos</a>{% endif %}
-      {% if perms.get('mbom', (False, False))[0] %}<a href="/ui/mbom">Estructura</a>{% endif %}
-      {% if perms.get('informes', (False, False))[0] %}
-        <a href="/ui/informes/costos-pt">Costos PT</a>
-      {% endif %}
-      {% if perms.get('precios', (False, False))[0] %}<a href="/ui/precios">Precios</a>{% endif %}
-      {% if perms.get('proveedores', (False, False))[0] %}<a href="/ui/proveedores">Proveedores</a>{% endif %}
-      {% if perms.get('recepcion', (False, False))[0] %}
-        <a href="/ui/recepcion">Recepción</a>
-        <a href="/ui/recepcion/historial-access">Historial Access</a>
-      {% endif %}
-      {% if perms.get('proveedores', (False, False))[0] %}<a href="/ui/evaluaciones">Evaluaciones</a>{% endif %}
-      {% if perms.get('tipo_cambio', (False, False))[0] %}<a href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
-      {% set show_admin = perms.get('admin_usuarios', (False, False))[0] or perms.get('admin_roles', (False, False))[0] or perms.get('admin_backups', (False, False))[0] or perms.get('admin_sistema', (False, False))[0] %}
-      {% if show_admin %}
-      <span class="import-dropdown" style="vertical-align:middle;">
-        <button class="btn-accion dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">Configuración ▾</button>
-        <div class="dropdown-menu hidden" role="menu">
-          {% if perms.get('admin_backups', (False, False))[0] %}
-            <a class="dropdown-item" href="/ui/admin/backups">Backups</a>
-          {% endif %}
-          {% if perms.get('admin_usuarios', (False, False))[0] %}
-            <a class="dropdown-item" href="/ui/admin/usuarios">Admin</a>
-          {% endif %}
-          {% if perms.get('admin_roles', (False, False))[0] %}
-            <a class="dropdown-item" href="/ui/admin/permisos">Permisos</a>
-            <a class="dropdown-item" href="/ui/admin/roles">Roles</a>
-          {% endif %}
-          {% if perms.get('admin_sistema', (False, False))[0] %}
-            <a class="dropdown-item" href="/ui/admin/logo">Logo</a>
-          {% endif %}
-        </div>
-      </span>
-      {% endif %}
-      {% if perms.get('admin_sistema', (False, False))[0] %}
-      <span class="update-menu-wrap" style="vertical-align:middle;">
-        <button
-          id="btn-update-status"
-          class="update-status-btn update-status-unknown"
-          type="button"
-          aria-expanded="false"
-          aria-controls="update-details"
-          title="Ver cambios del sistema"
-        >Verificando</button>
-      </span>
-      {% endif %}
-    </nav>
-    {% endif %}
     <div class="header-right">
-      {% set _user = current_user or request.state.current_user %}
       {% if _user %}
+        {% if is_admin or perms.get('ui_admin_settings', (False, False))[0] %}
+        <span class="update-menu-wrap" style="vertical-align:middle;">
+          <button
+            id="btn-update-status"
+            class="update-status-btn update-status-unknown"
+            type="button"
+            aria-expanded="false"
+            aria-controls="update-details"
+            title="Ver cambios del sistema"
+          >Verificando</button>
+        </span>
+        {% endif %}
         <div class="menu-user">Hola, {{ _user.nombre }}</div>
         <a class="btn-accion" href="/ui/logout">Logout</a>
       {% else %}
@@ -90,8 +51,98 @@
     </div>
   </header>
 
+  {% if _user %}
+  <div class="layout">
+    <aside id="sidebar" class="sidebar" aria-label="Navegación principal">
+      <nav class="sidebar-nav">
+        <a class="sidebar-link" href="/ui/">Inicio</a>
+        {% if show_control_recepcion %}
+        <div class="nav-group">
+          <button class="nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-control-recepcion">Control de recepción <span aria-hidden="true">▾</span></button>
+          <div id="menu-control-recepcion" class="dropdown-menu hidden" role="menu">
+            {% if is_admin or perms.get('ui_recepcion', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/recepcion">Recepción de materiales</a>{% endif %}
+            {% if is_admin or perms.get('ui_recepcion_calidad', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/recepcion/calidad">Pendientes de control</a>{% endif %}
+            {% if is_admin or perms.get('ui_recepcion_controles', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/recepcion/controles">Controles de recepción</a>{% endif %}
+            {% if is_admin or perms.get('ui_recepcion_historial_access', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/recepcion/historial-access">Historial Access</a>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% if show_inventory %}
+        <div class="nav-group">
+          <button class="nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-inventario">Inventario <span aria-hidden="true">▾</span></button>
+          <div id="menu-inventario" class="dropdown-menu hidden" role="menu">
+            {% if is_admin or perms.get('ui_stock', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/stock">Stock</a>{% endif %}
+            {% if is_admin or perms.get('ui_productos', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/productos">Artículos</a>{% endif %}
+            {% if is_admin or perms.get('ui_planos_articulos', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/planos-articulos">Planos de artículos</a>{% endif %}
+            {% if is_admin or perms.get('ui_mbom', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/mbom">Estructura</a>{% endif %}
+            {% if is_admin or perms.get('ui_rubros', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/rubros">Rubros</a>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% if show_supplier_receipt %}
+        <div class="nav-group">
+          <button class="nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-proveedores">Proveedores <span aria-hidden="true">▾</span></button>
+          <div id="menu-proveedores" class="dropdown-menu hidden" role="menu">
+            {% if is_admin or perms.get('ui_proveedores', (False, False))[0] %}
+              <a class="dropdown-item" role="menuitem" href="/ui/proveedores">Proveedores</a>
+            {% endif %}
+            {% if is_admin or perms.get('ui_evaluaciones', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/evaluaciones">Evaluaciones</a>{% endif %}
+            {% if is_admin or perms.get('ui_evaluaciones_ranking', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/evaluaciones/ranking">Ranking de evaluaciones</a>{% endif %}
+            {% if is_admin or perms.get('ui_evaluaciones_evolucion', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/evaluaciones/evolucion">Evolución por proveedor</a>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% if show_plan %}
+        <div class="nav-group">
+          <button class="nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-planificacion">Planificación <span aria-hidden="true">▾</span></button>
+          <div id="menu-planificacion" class="dropdown-menu hidden" role="menu">
+            {% if is_admin or perms.get('ui_plan', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/plan">Plan</a>{% endif %}
+            {% if is_admin or perms.get('ui_plan_asistente_oc', (False, False))[0] %}<a class="dropdown-item wizard-oc-link" role="menuitem" href="/ui/plan-asistente-oc">
+              <span class="wizard-oc-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" focusable="false"><path d="M3.2 11.7 7.8 7.1l1.1 1.1-4.6 4.6H3.2Zm5-5L9.7 5.2l.9.9-1.5 1.5-.9-.9Zm1.9-1.9 1.8-1.8 1.1 1.1-1.8 1.8-1.1-1.1ZM11.9 7l.7-1.9.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7ZM4.6 3.1l.5-1.3.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5ZM7 1.8l.3-.8.3.8.8.3-.8.3-.3.8-.3-.8-.8-.3.8-.3Z" /></svg>
+              </span>
+              <span>Wizard OC</span>
+            </a>{% endif %}
+            {% if is_admin or perms.get('ui_plan_mensual', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/plan-mensual">Plan mensual</a>{% endif %}
+            {% if is_admin or perms.get('ui_plan_variaciones', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/plan-variaciones">Variaciones</a>{% endif %}
+            {% if is_admin or perms.get('ui_plan_requerimientos', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/plan-requerimientos">Requerimientos</a>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% if show_costs %}
+        <div class="nav-group">
+          <button class="nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-costos">Costos y parámetros <span aria-hidden="true">▾</span></button>
+          <div id="menu-costos" class="dropdown-menu hidden" role="menu">
+            {% if is_admin or perms.get('ui_informes_costos_pt', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/informes/costos-pt">Costos PT</a>{% endif %}
+            {% if is_admin or perms.get('ui_precios', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/precios">Precios</a>{% endif %}
+            {% if is_admin or perms.get('ui_tipo_cambio', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/tipo-cambio">Tipo Cambio</a>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% if show_admin %}
+        <div class="nav-group nav-group-admin">
+          <button class="nav-group-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menu-administracion">Administración <span aria-hidden="true">▾</span></button>
+          <div id="menu-administracion" class="dropdown-menu hidden" role="menu">
+            {% if is_admin or perms.get('ui_admin_backups', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/admin/backups">Backups</a>{% endif %}
+            {% if is_admin or perms.get('ui_admin_usuarios', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/admin/usuarios">Admin</a>{% endif %}
+            {% if is_admin or perms.get('ui_admin_permisos', (False, False))[0] %}
+              <a class="dropdown-item" role="menuitem" href="/ui/admin/permisos">Permisos</a>
+            {% endif %}
+            {% if is_admin or perms.get('ui_admin_roles', (False, False))[0] %}
+              <a class="dropdown-item" role="menuitem" href="/ui/admin/roles">Roles</a>
+            {% endif %}
+            {% if is_admin or perms.get('ui_admin_logo', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/admin/logo">Logo</a>{% endif %}
+            {% if is_admin or perms.get('ui_admin_settings', (False, False))[0] %}<a class="dropdown-item" role="menuitem" href="/ui/admin/settings">Configuración</a><a class="dropdown-item" role="menuitem" href="/ui/admin/settings#ia">IA y controles</a>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </nav>
+    </aside>
+    <div class="layout-main">
+  {% endif %}
+
   {% set _user = current_user or request.state.current_user %}
-  {% if _user and _user.permissions is defined and _user.permissions.get('admin_sistema', (False, False))[0] %}
+  {% if _user and _user.permissions is defined and ('admin' in (_user.roles or []) or _user.permissions.get('ui_admin_settings', (False, False))[0]) %}
   <div id="update-details" class="update-details hidden">
     <label id="update-improvements-label" for="update-improvements">Cambios del sistema</label>
     <textarea id="update-improvements" class="update-improvements" readonly></textarea>
@@ -249,6 +300,11 @@
   (function(){
     const logoImg = document.getElementById('header-logo');
     if (!logoImg) return;
+    const fallbackLogo = '/static/favicon.svg';
+    logoImg.addEventListener('error', () => {
+      if (logoImg.src.endsWith(fallbackLogo)) return;
+      logoImg.src = fallbackLogo;
+    });
 
     async function loadHeaderLogo() {
       try {
@@ -280,6 +336,11 @@
   <footer>
     <small>v{{ app_version }}</small>
   </footer>
+  {% if _user %}
+    </div>
+  </div>
+  <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+  {% endif %}
   <script src="/static/js/main.js"></script>
   {% block scripts %}{% endblock %}
 </body>

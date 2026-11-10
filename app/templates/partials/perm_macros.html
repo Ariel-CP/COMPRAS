@@ -25,3 +25,21 @@
 {%- set _perms = (_user.permissions if _user and _user.permissions is defined else {}) -%}
 {{ True if (_user and _perms.get(form_key, (False, False))[1]) else False }}
 {%- endmacro %}
+
+{% macro can_write_any_js(form_keys) -%}
+{%- set _user = (current_user if current_user is defined else none) -%}
+{%- if not _user and request is defined and request.state is defined and request.state.current_user is defined -%}
+{%- set _user = request.state.current_user -%}
+{%- endif -%}
+{%- set _perms = (_user.permissions if _user and _user.permissions is defined else {}) -%}
+{%- set _roles = (_user.roles if _user and _user.roles is defined else []) -%}
+{%- set ns = namespace(allowed=('admin' in (_roles|map('lower')|list))) -%}
+{%- for key in form_keys -%}
+{%- if _perms.get(key, (False, False))[1] -%}{%- set ns.allowed = true -%}{%- endif -%}
+{%- endfor -%}
+{{ 'true' if ns.allowed else 'false' }}
+{%- endmacro %}
+
+{% macro can_write_any_attr(form_keys) -%}
+{%- if can_write_any_js(form_keys)|trim != 'true' -%}disabled title="No tiene permisos de escritura"{%- endif -%}
+{%- endmacro %}

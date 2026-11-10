@@ -114,6 +114,42 @@
     border-bottom: 1px solid #dce4e9;
     vertical-align: top;
   }
+  .access-history-table .access-history-quantity {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .access-history-article-detail {
+    min-width: 220px;
+    max-width: 420px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .access-history-table { table-layout: fixed; min-width: 100%; }
+  .access-history-table th { padding-right: 18px; cursor: grab; user-select: none; }
+  .access-history-table td { overflow-wrap: anywhere; }
+  .access-history-table .access-history-article-detail { min-width: 0; max-width: none; }
+  .access-history-resize {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 10px;
+    cursor: col-resize;
+    touch-action: none;
+    border-right: 2px solid #b9c8d3;
+  }
+  .access-history-resize:hover, .access-history-resize:focus-visible { background: #b9dce9; }
+  .access-history-table th:focus-visible { outline: 2px solid #159c9b; outline-offset: -2px; }
+  .access-history-order-remito {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .access-history-order-remito span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
   .access-history-pagination {
     display: flex;
     justify-content: space-between;
@@ -197,21 +233,27 @@
     <button class="access-history-button secondary" id="access-history-more" type="button" hidden>Ver anteriores</button>
   </div>
 
+  <p class="access-history-note">Arrastrá los encabezados para mover columnas y su borde derecho para ajustar el ancho.
+    <button class="access-history-button secondary" id="access-history-reset-columns" type="button">Restablecer columnas</button>
+  </p>
   <div class="access-history-table-wrap">
     <table class="access-history-table">
       <thead>
         <tr>
-          <th>ID / interno</th>
+          <th>Número de inspección</th>
           <th>Fecha control</th>
           <th>Plano</th>
           <th>Proveedor</th>
           <th>Material</th>
+          <th scope="col">Código / detalle</th>
+          <th scope="col">Nombre del artículo</th>
+          <th class="access-history-quantity" scope="col">Cantidad ingresada</th>
           <th>OC / remito</th>
           <th>Estado</th>
         </tr>
       </thead>
       <tbody id="access-history-rows">
-        <tr><td colspan="7">Cargando historial...</td></tr>
+        <tr><td colspan="10">Cargando historial...</td></tr>
       </tbody>
     </table>
   </div>
@@ -219,5 +261,5 @@
     <p class="access-history-empty">Seleccioná un control para ver sus datos y cotas.</p>
   </section>
 </main>
-<script src="/static/js/recepcion_access_history.js" defer></script>
+<script src="/static/js/recepcion_access_history.js?v={{ app_version }}-oc-remito-horizontal-1" defer></script>
 {% endblock %}

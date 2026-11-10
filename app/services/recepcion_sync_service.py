@@ -102,8 +102,15 @@ def leer_tabla_access(ruta: str = RUTA_ACCDB, tabla: str = TABLA_ACCESS) -> list
 # Candidatos de nombres de columnas para cada campo semántico.
 # Se prueban en orden; se usa el primero que exista en la fila.
 _CAMPO_MAP: dict[str, list[str]] = {
-    "id_recepcion_original":    ["Id", "ID", "id"],
-    "proveedor_codigo":         ["Proveedor_Codigo", "Codigo_Proveedor", "PROVEEDOR_CODIGO", "CODIGO"],
+    "id_recepcion_original": ["ID_INT", "N_interno", "Id", "ID", "id"],
+    "proveedor_codigo": [
+        "Codigo Proveedor",
+        "Código Proveedor",
+        "Proveedor_Codigo",
+        "Codigo_Proveedor",
+        "PROVEEDOR_CODIGO",
+        "CODIGO",
+    ],
     "proveedor_nombre":         ["Proveedor_Nombre", "Nombre_Proveedor", "PROVEEDOR", "Proveedor"],
     "producto_codigo":          ["Producto_Codigo", "Codigo_Producto", "PRODUCTO_CODIGO", "ARTICULO"],
     "producto_nombre":          ["Producto_Nombre", "Nombre_Producto", "PRODUCTO", "Producto"],
@@ -111,8 +118,8 @@ _CAMPO_MAP: dict[str, list[str]] = {
     "cantidad_recibida":        ["Cantidad_Recibida", "CANTIDAD_RECIBIDA", "Cant_Rec"],
     "lote_numero":              ["Lote_Numero", "Lote", "LOTE", "LOTE_NUMERO"],
     "fecha_vencimiento":        ["Fecha_Vencimiento", "FECHA_VENCIMIENTO", "Fec_Venc"],
-    "fecha_recepcion_original": ["Fecha_Recepcion", "FECHA_RECEPCION", "Fecha_Ingreso", "FECHA DE ENTREGA"],
-    "estado_inspeccion_original": ["Estado_Inspeccion", "ESTADO_INSPECCION", "Estado", "PLAN MUESTREO"],
+    "fecha_recepcion_original": ["Fecha Control", "Fecha_Recepcion", "FECHA_RECEPCION", "Fecha_Ingreso"],
+    "estado_inspeccion_original": ["Estado_Inspeccion", "ESTADO_INSPECCION", "Estado"],
     "calidad_ok":               ["Calidad_OK", "CALIDAD_OK", "Calidad", "TieneCertificado"],
     "codigo_no_conformidad":    ["Codigo_NC", "CODIGO_NC", "NC"],
     "descripcion_no_conformidad": ["Descripcion_NC", "DESC_NC", "Descripcion"],
@@ -177,7 +184,13 @@ def importar_filas_a_staging(
     duplicadas = 0
     errores: list[dict] = []
 
-    SQL_EXISTE = text("SELECT 1 FROM recepcion_staging WHERE fila_hash = :h LIMIT 1")
+    SQL_EXISTE = text("""
+        SELECT 1 FROM recepcion_staging
+        WHERE fila_hash = :h
+           OR (:id_original IS NOT NULL
+               AND id_recepcion_original = :id_original)
+        LIMIT 1
+    """)
     SQL_INSERT = text("""
         INSERT INTO recepcion_staging (
             fuente, fila_hash, fecha_importacion, usuario_importacion_id,
@@ -205,15 +218,43 @@ def importar_filas_a_staging(
     for idx, fila_raw in enumerate(filas_access):
         try:
             fila_hash = _generar_hash_fila(fila_raw)
-
-            existe = db.execute(SQL_EXISTE, {"h": fila_hash}).first()
-            if existe:
-                duplicadas += 1
-                continue
-
             datos = mapear_fila_a_staging(fila_raw)
             datos["fila_hash"] = fila_hash
             datos["usuario_id"] = usuario_id
+
+            existe = db.execute(
+                SQL_EXISTE,
+                {
+                    "h": fila_hash,
+                    "id_original": datos["id_recepcion_original"],
+                },
+            ).first()
+            if existe:
+                db.execute(
+                    text("""
+                        UPDATE recepcion_staging
+                        SET id_recepcion_original = COALESCE(
+                                id_recepcion_original, :id_recepcion_original
+                            ),
+                            proveedor_codigo = COALESCE(
+                                proveedor_codigo, :proveedor_codigo
+                            ),
+                            fecha_recepcion_original = COALESCE(
+                                fecha_recepcion_original, :fecha_recepcion_original
+                            ),
+                            estado_inspeccion_original = COALESCE(
+                                estado_inspeccion_original,
+                                :estado_inspeccion_original
+                            ),
+                            lote_numero = COALESCE(lote_numero, :lote_numero)
+                        WHERE fila_hash = :fila_hash
+                           OR (:id_recepcion_original IS NOT NULL
+                               AND id_recepcion_original = :id_recepcion_original)
+                        """),
+                    {**datos, "fila_hash": fila_hash},
+                )
+                duplicadas += 1
+                continue
 
             db.execute(SQL_INSERT, datos)
             nuevas += 1

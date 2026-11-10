@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
+{% from 'partials/perm_macros.html' import can_write_attr, can_write_js, can_write_any_attr with context %}
 {% set CAN_WRITE_JS = can_write_js('plan') %}
 
 {% block title %}Plan de Producción Mensual{% endblock %}
@@ -169,6 +169,7 @@
 
 <section class="panel" id="panelAnalisisPlan">
   <h3>Análisis de faltantes y capacidad</h3>
+  <label><input type="checkbox" id="guardarSugerenciasAnalisis" {{ can_write_any_attr(['ui_plan_mensual', 'ui_plan_requerimientos']) }} /> Guardar sugerencias de compra al calcular</label>
   <p class="hint" id="analisisResumen">Selecciona un período y presiona "Faltantes y capacidad".</p>
 
   <div id="analisisAlertas" class="error-banner hidden"></div>
@@ -746,7 +747,7 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       tablaPrioridadesBody.innerHTML =
         '<tr><td colspan="9"><em>Calculando...</em></td></tr>';
 
-      const persistir = CAN_WRITE ? "true" : "false";
+      const persistir = document.getElementById("guardarSugerenciasAnalisis").checked ? "true" : "false";
       const url = `${API_ANALISIS}?mes=${mes}&anio=${anio}&persistir_sugerencias=${persistir}`;
       const resp = await fetch(url);
       if (!resp.ok) {
@@ -773,10 +774,12 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       const mesStock = Number(resumen.mes_stock_base || 0);
       const anioStock = Number(resumen.anio_stock_base || 0);
       const periodoStockTxt = mesStock && anioStock ? `${mesStock}/${anioStock}` : "-";
+      const materialesPorUnidad = (resumen.por_unidad || []).map((grupo) =>
+        `${grupo.um_codigo}: faltante ${fmt(grupo.total_faltante)}, cobertura ${fmtPct(grupo.cobertura_global_pct)}`
+      ).join(" | ");
       analisisResumen.textContent =
         `Stock base: ${periodoStockTxt} | ` +
-        `Cobertura global: ${fmtPct(resumen.cobertura_global_pct)} | ` +
-        `Total faltante MP: ${fmt(resumen.total_faltante || 0)} | ` +
+        `${materialesPorUnidad || "Sin requerimientos de materiales"} | ` +
         `Sugerencias actualizadas: ${fmt(sug.persistidas || 0)}`;
 
       renderFaltantes(data.faltantes || []);

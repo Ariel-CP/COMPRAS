@@ -24,10 +24,15 @@ block styles %}
     color: #526576;
     font-size: 13px;
   }
+  .recepcion-title-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
   .recepcion-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.65fr) minmax(300px, 0.85fr);
-    gap: 24px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
     padding-top: 18px;
   }
   .recepcion-section {
@@ -152,6 +157,21 @@ block styles %}
   .recepcion-message.success {
     color: #12683d;
   }
+  .nivel-recomendacion {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 8px 10px;
+    border-left: 3px solid #167c80;
+    background: #edf6f5;
+    color: #24545a;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .nivel-recomendacion.error {
+    border-left-color: #a32222;
+    background: #fff3f1;
+    color: #8a211b;
+  }
   .recepcion-side {
     min-width: 0;
   }
@@ -212,6 +232,30 @@ block styles %}
     font: inherit;
     font-weight: 700;
     padding: 0;
+  }
+  .recepcion-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .recepcion-row-action {
+    padding: 4px 7px;
+    border: 1px solid #9aabb8;
+    border-radius: 3px;
+    background: #fff;
+    color: #145f91;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .recepcion-row-action.danger {
+    border-color: #d7a7a2;
+    color: #a3362c;
+  }
+  .recepcion-source {
+    color: #526576;
+    font-size: 10px;
   }
   .recepcion-detail {
     margin-top: 18px;
@@ -391,9 +435,6 @@ block styles %}
     opacity: 0.65;
   }
   @media (max-width: 1050px) {
-    .recepcion-layout {
-      grid-template-columns: 1fr;
-    }
     .recepcion-table-wrap {
       max-height: 360px;
     }
@@ -430,49 +471,12 @@ block styles %}
   data-can-write="{{ 'true' if current_user.permissions.get('recepcion', (False, False))[1] else 'false' }}"
   data-current-user-name="{{ current_user.get('nombre') or current_user.get('email') or 'Usuario actual' }}"
 >
-  <div class="recepcion-title">
-    <div>
-      <h1>Control de recepción</h1>
-      <p>Registro de ingreso e inspección de materiales</p>
-    </div>
-    <button
-      class="recepcion-button secondary"
-      type="button"
-      id="recepcion-reset"
-    >
-      Nueva inspección
-    </button>
-  </div>
-
-  <div class="recepcion-layout">
-    <form id="recepcion-form">
-      <section class="recepcion-section">
-        <h2>Datos de recepción</h2>
-        <div class="recepcion-fields">
-          <div class="span-2 proveedor-search-wrap">
-            <label for="proveedor-search">Proveedor</label>
-            <div id="proveedor-search-entry" class="proveedor-search-entry">
-              <input
-                id="proveedor-search"
-                type="search"
-                placeholder="Buscar por número o nombre"
-                autocomplete="off"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded="false"
-                aria-controls="proveedor-suggestions"
-                required
-              />
-            </div>
-            <input id="proveedor-id" type="hidden" name="proveedor_id" />
-            <div
-              id="proveedor-selected"
-              class="proveedor-selected"
-              role="status"
-              aria-live="polite"
-              hidden
-            >
-              <span class="proveedor-selected-label">Seleccionado</span>
+    <section class="recepcion-section">
+      <h2>Detalle de la recepción</h2>
+      <div class="recepcion-detail" id="recepcion-detail" aria-live="polite">
+        <p class="recepcion-detail-empty">Al guardar una recepción, se mostrará aquí su detalle y control de calidad.</p>
+      </div>
+    </section>
               <strong id="proveedor-selected-code" class="proveedor-selected-code"></strong>
               <span id="proveedor-selected-name" class="proveedor-selected-name"></span>
               <button
@@ -609,6 +613,13 @@ block styles %}
               <option>Estricta</option>
             </select>
           </label>
+          <p
+            class="nivel-recomendacion"
+            id="nivel-inspeccion-recomendacion"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
           <label
             >Muestreo (unidades)<input
               name="tamano_muestra"
@@ -636,56 +647,34 @@ block styles %}
           placeholder="Notas de recepción e inspección"
         ></textarea>
       </section>
-      <button class="recepcion-button save" type="submit" id="recepcion-save">
-        Guardar recepción
-      </button>
-      <p
-        class="recepcion-message"
-        id="recepcion-message"
-        role="status"
-        aria-live="polite"
-      ></p>
-    </form>
-
-    <aside class="recepcion-side">
-      <section class="recepcion-section">
-        <h2>Recepciones recientes</h2>
-        <div class="recepcion-search">
-          <input
-            id="recepcion-query"
-            type="search"
-            placeholder="Buscar proveedor, OC, remito o número"
-            aria-label="Buscar recepciones"
-          />
-          <button class="recepcion-button" type="button" id="recepcion-search">
-            Buscar
-          </button>
+      <section class="recepcion-section" id="recepcion-edit-controls" hidden>
+        <h2>Controles registrados</h2>
+        <div class="recepcion-fields">
+          <label>Terminación superficial (%)<input name="terminacion_superficial" type="number" min="0" max="100" step="0.01"></label>
+          <label>Control dimensional (%)<input name="control_dimensional" type="number" min="0" max="100" step="0.01"></label>
+          <label>Embalaje (%)<input name="embalaje" type="number" min="0" max="100" step="0.01"></label>
         </div>
-        <div class="recepcion-table-wrap">
-          <table class="recepcion-table">
-            <thead>
-              <tr>
-                <th>ID / fecha control</th>
-                <th>Proveedor</th>
-                <th>OC / remito</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="recepcion-rows">
-              <tr>
-                <td colspan="4">Cargando...</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="cotas-head">
+          <span>Cota / criterio</span><span>Especificación</span><span>Control</span><span>Desviación</span><span>Resultado</span><span></span>
         </div>
-        <div class="recepcion-detail" id="recepcion-detail" aria-live="polite">
-          <p class="recepcion-detail-empty">
-            Seleccioná una recepción para ver su detalle.
-          </p>
+        <div id="recepcion-edit-cotas"></div>
+        <div class="section-actions">
+          <button class="recepcion-button secondary" type="button" data-edit-cota-add>Agregar cota</button>
         </div>
       </section>
-
-    </aside>
+      <button class="recepcion-button save" type="submit" id="recepcion-save">
+        Guardar recepción
+      <div class="recepcion-title-actions">
+        <a class="recepcion-button secondary" href="/ui/recepcion/controles">Ver controles</a>
+        <button class="recepcion-button secondary" type="button" id="recepcion-reset">Nueva recepción</button>
+      </div>
+    </form>
+    <section class="recepcion-section">
+      <h2>Detalle de la recepción</h2>
+      <div class="recepcion-detail" id="recepcion-detail" aria-live="polite">
+        <p class="recepcion-detail-empty">Al guardar una recepción se abrirá aquí su detalle y control de calidad.</p>
+      </div>
+    </section>
   </div>
 </div>
 <script src="/static/js/recepcion.js" defer></script>

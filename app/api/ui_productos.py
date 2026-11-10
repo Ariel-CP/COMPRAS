@@ -1,4 +1,5 @@
 from typing import Optional
+
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -10,10 +11,21 @@ from ..services.producto_service import listar_productos
 from ..services.rubro_service import listar_rubros
 from ..services.unidad_service import listar_unidades
 from ..utils.health import db_status
-
+from .deps_auth import require_permission
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("/planos-articulos", response_class=HTMLResponse)
+async def ui_planos_articulos(
+    request: Request,
+    _current_user: dict = Depends(require_permission("productos", False)),
+):
+    return templates.TemplateResponse(
+        "productos/planos.html",
+        {"request": request},
+    )
 
 
 @router.get("/productos", response_class=HTMLResponse)

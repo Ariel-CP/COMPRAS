@@ -159,3 +159,16 @@ def listar_articulos_con_planos(
         ]
     resultados.sort(key=lambda item: (item["numero_base"], item["revision"]))
     return resultados
+
+
+def obtener_asociaciones_por_plano(
+    db: Session, numeros: list[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """Reutiliza las asociaciones del listado de planos sin duplicar revisiones."""
+    solicitados = {numero.zfill(4) for numero in numeros if numero.isdigit()}
+    resultado: dict[str, list[dict[str, Any]]] = {}
+    for plano in listar_articulos_con_planos(db):
+        numero = plano["numero_base"]
+        if numero in solicitados and numero not in resultado:
+            resultado[numero] = plano["asociaciones"]
+    return resultado

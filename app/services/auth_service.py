@@ -141,11 +141,13 @@ def get_permissions(db: Session, user_id: int) -> Dict[str, Tuple[bool, bool]]:
     ).fetchall()
     perms: Dict[str, Tuple[bool, bool]] = {}
     for form_key, leer, escribir in rows:
+        can_write = bool(escribir)
+        can_read = bool(leer) or can_write
         if form_key not in perms:
-            perms[form_key] = (bool(leer), bool(escribir))
+            perms[form_key] = (can_read, can_write)
         else:
             old_read, old_write = perms[form_key]
-            perms[form_key] = (old_read or bool(leer), old_write or bool(escribir))
+            perms[form_key] = (old_read or can_read, old_write or can_write)
 
     # Compatibilidad: si el usuario ya es admin por roles/usuarios,
     # habilitar acceso al modulo de backups aunque aun no tenga form_key explicita.

@@ -1,0 +1,811 @@
+{% extends "base.html" %} {% block title %}Recepción de materiales{% endblock %}
+{% block styles %}
+<style>
+  .recepcion-page {
+    max-width: 1320px;
+    margin: 0 auto;
+    color: #182a3a;
+  }
+  .recepcion-title {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0 18px;
+    border-bottom: 3px solid #159c9b;
+  }
+  .recepcion-title h1 {
+    margin: 0;
+    font-size: 26px;
+    color: #174f7a;
+  }
+  .recepcion-title p {
+    margin: 5px 0 0;
+    color: #526576;
+    font-size: 13px;
+  }
+  .recepcion-title-actions,
+  .section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .recepcion-form {
+    padding-top: 16px;
+  }
+  .recepcion-section {
+    padding: 0 0 18px;
+    margin: 0 0 16px;
+    border-bottom: 1px solid #cbd7df;
+  }
+  .recepcion-section h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    color: #176e78;
+    font-size: 14px;
+    text-transform: uppercase;
+  }
+  .recepcion-section h2::before {
+    width: 4px;
+    height: 16px;
+    background: #159c9b;
+    content: "";
+  }
+  .recepcion-fields {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px 14px;
+  }
+  .recepcion-fields label,
+  .cota-row label {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+    color: #405366;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .recepcion-fields label.recepcion-recibio {
+    gap: 0;
+  }
+  .recepcion-fields input,
+  .recepcion-fields select,
+  .recepcion-section textarea,
+  .cota-row input,
+  .cota-row select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 8px 9px;
+    border: 1px solid #b9c8d3;
+    border-radius: 3px;
+    background: #fff;
+    color: #1f2933;
+    font: inherit;
+    font-size: 13px;
+  }
+  .recepcion-fields input:focus,
+  .recepcion-fields select:focus,
+  .recepcion-section textarea:focus,
+  .cota-row input:focus,
+  .cota-row select:focus {
+    outline: 2px solid #159c9b;
+    outline-offset: 1px;
+  }
+  .span-2 {
+    grid-column: span 2;
+  }
+  .span-4 {
+    grid-column: 1 / -1;
+  }
+  .recepcion-pair-panels {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .recepcion-pair-panel {
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid #cbd7df;
+    border-radius: 3px;
+  }
+  .recepcion-pair-panel legend {
+    padding: 0 6px;
+    color: #176e78;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .recepcion-pair-panel .recepcion-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recepcion-field-hint {
+    margin: 5px 0 0;
+    color: #526576;
+    font-size: 11px;
+    font-weight: 400;
+  }
+  .recepcion-button {
+    display: inline-flex;
+    min-height: 36px;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 13px;
+    border: 0;
+    border-radius: 3px;
+    background: #145f91;
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .recepcion-button:hover {
+    background: #0e4d76;
+  }
+  .recepcion-button.secondary {
+    background: #536b7d;
+  }
+  .recepcion-title-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .recepcion-title-actions .recepcion-button {
+    box-sizing: border-box;
+    min-height: 44px;
+    margin: 0;
+    padding: 10px 16px;
+    border: 1px solid #145f91;
+    border-radius: 9px;
+    background: #145f91;
+    color: #fff;
+    line-height: 1.35;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(20, 95, 145, 0.16);
+    transition: background 0.18s ease, box-shadow 0.18s ease;
+  }
+  .recepcion-title-actions .recepcion-button:hover {
+    background: #0e4d76;
+    border-color: #0e4d76;
+    box-shadow: 0 4px 9px rgba(20, 95, 145, 0.24);
+  }
+  .recepcion-title-actions .recepcion-button:focus-visible {
+    outline: 3px solid #159c9b;
+    outline-offset: 3px;
+  }
+  .recepcion-button.save {
+    background: #198754;
+  }
+  .recepcion-message {
+    min-height: 20px;
+    margin: 10px 0 0;
+    font-size: 13px;
+  }
+  .recepcion-message.error {
+    color: #a32222;
+  }
+  .recepcion-message.success {
+    color: #12683d;
+  }
+  .nivel-recomendacion {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 8px 10px;
+    border-left: 3px solid #167c80;
+    background: #edf6f5;
+    color: #24545a;
+    font-size: 12px;
+  }
+  .nivel-recomendacion.error {
+    border-left-color: #a32222;
+    background: #fff3f1;
+    color: #8a211b;
+  }
+  .proveedor-search-wrap,
+  .articulo-search-wrap {
+    position: relative;
+  }
+  .proveedor-suggestions,
+  .articulo-suggestions {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 3px);
+    right: 0;
+    left: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid #a9bbc8;
+    border-radius: 3px;
+    background: #fff;
+    box-shadow: 0 5px 14px rgb(24 42 58 / 16%);
+  }
+  .proveedor-suggestions[hidden],
+  .articulo-suggestions[hidden] {
+    display: none;
+  }
+  .proveedor-suggestion,
+  .articulo-suggestion {
+    display: block;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-bottom: 1px solid #e4ebef;
+    background: #fff;
+    color: #182a3a;
+    text-align: left;
+    cursor: pointer;
+  }
+  .proveedor-suggestion:hover,
+  .proveedor-suggestion[aria-selected="true"],
+  .articulo-suggestion:hover,
+  .articulo-suggestion[aria-selected="true"] {
+    background: #e8f3f5;
+  }
+  .proveedor-suggestion strong,
+  .articulo-suggestion strong {
+    display: inline-block;
+    min-width: 68px;
+    margin-right: 10px;
+    color: #145f91;
+  }
+  .proveedor-suggestion-status,
+  .articulo-suggestion-status {
+    margin: 0;
+    padding: 9px 11px;
+    color: #526576;
+    font-size: 12px;
+  }
+  .proveedor-selected,
+  .articulo-selected {
+    display: flex;
+    min-height: 36px;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 7px 5px 10px;
+    border: 1px solid #86b99a;
+    border-radius: 3px;
+    background: #eff8f1;
+    color: #234d34;
+    font-size: 13px;
+  }
+  .proveedor-selected[hidden],
+  .proveedor-search-entry[hidden],
+  .articulo-selected[hidden],
+  .articulo-search-entry[hidden] {
+    display: none;
+  }
+  .proveedor-selected-label,
+  .articulo-selected-label {
+    flex: 0 0 auto;
+    color: #287044;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .proveedor-selected-code,
+  .articulo-selected-code {
+    flex: 0 0 auto;
+    font-weight: 800;
+  }
+  .proveedor-selected-name,
+  .articulo-selected-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .proveedor-change,
+  .articulo-change,
+  .articulo-open-plan {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 4px 7px;
+    border: 1px solid #a8c9b1;
+    border-radius: 3px;
+    background: #fff;
+    color: #145f91;
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .articulo-open-plan[aria-disabled="true"] {
+    color: #66727b;
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+  .articulo-plan-actions {
+    display: flex;
+    margin-top: 6px;
+  }
+  .articulo-plan-actions[hidden] {
+    display: none;
+  }
+  .recepcion-edit-controls[hidden] {
+    display: none;
+  }
+  .recepcion-quality-form {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #d8e0e5;
+  }
+  .cotas-head,
+  .cota-row {
+    display: grid;
+    grid-template-columns:
+      minmax(120px, 1.2fr) minmax(130px, 1fr) minmax(110px, 0.8fr)
+      minmax(110px, 0.8fr) 145px 36px;
+    gap: 8px;
+    align-items: end;
+  }
+  .cotas-head {
+    padding: 7px 8px;
+    background: #e8f1f5;
+    color: #345369;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .cota-row {
+    padding: 8px;
+    border-bottom: 1px solid #dde5ea;
+  }
+  .cota-remove {
+    width: 36px;
+    height: 34px;
+    border: 1px solid #d7a7a2;
+    border-radius: 3px;
+    background: #fff;
+    color: #a3362c;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .recepcion-detail {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 2px solid #159c9b;
+  }
+  .recepcion-detail h3 {
+    margin: 0 0 12px;
+    color: #174f7a;
+    font-size: 16px;
+  }
+  .recepcion-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 12px;
+    font-size: 12px;
+  }
+  .recepcion-detail-grid strong {
+    display: block;
+    color: #526576;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .recepcion-detail-line {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #cbd7df;
+  }
+  .recepcion-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .recepcion-detail-table th,
+  .recepcion-detail-table td {
+    padding: 6px;
+    border-bottom: 1px solid #dce4e9;
+    text-align: left;
+  }
+  .recepcion-detail-empty {
+    color: #526576;
+    font-size: 12px;
+  }
+  @media (max-width: 900px) {
+    .recepcion-fields {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .recepcion-detail-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 620px) {
+    .recepcion-title {
+      align-items: start;
+      flex-direction: column;
+    }
+    .recepcion-title-actions {
+      width: 100%;
+    }
+    .recepcion-title-actions {
+      grid-template-columns: 1fr;
+    }
+    .span-2 {
+      grid-column: span 2;
+    }
+    .recepcion-pair-panels {
+      grid-template-columns: 1fr;
+    }
+    .cotas-head {
+      display: none;
+    }
+    .cota-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .cota-row .cota-remove {
+      grid-column: 2;
+      justify-self: end;
+    }
+  }
+</style>
+{% endblock %} {% block content %}
+<div
+  class="recepcion-page"
+  data-can-write="{{ 'true' if current_user.permissions.get('recepcion', (False, False))[1] else 'false' }}"
+  data-current-user-name="{{ current_user.get('nombre') or current_user.get('email') or 'Usuario actual' }}"
+>
+  <div class="recepcion-title">
+    <div>
+      <h1>Recepción de materiales</h1>
+      <p>Registro de ingreso e inspección de materiales</p>
+    </div>
+    <div class="recepcion-title-actions">
+      <a class="recepcion-button secondary" href="/ui/recepcion/controles"
+        >Controles recientes</a
+      >
+      <a class="recepcion-button secondary" href="/ui/recepcion/calidad"
+        >Pendientes de calidad</a
+      >
+      <button
+        class="recepcion-button secondary"
+        type="button"
+        id="recepcion-reset"
+      >
+        Nueva recepción
+      </button>
+    </div>
+  </div>
+
+  <form id="recepcion-form" class="recepcion-form">
+    <section class="recepcion-section">
+      <h2>Recepción</h2>
+      <div class="recepcion-fields">
+        <div class="span-2 proveedor-search-wrap">
+          <label for="proveedor-search">Proveedor</label>
+          <div id="proveedor-search-entry" class="proveedor-search-entry">
+            <input
+              id="proveedor-search"
+              type="search"
+              placeholder="Buscar por código o nombre"
+              autocomplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="proveedor-suggestions"
+              required
+            />
+          </div>
+          <input id="proveedor-id" type="hidden" name="proveedor_id" />
+          <div
+            id="proveedor-selected"
+            class="proveedor-selected"
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+            <span class="proveedor-selected-label">Seleccionado</span>
+            <strong
+              id="proveedor-selected-code"
+              class="proveedor-selected-code"
+            ></strong>
+            <span
+              id="proveedor-selected-name"
+              class="proveedor-selected-name"
+            ></span>
+            <button
+              id="proveedor-change"
+              class="proveedor-change"
+              type="button"
+            >
+              Cambiar
+            </button>
+          </div>
+          <div
+            id="proveedor-suggestions"
+            class="proveedor-suggestions"
+            role="listbox"
+            aria-label="Proveedores coincidentes"
+            hidden
+          ></div>
+        </div>
+        <label class="recepcion-recibio"
+          >Recepcionó<input
+            type="text"
+            value="{{ current_user.get('nombre') or current_user.get('email') or 'Usuario actual' }}"
+            readonly
+        /></label>
+        <div class="recepcion-pair-panels">
+          <fieldset class="recepcion-pair-panel">
+            <legend>Orden de compra</legend>
+            <div class="recepcion-fields">
+              <label
+                >Orden de compra<input
+                  id="orden_compra"
+                  name="orden_compra"
+                  maxlength="50"
+                  required
+              /></label>
+              <label
+                >Entrega esperada<input
+                  name="fecha_entrega_esperada"
+                  type="date"
+              /></label>
+            </div>
+          </fieldset>
+          <fieldset class="recepcion-pair-panel">
+            <legend>Ingreso del material</legend>
+            <div class="recepcion-fields">
+              <label>Remito<input name="remito" maxlength="100" /></label>
+              <label
+                >Fecha de recepción<input
+                  name="fecha_recepcion"
+                  type="date"
+                  value="{{ hoy }}"
+                  required
+              /></label>
+            </div>
+          </fieldset>
+        </div>
+      </div>
+    </section>
+
+    <section class="recepcion-section">
+      <h2>Material y trazabilidad</h2>
+      <div class="recepcion-fields">
+        <div class="span-2 articulo-search-wrap">
+          <label for="articulo-search">Artículo a controlar</label>
+          <p class="recepcion-field-hint" id="articulo-unidad-hint" hidden></p>
+          <div id="articulo-search-entry" class="articulo-search-entry">
+            <input
+              id="articulo-search"
+              type="search"
+              placeholder="Buscar por código o nombre"
+              autocomplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="articulo-suggestions"
+              required
+            />
+          </div>
+          <input id="articulo-id" type="hidden" name="producto_id" />
+          <div
+            id="articulo-selected"
+            class="articulo-selected"
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+            <span class="articulo-selected-label">Seleccionado</span>
+            <strong
+              id="articulo-selected-code"
+              class="articulo-selected-code"
+            ></strong>
+            <span
+              id="articulo-selected-name"
+              class="articulo-selected-name"
+            ></span>
+            <button id="articulo-change" class="articulo-change" type="button">
+              Cambiar
+            </button>
+          </div>
+          <div id="articulo-plan-actions" class="articulo-plan-actions" hidden>
+            <a
+              id="articulo-open-plan"
+              class="articulo-open-plan"
+              target="_blank"
+              rel="noopener"
+              aria-disabled="true"
+              >Buscando última revisión...</a
+            >
+          </div>
+          <div
+            id="articulo-suggestions"
+            class="articulo-suggestions"
+            role="listbox"
+            aria-label="Artículos coincidentes"
+            hidden
+          ></div>
+        </div>
+        <label
+          >Número de plano<input
+            id="numero_plano"
+            name="numero_plano"
+            maxlength="50"
+        /></label>
+        <input type="hidden" name="designacion" />
+        <label
+          >Identificador de lote<input
+            id="lote-numero"
+            name="lote_numero"
+            maxlength="100"
+            placeholder="Lote del proveedor"
+        /></label>
+        <label
+          >Material utilizado<input name="material_utilizado" maxlength="255"
+        /></label>
+      </div>
+    </section>
+
+    <section class="recepcion-section">
+      <h2>Cantidades y plan de inspección</h2>
+      <div class="recepcion-fields">
+        <label
+          >Cantidad solicitada<input
+            name="cantidad_solicitada"
+            type="number"
+            min="0.0001"
+            step="0.0001"
+            required
+        /></label>
+        <label
+          >Cantidad recibida<input
+            id="cantidad-recibida"
+            name="cantidad_recibida"
+            type="number"
+            min="0.0001"
+            step="0.0001"
+            required
+        /></label>
+        <label
+          >Estado del embalaje<select name="estado_embalaje" required>
+            <option value="">Seleccionar</option>
+            <option value="CONFORME">Conforme</option>
+            <option value="NO_CONFORME">No conforme</option>
+            <option value="NO_APLICA">No aplica</option>
+          </select></label
+        >
+        <label
+          >Nivel de inspección<select name="nivel_inspeccion">
+            <option value="">Sin definir</option>
+            <option>Simplificada</option>
+            <option>Normal</option>
+            <option>Estricta</option>
+          </select><p class="recepcion-field-hint">Asignado automáticamente según el historial anual del proveedor.</p></label
+        >
+        <p
+          class="nivel-recomendacion"
+          id="nivel-inspeccion-recomendacion"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+        <label
+          >Muestra (unidades)<input
+            name="tamano_muestra"
+            type="number"
+            min="0"
+            step="1"
+            readonly
+        /></label>
+        <label
+          >Muestra (%)<input
+            name="porcentaje_muestreo"
+            type="number"
+            min="0"
+            max="100"
+            step="0.001"
+            readonly
+        /></label>
+        <p
+          class="nivel-recomendacion"
+          id="plan-muestreo-recomendacion"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+      </div>
+    </section>
+
+    <section class="recepcion-section">
+      <h2>Observaciones</h2>
+      <textarea
+        name="notas"
+        rows="3"
+        maxlength="5000"
+        placeholder="Notas de recepción e inspección"
+      ></textarea>
+    </section>
+
+    <section
+      class="recepcion-section recepcion-edit-controls"
+      id="recepcion-edit-controls"
+      hidden
+    >
+      <h2>Controles registrados</h2>
+      <div class="recepcion-fields">
+        <label
+          >Terminación superficial (%)<input
+            name="terminacion_superficial"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+        /></label>
+        <label
+          >Control dimensional (%)<input
+            name="control_dimensional"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+        /></label>
+        <label
+          >Embalaje (%)<input
+            name="embalaje"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+        /></label>
+      </div>
+      <div class="cotas-head">
+        <span>Cota / criterio</span><span>Especificación</span
+        ><span>Control</span><span>Desviación</span><span>Resultado</span
+        ><span></span>
+      </div>
+      <div id="recepcion-edit-cotas"></div>
+      <div class="section-actions">
+        <button
+          class="recepcion-button secondary"
+          type="button"
+          data-edit-cota-add
+        >
+          Agregar cota
+        </button>
+      </div>
+    </section>
+
+    <div class="section-actions">
+      <button class="recepcion-button save" type="submit" id="recepcion-save">
+        Guardar recepción
+      </button>
+      <button
+        class="recepcion-button secondary"
+        type="button"
+        id="recepcion-reset-bottom"
+      >
+        Limpiar
+      </button>
+    </div>
+    <p
+      class="recepcion-message"
+      id="recepcion-message"
+      role="status"
+      aria-live="polite"
+    ></p>
+  </form>
+
+  <section class="recepcion-section">
+    <h2>Detalle de la recepción</h2>
+    <div class="recepcion-detail" id="recepcion-detail" aria-live="polite">
+      <p class="recepcion-detail-empty">
+        Al guardar una recepción, aquí aparecerán el detalle y el control de
+        calidad.
+      </p>
+    </div>
+  </section>
+</div>
+<script src="/static/js/recepcion_etiqueta.js" defer></script>
+<script src="/static/js/recepcion.js" defer></script>
+{% endblock %}

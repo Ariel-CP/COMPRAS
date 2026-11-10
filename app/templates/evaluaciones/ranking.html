@@ -49,6 +49,28 @@
   </div>
 
   <div class="panel">
+    <h3 style="margin-top:0;">Desempeño operativo del período</h3>
+    <p style="color:#526576;font-size:0.9em;">
+      Calculado con recepciones, controles de calidad, entregas y no conformidades,
+      incluyendo el historial importado de Access que ya fue asociado a un proveedor.
+      La muestra mínima para clasificar es de 3 recepciones. Si el historial no tiene
+      fecha comprometida, se informa la calidad pero la entrega queda como “sin dato”.
+    </p>
+    <div id="resumenOperativo" style="font-size:0.95em;color:#333;">Sin datos cargados.</div>
+    <div class="tabla-scroll" style="margin-top:10px;">
+      <table class="productos-table" id="tablaOperativo">
+        <thead>
+          <tr>
+            <th>Proveedor</th><th>Puntaje</th><th>Estado</th><th>Calidad</th>
+            <th>Entrega a tiempo</th><th>NC abiertas</th><th>Recepciones</th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="7" style="text-align:center;color:#888;">Sin datos</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
     <h3 style="margin-top:0;">20 peores proveedores</h3>
     <canvas id="chartWorst20" height="220"></canvas>
     <div style="display:flex;justify-content:flex-end;margin-top:10px;">
@@ -82,6 +104,7 @@
   let chartTop10 = null;
   let chartWorst20 = null;
   let rankingData = null;
+  let rankingOperativoData = [];
 
   function fmt(n) {
     if (n == null || Number.isNaN(Number(n))) return '-';
@@ -279,6 +302,45 @@
     renderTabla('tablaWorst20', worst20);
   }
 
+  function estadoOperativo(estado) {
+    const labels = {
+      APROBADO: 'Aprobado',
+      APROB_CONDICIONAL: 'Condicional',
+      NO_APTO: 'No apto',
+      MUESTRA_INSUFICIENTE: 'Muestra insuficiente',
+      SIN_DATOS: 'Sin datos',
+    };
+    return labels[estado] || estado || '-';
+  }
+
+  function renderRankingOperativo(rows) {
+    rankingOperativoData = rows || [];
+    const tbody = document.querySelector('#tablaOperativo tbody');
+    const resumen = document.getElementById('resumenOperativo');
+    resumen.textContent = `Proveedores con recepciones en el período: ${rankingOperativoData.length}`;
+    if (!rankingOperativoData.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;">No hay recepciones para el período.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rankingOperativoData.map((row) => `
+      <tr>
+        <td>${escHtml(`${row.proveedor_codigo || ''} · ${row.proveedor_nombre || ''}`)}</td>
+        <td style="text-align:right;">${fmt(row.puntaje_general)}</td>
+        <td>${escHtml(estadoOperativo(row.estado))}</td>
+        <td style="text-align:right;">${fmt(row.porcentaje_calidad)}%</td>
+        <td style="text-align:right;">${fmt(row.porcentaje_entrega_a_tiempo)}%</td>
+        <td style="text-align:center;">${row.no_conformidades_abiertas || 0}</td>
+        <td style="text-align:center;">${row.cantidad_recepciones || 0}</td>
+      </tr>
+    `).join('');
+  }
+
+  function escHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
+  }
+
   async function cargarRanking() {
     const desde = document.getElementById('desde').value;
     const hasta = document.getElementById('hasta').value;
@@ -295,14 +357,19 @@
 
     try {
       const qs = new URLSearchParams({ desde, hasta });
-      const resp = await fetch('/api/evaluaciones/ranking-periodo?' + qs.toString());
-      const data = await resp.json();
-      if (!resp.ok) {
-        msg.textContent = data.detail || 'Error al consultar ranking';
+      const [formalResp, operativoResp] = await Promise.all([
+        fetch('/api/evaluaciones/ranking-periodo?' + qs.toString()),
+        fetch('/api/evaluaciones/ranking-operativo?' + qs.toString()),
+      ]);
+      const formalData = await formalResp.json();
+      const operativoData = await operativoResp.json();
+      if (!formalResp.ok || !operativoResp.ok) {
+        msg.textContent = formalData.detail || operativoData.detail || 'Error al consultar ranking';
         msg.style.color = '#721c24';
         return;
       }
-      renderRanking(data);
+      renderRanking(formalData);
+      renderRankingOperativo(operativoData);
       msg.textContent = 'Datos actualizados.';
       msg.style.color = '#155724';
     } catch (err) {

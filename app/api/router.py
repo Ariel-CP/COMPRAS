@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from .ai_settings import router as ai_settings_router
 from .auth import router as auth_router
 from .backups import router as backups_router
 from .health import router as health_router
@@ -44,3 +45,5 @@ api_router.include_router(auth_router)
 api_router.include_router(users_router)
 api_router.include_router(roles_router)
 api_router.include_router(system_router)
+
+api_router.include_router(ai_settings_router)

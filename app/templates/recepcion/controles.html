@@ -1,0 +1,330 @@
+{% extends "base.html" %} {% block title %}Controles de recepción{% endblock %}
+{% block styles %}
+<style>
+  .controles-page {
+    max-width: 1500px;
+    margin: 0 auto;
+    color: #182a3a;
+  }
+  .controles-title {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0 18px;
+    border-bottom: 3px solid #159c9b;
+  }
+  .controles-title h1 {
+    margin: 0;
+    font-size: 26px;
+    color: #174f7a;
+  }
+  .controles-title p {
+    margin: 5px 0 0;
+    color: #526576;
+    font-size: 13px;
+  }
+  .controles-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .controles-button {
+    display: inline-block;
+    border: 0;
+    border-radius: 3px;
+    padding: 9px 14px;
+    background: #145f91;
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .controles-button.secondary {
+    background: #536b7d;
+  }
+  .controles-section {
+    padding: 18px 0;
+    border-bottom: 1px solid #cbd7df;
+  }
+  .controles-section h2 {
+    margin: 0 0 13px;
+    color: #176e78;
+    font-size: 15px;
+    text-transform: uppercase;
+  }
+  .controles-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr);
+    align-items: end;
+    gap: 12px 16px;
+    margin-bottom: 12px;
+  }
+  .controles-provider-wrap { position: relative; min-width: 0; }
+  .controles-provider-wrap > label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: #405366;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .controles-provider-wrap input,
+  .controles-search input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid #b9c8d3;
+    border-radius: 3px;
+    font: inherit;
+  }
+  .controles-provider-suggestions {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 3px);
+    right: 0;
+    left: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid #a9bbc8;
+    border-radius: 3px;
+    background: #fff;
+    box-shadow: 0 5px 14px rgb(24 42 58 / 16%);
+  }
+  .controles-provider-suggestions[hidden] { display: none; }
+  .controles-provider-suggestion {
+    display: block;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-bottom: 1px solid #e4ebef;
+    background: #fff;
+    color: #182a3a;
+    text-align: left;
+    cursor: pointer;
+  }
+  .controles-provider-suggestion:hover,
+  .controles-provider-suggestion[aria-selected="true"] { background: #e8f3f5; }
+  .controles-provider-suggestion strong {
+    display: inline-block;
+    min-width: 68px;
+    margin-right: 10px;
+    color: #145f91;
+  }
+  .controles-provider-status { margin: 0; padding: 9px 11px; color: #526576; font-size: 12px; }
+  .controles-provider-selected {
+    display: flex;
+    min-height: 36px;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 7px 5px 10px;
+    border: 1px solid #86b99a;
+    border-radius: 3px;
+    background: #eff8f1;
+    color: #234d34;
+    font-size: 13px;
+  }
+  .controles-provider-selected[hidden],
+  .controles-provider-entry[hidden] { display: none; }
+  .controles-provider-selected strong { flex: 0 0 auto; color: #287044; }
+  .controles-provider-selected span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .controles-provider-change { flex: 0 0 auto; margin-left: auto; padding: 4px 7px; border: 1px solid #a8c9b1; border-radius: 3px; background: #fff; color: #145f91; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .controles-search {
+    display: flex;
+    min-width: 0;
+    gap: 8px;
+  }
+  .controles-search input {
+    flex: 1;
+  }
+  .controles-table-wrap {
+    overflow: auto;
+    max-height: 62vh;
+    border-top: 2px solid #145f91;
+  }
+  .controles-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .controles-table th {
+    position: sticky;
+    top: 0;
+    background: #eaf0f4;
+    color: #344a5c;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .controles-table th,
+  .controles-table td {
+    padding: 8px;
+    border-bottom: 1px solid #dce4e9;
+    vertical-align: top;
+  }
+  .controles-open {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: #145f91;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .controles-source {
+    color: #526576;
+    font-size: 10px;
+  }
+  .controles-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .controles-row-actions button {
+    padding: 4px 7px;
+    border: 1px solid #9aabb8;
+    border-radius: 3px;
+    background: #fff;
+    color: #145f91;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .controles-row-actions .danger {
+    border-color: #d7a7a2;
+    color: #a3362c;
+  }
+  .controles-status {
+    min-height: 20px;
+    margin: 8px 0 0;
+    color: #526576;
+    font-size: 13px;
+  }
+  .controles-status.error {
+    color: #a32222;
+  }
+  .controles-detail {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 2px solid #159c9b;
+  }
+  .controles-detail h3 {
+    margin: 0 0 12px;
+    color: #174f7a;
+    font-size: 16px;
+  }
+  .controles-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 12px;
+    font-size: 12px;
+  }
+  .controles-detail-grid strong {
+    display: block;
+    color: #526576;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .controles-detail-table {
+    width: 100%;
+    margin-top: 12px;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .controles-detail-table th,
+  .controles-detail-table td {
+    padding: 6px;
+    border-bottom: 1px solid #dce4e9;
+    text-align: left;
+  }
+  .controles-empty {
+    color: #526576;
+    font-size: 12px;
+  }
+  @media (max-width: 700px) {
+    .controles-title {
+      align-items: start;
+      flex-direction: column;
+    }
+    .controles-detail-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .controles-filter-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+{% endblock %} {% block content %}
+<div
+  class="controles-page"
+  data-can-write="{{ 'true' if current_user.permissions.get('recepcion', (False, False))[1] else 'false' }}"
+>
+  <div class="controles-title">
+    <div>
+      <h1>Controles de recepción</h1>
+      <p>Recepciones de COMPRAS e histórico de Access</p>
+    </div>
+    <div class="controles-actions">
+      <a
+        class="controles-button secondary"
+        href="/ui/recepcion/historial-access"
+        >Historial Access</a
+      >
+      <a class="controles-button" href="/ui/recepcion">Nueva recepción</a>
+    </div>
+  </div>
+  <section class="controles-section">
+    <h2>Recepciones recientes</h2>
+    <div class="controles-filter-grid">
+      <div class="controles-provider-wrap">
+        <label for="controles-provider-search">Proveedor</label>
+        <div id="controles-provider-entry" class="controles-provider-entry">
+          <input id="controles-provider-search" type="search" placeholder="Buscar por código o nombre" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="controles-provider-suggestions">
+        </div>
+        <div id="controles-provider-selected" class="controles-provider-selected" role="status" aria-live="polite" hidden>
+          <strong id="controles-provider-code"></strong>
+          <span id="controles-provider-name"></span>
+          <button id="controles-provider-change" class="controles-provider-change" type="button">Cambiar</button>
+        </div>
+        <div id="controles-provider-suggestions" class="controles-provider-suggestions" role="listbox" aria-label="Proveedores encontrados" hidden></div>
+      </div>
+      <div class="controles-search">
+        <input id="controles-query" type="search" placeholder="Buscar OC, remito, plano o número" aria-label="Buscar controles de recepción">
+        <button class="controles-button" id="controles-search" type="button">Buscar</button>
+      </div>
+    </div>
+    <div class="controles-table-wrap">
+      <table class="controles-table">
+        <thead>
+          <tr>
+            <th>ID / fecha</th>
+            <th>Proveedor</th>
+            <th>OC / remito</th>
+            <th>Cant. artículos</th>
+            <th>Estado</th>
+            <th>Origen</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="controles-rows">
+          <tr>
+            <td colspan="7">Cargando...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p
+      class="controles-status"
+      id="controles-status"
+      role="status"
+      aria-live="polite"
+    ></p>
+    <div class="controles-detail" id="controles-detail" aria-live="polite">
+      <p class="controles-empty">Seleccioná un control para ver sus datos.</p>
+    </div>
+  </section>
+</div>
+<script src="/static/js/recepcion_etiqueta.js?v={{ app_version }}" defer></script>
+<script src="/static/js/recepcion_controles.js?v={{ app_version }}" defer></script>
+{% endblock %}

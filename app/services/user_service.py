@@ -5,23 +5,59 @@ from sqlalchemy.orm import Session
 
 from app.services import auth_service
 
-PERMISSION_CATALOG: tuple[tuple[str, str], ...] = (
-    ("admin_backups", "Administracion de backups"),
-    ("admin_roles", "Administracion de roles"),
-    ("admin_sistema", "Actualizacion del sistema"),
-    ("admin_usuarios", "Administracion de usuarios"),
-    ("informes", "Informes"),
-    ("mbom", "MBOM"),
-    ("plan", "Plan de produccion"),
-    ("precios", "Precios"),
-    ("proveedores", "Proveedores"),
-    ("productos", "Articulos"),
-    ("recepcion", "Control de recepción"),
-    ("rubros", "Rubros"),
-    ("stock", "Stock"),
-    ("tipo_cambio", "Tipo de cambio"),
-    ("unidades", "Unidades"),
+PERMISSION_CATALOG: tuple[tuple[str, str, str], ...] = (
+    ("ui_admin_usuarios", "Usuarios", "Administración"),
+    ("ui_admin_permisos", "Permisos por rol", "Administración"),
+    ("ui_admin_roles", "Roles", "Administración"),
+    ("ui_admin_backups", "Backups", "Administración"),
+    ("ui_admin_logo", "Logo", "Administración"),
+    ("ui_admin_settings", "Configuración del sistema", "Administración"),
+    ("ui_evaluaciones", "Evaluaciones de proveedores", "Evaluaciones"),
+    ("ui_evaluaciones_ranking", "Ranking de evaluaciones", "Evaluaciones"),
+    ("ui_evaluaciones_ranking_print", "Impresión del ranking", "Evaluaciones"),
+    ("ui_evaluaciones_evolucion", "Evolución por proveedor", "Evaluaciones"),
+    ("ui_informes_costos_pt", "Costos de productos terminados", "Costos y parámetros"),
+    ("ui_mbom", "Estructura MBOM", "Inventario e ingeniería"),
+    ("ui_plan", "Plan de producción", "Planificación"),
+    ("ui_plan_mensual", "Plan mensual", "Planificación"),
+    ("ui_plan_variaciones", "Variaciones del plan", "Planificación"),
+    ("ui_plan_requerimientos", "Requerimientos del plan", "Planificación"),
+    ("ui_plan_asistente_oc", "Asistente de órdenes de compra", "Planificación"),
+    ("ui_precios", "Precios", "Costos y parámetros"),
+    ("ui_planos_articulos", "Planos de artículos", "Inventario e ingeniería"),
+    ("ui_productos", "Artículos", "Inventario e ingeniería"),
+    ("ui_proveedores", "Proveedores", "Proveedores"),
+    ("ui_recepcion", "Recepción de materiales", "Control de recepción"),
+    ("ui_recepcion_controles", "Controles recientes", "Control de recepción"),
+    ("ui_recepcion_calidad", "Control de calidad", "Control de recepción"),
+    ("ui_recepcion_historial_access", "Historial de Access", "Control de recepción"),
+    ("ui_rubros", "Rubros", "Inventario e ingeniería"),
+    ("ui_rubros_nuevo", "Alta de rubro", "Inventario e ingeniería"),
+    ("ui_rubros_editar", "Edición de rubro", "Inventario e ingeniería"),
+    ("ui_rubros_eliminar", "Eliminación de rubro", "Inventario e ingeniería"),
+    ("ui_sesiones", "Sesiones", "Administración"),
+    ("ui_stock", "Stock mensual", "Inventario e ingeniería"),
+    ("ui_tipo_cambio", "Tipo de cambio", "Costos y parámetros"),
 )
+
+LEGACY_PERMISSION_KEYS = {
+    "admin_backups",
+    "admin_roles",
+    "admin_sistema",
+    "admin_usuarios",
+    "evaluaciones",
+    "informes",
+    "mbom",
+    "plan",
+    "precios",
+    "proveedores",
+    "productos",
+    "recepcion",
+    "rubros",
+    "stock",
+    "tipo_cambio",
+    "unidades",
+}
 
 LEGACY_PERMISSION_ALIASES: dict[str, str] = {
     "producto": "productos",
@@ -31,7 +67,10 @@ LEGACY_PERMISSION_ALIASES: dict[str, str] = {
 
 
 def list_permission_catalog() -> List[dict]:
-    return [{"form_key": fk, "label": label} for fk, label in PERMISSION_CATALOG]
+    return [
+        {"form_key": form_key, "label": label, "group": group}
+        for form_key, label, group in PERMISSION_CATALOG
+    ]
 
 
 def _normalize_form_key(form_key: str) -> str:
@@ -249,11 +288,18 @@ def get_role_perms(db: Session, rol_id: int) -> List[dict]:
         merged_row["puede_escribir"] = bool(merged_row.get("puede_escribir")) or bool(
             row.get("puede_escribir")
         )
+        merged_row["puede_leer"] = bool(merged_row.get("puede_leer")) or bool(
+            merged_row.get("puede_escribir")
+        )
+    for row in merged.values():
+        row["puede_leer"] = bool(row.get("puede_leer")) or bool(
+            row.get("puede_escribir")
+        )
     return sorted(merged.values(), key=lambda x: str(x.get("form_key", "")))
 
 
 def set_role_perms(db: Session, rol_id: int, perms: List[dict]) -> List[dict]:
-    valid_keys = {fk for fk, _ in PERMISSION_CATALOG}
+    valid_keys = {form_key for form_key, _, _ in PERMISSION_CATALOG} | LEGACY_PERMISSION_KEYS
     normalized_perms: dict[str, dict] = {}
     invalid_keys: list[str] = []
 
@@ -271,6 +317,7 @@ def set_role_perms(db: Session, rol_id: int, perms: List[dict]) -> List[dict]:
             "puede_leer": bool(p.get("puede_leer", True)),
             "puede_escribir": bool(p.get("puede_escribir", False)),
         }
+        current["puede_leer"] = current["puede_leer"] or current["puede_escribir"]
         if prev is None:
             normalized_perms[normalized_key] = current
         else:

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Material seleccionado{% endblock %}
+{% block styles %}
+<style>
+  .calidad-page { max-width: 1100px; margin: 0 auto; color: #182a3a; }
+  .calidad-title { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 8px 0 18px; border-bottom: 3px solid #159c9b; }
+  .calidad-title h1 { margin: 0; color: #174f7a; font-size: 26px; }
+  .calidad-title p { margin: 5px 0 0; color: #526576; font-size: 13px; }
+  .calidad-actions, .calidad-toolbar, .calidad-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .calidad-button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; padding: 8px 13px; border: 0; border-radius: 3px; background: #145f91; color: #fff; font: inherit; font-size: 13px; font-weight: 700; text-decoration: none; cursor: pointer; }
+  .calidad-button.secondary { background: #536b7d; }
+  .calidad-button.save { background: #198754; }
+  .calidad-panel h2 { margin: 0 0 12px; color: #176e78; font-size: 14px; text-transform: uppercase; }
+  .calidad-form input, .calidad-form select, .calidad-form textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #b9c8d3; border-radius: 3px; background: #fff; color: #1f2933; font: inherit; font-size: 13px; }
+  .calidad-form input:focus, .calidad-form select:focus, .calidad-form textarea:focus { outline: 2px solid #159c9b; outline-offset: 1px; }
+  .calidad-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .calidad-table th { background: #eaf0f4; color: #344a5c; text-align: left; white-space: nowrap; }
+  .calidad-table th, .calidad-table td { padding: 8px; border-bottom: 1px solid #dce4e9; vertical-align: top; }
+  .calidad-muted { color: #526576; font-size: 11px; }
+  .calidad-status { min-height: 20px; margin: 9px 0; color: #526576; font-size: 13px; }
+  .calidad-status.error { color: #a32222; }
+  .calidad-detail h2 { margin-bottom: 10px; color: #174f7a; font-size: 17px; text-transform: none; }
+  .calidad-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding-bottom: 14px; border-bottom: 1px solid #cbd7df; }
+  .calidad-summary div { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+  .calidad-summary strong { display: block; margin-bottom: 3px; color: #526576; font-size: 10px; text-transform: uppercase; }
+  .calidad-form { padding-top: 14px; }
+  .calidad-form[hidden] { display: none; }
+  .calidad-form h3 { margin: 0 0 12px; color: #176e78; font-size: 14px; }
+  .calidad-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
+  .calidad-fields label, .calidad-cota label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: #405366; font-size: 12px; font-weight: 700; }
+  .calidad-fields input[readonly] { background: #f1f5f7; }
+  .calidad-hint { margin: 10px 0; padding: 8px 10px; border-left: 3px solid #167c80; background: #edf6f5; color: #24545a; font-size: 12px; }
+  .calidad-cotas-head, .calidad-cota { display: grid; grid-template-columns: minmax(120px, 1.2fr) minmax(125px, 1fr) minmax(100px, 0.9fr) minmax(100px, 0.8fr) 135px 34px; gap: 8px; align-items: end; }
+  .calidad-cotas-head { margin-top: 14px; padding: 7px 8px; background: #e8f1f5; color: #345369; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .calidad-cota { padding: 8px; border-bottom: 1px solid #dde5ea; }
+  .calidad-remove { width: 34px; height: 34px; border: 1px solid #d7a7a2; border-radius: 3px; background: #fff; color: #a3362c; font-size: 18px; cursor: pointer; }
+  .calidad-attempt { margin-bottom: 14px; }
+  @media (max-width: 680px) { .calidad-title { align-items: start; flex-direction: column; } .calidad-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .calidad-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .calidad-cotas-head { display: none; } .calidad-cota { grid-template-columns: repeat(2, minmax(0, 1fr)); } .calidad-cota .calidad-remove { grid-column: 2; justify-self: end; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="calidad-page" data-line-id="{{ linea_id }}" data-can-write="{{ 'true' if (current_user.permissions.get('ui_recepcion_calidad', (False, False))[1] or current_user.permissions.get('recepcion', (False, False))[1]) else 'false' }}" data-current-user="{{ current_user.get('nombre') or current_user.get('email') or 'Usuario actual' }}">
+  <div class="calidad-title">
+    <div><h1>Material seleccionado</h1><p>Control de calidad de la línea de recepción</p></div>
+    <div class="calidad-actions"><a class="calidad-button secondary" href="/ui/recepcion/calidad">← Volver a pendientes</a></div>
+  </div>
+  <div class="calidad-detail" id="calidad-detail" aria-live="polite" style="padding-top: 18px;">
+    <p class="calidad-muted">Cargando ficha e historial de inspección...</p>
+  </div>
+</div>
+<script src="/static/js/recepcion_calidad_material.js" defer></script>
+{% endblock %}

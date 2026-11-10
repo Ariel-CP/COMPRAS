@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% from 'partials/perm_macros.html' import can_write_attr, can_write_js with context %}
-{% set CAN_WRITE_JS = can_write_js('plan') %}
+{% from 'partials/perm_macros.html' import can_write_any_attr, can_write_any_js with context %}
+{% set CAN_WRITE_JS = can_write_any_js(['ui_plan_asistente_oc']) %}
 
 {% block title %}Wizard de Orden de Compra{% endblock %}
 
@@ -71,9 +71,9 @@
     <input id="fechaCorteStock" type="date" />
 
     <label for="archivoStockMp">Archivo CSV/XLSX stock MP</label>
-    <input id="archivoStockMp" type="file" accept=".csv,.xlsx" {{ can_write_attr('stock') }} />
+    <input id="archivoStockMp" type="file" accept=".csv,.xlsx" {{ can_write_any_attr(['ui_stock', 'ui_plan_asistente_oc']) }} />
 
-    <button id="btnImportarStockMp" type="button" class="btn-accion" {{ can_write_attr('stock') }}>Importar stock MP</button>
+    <button id="btnImportarStockMp" type="button" class="btn-accion" {{ can_write_any_attr(['ui_stock', 'ui_plan_asistente_oc']) }}>Importar stock MP</button>
     <button id="btnPlantillaStockMp" type="button" class="btn-accion">Plantilla stock MP (CSV)</button>
     <button id="btnPlantillaStockMpXlsx" type="button" class="btn-accion">Plantilla stock MP (XLSX)</button>
     <span id="stockMpFeedback" class="nota"></span>
@@ -112,8 +112,8 @@
     <label for="archivoLafSolicitado">Archivo CSV/XLSX solicitado LAF</label>
     <input id="archivoLafSolicitado" type="file" accept=".csv,.xlsx" />
 
-    <button id="btnAgregarLaf" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Agregar solicitado LAF</button>
-    <button id="btnImportarLaf" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Importar solicitado LAF</button>
+    <button id="btnAgregarLaf" type="button" class="btn-accion" {{ can_write_any_attr(['ui_plan_asistente_oc']) }}>Agregar solicitado LAF</button>
+    <button id="btnImportarLaf" type="button" class="btn-accion" {{ can_write_any_attr(['ui_plan_asistente_oc']) }}>Importar solicitado LAF</button>
     <button id="btnPlantillaLafCsv" type="button" class="btn-accion">Plantilla solicitado LAF (CSV)</button>
     <button id="btnPlantillaLafXlsx" type="button" class="btn-accion">Plantilla solicitado LAF (XLSX)</button>
     <span id="lafFeedback" class="nota"></span>
@@ -147,7 +147,7 @@
     <label for="archivoStockPt">Archivo CSV/XLSX stock PT</label>
     <input id="archivoStockPt" type="file" accept=".csv,.xlsx" />
 
-    <button id="btnProcesarStockPt" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Procesar y guardar stock PT</button>
+    <button id="btnProcesarStockPt" type="button" class="btn-accion" {{ can_write_any_attr(['ui_plan_asistente_oc']) }}>Procesar y guardar stock PT</button>
     <button id="btnPlantillaStockPt" type="button" class="btn-accion">Plantilla stock PT (CSV)</button>
     <button id="btnPlantillaStockPtXlsx" type="button" class="btn-accion">Plantilla stock PT (XLSX)</button>
     <span id="stockPtFeedback" class="nota"></span>
@@ -174,7 +174,7 @@
     <label for="archivoDeudaClientes">Archivo CSV/XLSX deuda clientes</label>
     <input id="archivoDeudaClientes" type="file" accept=".csv,.xlsx" />
 
-    <button id="btnProcesarDeuda" type="button" class="btn-accion" {{ can_write_attr('plan') }}>Procesar y guardar deuda clientes</button>
+    <button id="btnProcesarDeuda" type="button" class="btn-accion" {{ can_write_any_attr(['ui_plan_asistente_oc']) }}>Procesar y guardar deuda clientes</button>
     <button id="btnPlantillaDeuda" type="button" class="btn-accion">Plantilla deuda (CSV)</button>
     <button id="btnPlantillaDeudaXlsx" type="button" class="btn-accion">Plantilla deuda (XLSX)</button>
     <span id="deudaFeedback" class="nota"></span>
@@ -196,9 +196,10 @@
 
 <section class="panel wizard-body hidden" data-pane="5">
   <h3>Paso 5: Calcular materiales y sugerencia de compra</h3>
+  <p class="hint">Los cálculos se ejecutan localmente. La IA externa está deshabilitada. Simular no guarda sugerencias ni corridas; para guardarlas, marcá la opción siguiente.</p>
   <div class="form-grid" style="margin-bottom: 8px;">
     <label for="persistirSugerencias" style="display:flex;align-items:center;gap:8px;">
-      <input id="persistirSugerencias" type="checkbox" {{ can_write_attr('plan') }} />
+      <input id="persistirSugerencias" type="checkbox" {{ can_write_any_attr(['ui_plan_asistente_oc']) }} />
       Persistir sugerencias de compra
     </label>
   </div>
@@ -251,7 +252,7 @@
   <div id="alertasOc" class="error-banner hidden" style="margin-top: 10px;"></div>
 
   <div class="tabla-wrapper" style="margin-top: 12px;">
-    <h4>Historial reciente de corridas</h4>
+    <h4>Historial de cálculos guardados</h4>
     <table class="striped" id="tablaCorridasOc">
       <thead>
         <tr>
@@ -551,6 +552,7 @@
 {% block scripts %}
 <script>
 const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
+const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']) }};
 (function () {
   // --- Modal procedimiento ---
   const btnVerProcedimiento  = document.getElementById("btnVerProcedimiento");
@@ -754,7 +756,7 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
   }
 
   async function importarStockMp() {
-    if (!CAN_WRITE) {
+    if (!CAN_WRITE_STOCK) {
       stockMpFeedback.textContent = "Tu usuario no tiene permiso de escritura para stock.";
       return;
     }
@@ -1128,18 +1130,29 @@ const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
       ["Stock PT", fmt(resumen.total_stock_pt || 0)],
       ["Deuda clientes", fmt(resumen.total_deuda_clientes || 0)],
       ["Demanda neta PT", fmt(resumen.total_demanda_neta_pt || 0)],
-      ["Solicitado previo LAF", fmt(resumen.total_solicitado_previo_laf || 0)],
-      ["Total faltante MP", fmt(resumen.total_faltante || 0)],
-      ["Cobertura global", `${fmt(resumen.cobertura_global_pct || 0)} %`],
+
     ];
-    kpiOc.innerHTML = cards
-      .map(([label, value]) => `
-        <article class="kpi-card">
-          <div class="kpi-label">${label}</div>
-          <div class="kpi-value">${value}</div>
-        </article>
-      `)
-      .join("");
+    (resumen.por_unidad || []).forEach((grupo) => {
+      const unidad = grupo.um_codigo || "Sin unidad";
+      cards.push(
+        [`Solicitado previo LAF (${unidad})`, fmt(grupo.total_solicitado_previo_laf)],
+        [`Faltante MP (${unidad})`, fmt(grupo.total_faltante)],
+        [`Cobertura (${unidad})`, `${fmt(grupo.cobertura_global_pct)} %`],
+      );
+    });
+    kpiOc.replaceChildren();
+    cards.forEach(([label, value]) => {
+      const card = document.createElement("article");
+      card.className = "kpi-card";
+      const title = document.createElement("div");
+      title.className = "kpi-label";
+      title.textContent = label;
+      const content = document.createElement("div");
+      content.className = "kpi-value";
+      content.textContent = value;
+      card.append(title, content);
+      kpiOc.appendChild(card);
+    });
   }
 
   function renderDemandaNeta(items) {

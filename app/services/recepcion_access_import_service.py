@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 def _generar_hash_fila(datos_fila: Dict) -> str:
     """Genera SHA256 de fila para idempotencia."""
     # Serializa en orden determinista
-    contenido = json.dumps(datos_fila, sort_keys=True, default=str, ensure_ascii=True)
-    return hashlib.sha256(contenido.encode()).hexdigest()
+    contenido = json.dumps(datos_fila, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(contenido.encode("utf-8")).hexdigest()
 
 
 def _convertir_tipo_dato(valor, tipo_esperado: str):
@@ -330,14 +330,62 @@ def importar_recepcion_desde_access(
                 # Validar clave única (fila_hash) - si existe, es duplicada
                 existe = db.execute(
                     text(
-                        "SELECT id FROM recepcion_staging WHERE fila_hash = :fila_hash"
+                        """
+                        SELECT id FROM recepcion_staging
+                        WHERE fila_hash = :fila_hash
+                           OR (:id_original IS NOT NULL
+                               AND id_recepcion_original = :id_original)
+                        LIMIT 1
+                        """
                     ),
-                    {"fila_hash": fila_hash},
+                    {
+                        "fila_hash": fila_hash,
+                        "id_original": fila_mapeada["id_recepcion_original"],
+                    },
                 ).fetchone()
 
                 if existe:
+                    db.execute(
+                        text("""
+                            UPDATE recepcion_staging
+                            SET id_recepcion_original = COALESCE(
+                                    id_recepcion_original, :id_recepcion_original
+                                ),
+                                proveedor_codigo = COALESCE(
+                                    proveedor_codigo, :proveedor_codigo
+                                ),
+                                fecha_recepcion_original = COALESCE(
+                                    fecha_recepcion_original, :fecha_recepcion_original
+                                ),
+                                estado_inspeccion_original = COALESCE(
+                                    estado_inspeccion_original,
+                                    :estado_inspeccion_original
+                                ),
+                                lote_numero = COALESCE(lote_numero, :lote_numero)
+                            WHERE fila_hash = :fila_hash
+                               OR (:id_recepcion_original IS NOT NULL
+                                   AND id_recepcion_original = :id_recepcion_original)
+                            """),
+                        {
+                            "id_recepcion_original": fila_mapeada[
+                                "id_recepcion_original"
+                            ],
+                            "proveedor_codigo": fila_mapeada["proveedor_codigo"],
+                            "fecha_recepcion_original": fila_mapeada[
+                                "fecha_recepcion_original"
+                            ],
+                            "estado_inspeccion_original": fila_mapeada[
+                                "estado_inspeccion_original"
+                            ],
+                            "lote_numero": fila_mapeada["lote_numero"],
+                            "fila_hash": fila_hash,
+                        },
+                    )
                     resultado["duplicadas"] += 1
-                    logger.debug(f"Fila {idx}: Duplicada (hash existente)")
+                    logger.debug(
+                        "Fila %d: duplicada; se completaron campos históricos faltantes",
+                        idx,
+                    )
                     continue
 
                 # Insertar nueva fila

@@ -1,6 +1,31 @@
 {% extends "base.html" %} {% block title %}Permisos por rol{% endblock %} {%
 block content %}
 <section class="productos-wrapper">
+  <style>
+    .permission-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:14px}
+    .permission-toolbar input[type="search"]{flex:1;min-width:220px;max-width:420px}
+    .permission-tree{display:grid;gap:8px}
+    .permission-group{border:1px solid #d9e0e5;border-radius:6px;background:#fff}
+    .permission-group summary{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;font-weight:700;list-style:none}
+    .permission-group summary::-webkit-details-marker{display:none}
+    .permission-group summary:after{content:'+';margin-left:auto;color:#52616b;font-size:18px}
+    .permission-group[open] summary:after{content:'−'}
+    .permission-group-title{min-width:180px}
+    .permission-head-checks,.permission-checks{display:grid;grid-template-columns:repeat(2,minmax(88px,1fr));gap:12px;align-items:center}
+    .permission-head-checks{margin-left:auto;color:#52616b;font-size:12px;font-weight:600}
+    .permission-head-checks label,.permission-checks label{display:flex;align-items:center;gap:7px;white-space:nowrap}
+    .permission-group-count{font-size:12px;color:#60717d;font-weight:500}
+    .permission-group-controls{display:flex;justify-content:flex-end;padding:0 14px 10px}
+    .permission-items{border-top:1px solid #e5e9ec}
+    .permission-item{display:grid;grid-template-columns:minmax(180px,1fr) minmax(196px,220px);gap:14px;align-items:center;padding:10px 14px;border-bottom:1px solid #edf0f2}
+    .permission-item:last-child{border-bottom:0}
+    .permission-item[hidden],.permission-group[hidden]{display:none}
+    .permission-label{font-weight:600;color:#26343c}
+    .permission-key{display:block;margin-top:2px;color:#75838b;font:11px ui-monospace,Consolas,monospace}
+    .permission-checks input,.permission-head-checks input{width:16px;height:16px;accent-color:#176b5b}
+    .permission-tree :focus-visible{outline:2px solid #176b5b;outline-offset:2px}
+    @media(max-width:620px){.permission-group summary{flex-wrap:wrap;gap:8px}.permission-group-title{min-width:0;flex:1}.permission-head-checks{width:100%;margin-left:0}.permission-item{grid-template-columns:1fr;gap:8px;padding:10px}.permission-checks{max-width:240px}}
+  </style>
   <h2>Permisos por rol</h2>
 
   <div class="panel panel-alta">
@@ -41,29 +66,14 @@ block content %}
   </div>
 
   <div class="panel panel-listado">
-    <div class="tabla-controles">
-      <button class="btn-accion" type="button" onclick="agregarFila()">
-        Agregar permiso
-      </button>
-      <button class="btn-accion" type="button" onclick="guardarPermisos()">
-        Guardar
-      </button>
-      <span id="perm-status" class="hint"></span>
+    <div class="permission-toolbar">
+      <label for="permission-search">Buscar formulario</label>
+      <input id="permission-search" type="search" placeholder="Filtrar por nombre o clave" oninput="filtrarPermisos()" />
+      <button class="btn-accion" type="button" onclick="guardarPermisos()">Guardar permisos</button>
+      <span id="permission-count" class="hint" aria-live="polite"></span>
+      <span id="perm-status" class="hint" aria-live="polite"></span>
     </div>
-    <div class="tabla-scroll">
-      <table class="productos-table table-center" id="tablaPerms">
-        <thead>
-          <tr>
-            <th>form_key</th>
-            <th>Descripción</th>
-            <th>Leer</th>
-            <th>Escribir</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+    <div id="permission-tree" class="permission-tree" aria-label="Permisos agrupados por formulario"></div>
   </div>
 </section>
 {% endblock %} {% block scripts %}
@@ -71,83 +81,24 @@ block content %}
   let roles = {{ roles|tojson }};
   let permisos = {{ permisos|tojson }};
   let selectedRole = {{ selected_role|tojson }};
-  const permissionCatalog = {{ permission_catalog|tojson }}.slice().sort((a, b) => {
-    const la = (a?.label || '').toString();
-    const lb = (b?.label || '').toString();
-    return la.localeCompare(lb, 'es', { sensitivity: 'base' });
-  });
-
-  function getPermissionLabel(formKey){
-    const key = (formKey || '').trim();
-    const found = permissionCatalog.find(p => p.form_key === key);
-    return found ? found.label : 'Clave legacy/no catalogada';
-  }
-
-  function onFormKeyChanged(selectEl){
-    const tr = selectEl.closest('tr');
-    if(!tr) return;
-    const labelCell = tr.querySelector('.perm-label');
-    if(!labelCell) return;
-    labelCell.textContent = getPermissionLabel(selectEl.value);
-  }
-
-  function renderFormKeySelect(actual){
-    const current = (actual || '').trim();
-    const exists = permissionCatalog.some(p => p.form_key === current);
-    const options = permissionCatalog.map(p => {
-      const selected = p.form_key === current ? 'selected' : '';
-      return `<option value="${escapeHtml(p.form_key)}" ${selected}>${escapeHtml(p.label)} (${escapeHtml(p.form_key)})</option>`;
-    }).join('');
-
-    const legacyOption = (current && !exists)
-      ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (legacy)</option>`
-      : '';
-
-    return `<select name="form_key" onchange="onFormKeyChanged(this)">${legacyOption}${options}</select>`;
-  }
-
-  function renderPerms(data){
-    const tbody = document.querySelector('#tablaPerms tbody');
-    tbody.innerHTML = '';
-    data.forEach(p => {
-      const tr = document.createElement('tr');
-      tr.dataset.id = p.id || '';
-      tr.innerHTML = `
-        <td>${renderFormKeySelect(p.form_key)}</td>
-        <td class="perm-label">${escapeHtml(getPermissionLabel(p.form_key))}</td>
-        <td><input type="checkbox" name="leer" ${p.puede_leer ? 'checked':''} /></td>
-        <td><input type="checkbox" name="escribir" ${p.puede_escribir ? 'checked':''} /></td>
-        <td><button class="btn-accion" type="button" onclick="eliminarFila(this)">Eliminar</button></td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  function agregarFila(){
-    const defaultKey = permissionCatalog.length ? permissionCatalog[0].form_key : '';
-    permisos.push({id:null, form_key: defaultKey, puede_leer:true, puede_escribir:false});
-    renderPerms(permisos);
-  }
-
-  function eliminarFila(btn){
-    const tr = btn.closest('tr');
-    const idx = Array.from(tr.parentNode.children).indexOf(tr);
-    if(idx>=0){
-      permisos.splice(idx,1);
-      renderPerms(permisos);
-    }
-  }
+    const permissionCatalog = {{ permission_catalog|tojson }};
 
   function dataDesdeTabla(){
-    const rows = document.querySelectorAll('#tablaPerms tbody tr');
-    return Array.from(rows).map(tr => {
+    const rows = document.querySelectorAll('#permission-tree [data-level="leer"]');
+    const treePermissions = Array.from(rows).map(read => {
+      const row = read.closest('.permission-item');
       return {
-        id: tr.dataset.id || null,
-        form_key: tr.querySelector('select[name="form_key"]').value.trim(),
-        puede_leer: tr.querySelector('input[name="leer"]').checked,
-        puede_escribir: tr.querySelector('input[name="escribir"]').checked,
+        form_key: read.dataset.key,
+        puede_leer: read.checked,
+        puede_escribir: row.querySelector('[data-level="escribir"]').checked,
       };
-    }).filter(p => p.form_key.length > 0);
+    });
+    const representedKeys = new Set(treePermissions.map(permission => permission.form_key));
+    const preservedLegacy = permisos.filter(permission => !representedKeys.has(permission.form_key));
+    return [
+      ...treePermissions.filter(permission => permission.puede_leer || permission.puede_escribir),
+      ...preservedLegacy,
+    ];
   }
 
   async function guardarPermisos(){
@@ -264,6 +215,106 @@ block content %}
     return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
   }
 
+  function renderPerms(data){
+    permisos = data || [];
+    const grouped = new Map();
+    permissionCatalog.forEach(item => {
+      if(!grouped.has(item.group)) grouped.set(item.group, []);
+      grouped.get(item.group).push(item);
+    });
+    const tree = document.getElementById('permission-tree');
+    tree.innerHTML = Array.from(grouped.entries()).map(([group, items]) => `
+      <details class="permission-group" data-group="${escapeHtml(group)}">
+        <summary>
+          <span class="permission-group-title">${escapeHtml(group)}</span>
+          <span class="permission-group-count" data-count-for="${escapeHtml(group)}"></span>
+        </summary>
+        <div class="permission-group-controls permission-head-checks">
+          <label><input type="checkbox" data-group-level="leer" data-group-name="${escapeHtml(group)}" aria-label="Ver todos: ${escapeHtml(group)}" /> Ver todas</label>
+          <label><input type="checkbox" data-group-level="escribir" data-group-name="${escapeHtml(group)}" aria-label="Editar todos: ${escapeHtml(group)}" /> Editar todas</label>
+        </div>
+        <div class="permission-items">
+          ${items.map(item => {
+            const current = permisos.find(permission => permission.form_key === item.form_key) || {};
+            const write = Boolean(current.puede_escribir);
+            const read = Boolean(current.puede_leer) || write;
+            return `<div class="permission-item" data-label="${escapeHtml(`${item.label} ${item.form_key}`.toLowerCase())}" data-key="${escapeHtml(item.form_key)}" data-group="${escapeHtml(group)}">
+              <div class="permission-label">${escapeHtml(item.label)}<span class="permission-key">${escapeHtml(item.form_key)}</span></div>
+              <div class="permission-checks">
+                <label><input type="checkbox" data-level="leer" data-key="${escapeHtml(item.form_key)}" ${read ? 'checked' : ''} /> Ver</label>
+                <label><input type="checkbox" data-level="escribir" data-key="${escapeHtml(item.form_key)}" ${write ? 'checked' : ''} /> Editar</label>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </details>
+    `).join('');
+    updateGroupChecks();
+    filtrarPermisos();
+  }
+
+  function updateGroupChecks(){
+    document.querySelectorAll('[data-group-level]').forEach(parent => {
+      const group = parent.dataset.groupName;
+      const level = parent.dataset.groupLevel;
+      const leaves = Array.from(document.querySelectorAll(`.permission-item[data-group="${CSS.escape(group)}"] [data-level="${level}"]`));
+      const selected = leaves.filter(input => input.checked).length;
+      parent.checked = leaves.length > 0 && selected === leaves.length;
+      parent.indeterminate = selected > 0 && selected < leaves.length;
+      const count = document.querySelector(`[data-count-for="${CSS.escape(group)}"]`);
+      if(count && level === 'leer') count.textContent = `${selected}/${leaves.length} visibles`;
+    });
+    const checked = document.querySelectorAll('#permission-tree [data-level="leer"]:checked').length;
+    const total = document.querySelectorAll('#permission-tree [data-level="leer"]').length;
+    document.getElementById('permission-count').textContent = `${checked} de ${total} formularios visibles`;
+  }
+
+  function onTreeChange(event){
+    const input = event.target;
+    if(!(input instanceof HTMLInputElement)) return;
+    if(input.matches('[data-group-level]')){
+      const group = input.dataset.groupName;
+      const level = input.dataset.groupLevel;
+      document.querySelectorAll(`.permission-item[data-group="${CSS.escape(group)}"] [data-level="${level}"]`).forEach(leaf => {
+        leaf.checked = input.checked;
+        const row = leaf.closest('.permission-item');
+        if(level === 'escribir' && input.checked) row.querySelector('[data-level="leer"]').checked = true;
+        if(level === 'leer' && !input.checked) row.querySelector('[data-level="escribir"]').checked = false;
+      });
+    } else if(input.dataset.level === 'escribir' && input.checked){
+      input.closest('.permission-item').querySelector('[data-level="leer"]').checked = true;
+    } else if(input.dataset.level === 'leer' && !input.checked){
+      input.closest('.permission-item').querySelector('[data-level="escribir"]').checked = false;
+    }
+    updateGroupChecks();
+  }
+
+  function filtrarPermisos(){
+    const query = document.getElementById('permission-search').value.trim().toLocaleLowerCase('es');
+    document.querySelectorAll('.permission-group').forEach(group => {
+      let visible = 0;
+      group.querySelectorAll('.permission-item').forEach(item => {
+        const matches = !query || item.dataset.label.includes(query);
+        item.hidden = !matches;
+        if(matches) visible += 1;
+      });
+      group.hidden = visible === 0;
+      if(query && visible > 0) group.open = true;
+    });
+  }
+
+  function dataDesdeTabla(){
+    return Array.from(document.querySelectorAll('#permission-tree [data-level="leer"]')).map(read => {
+      const row = read.closest('.permission-item');
+      return {
+        form_key: read.dataset.key,
+        puede_leer: read.checked,
+        puede_escribir: row.querySelector('[data-level="escribir"]').checked,
+      };
+    }).filter(permission => permission.puede_leer || permission.puede_escribir);
+  }
+
+  document.getElementById('permission-tree').addEventListener('change', onTreeChange);
   renderPerms(permisos || []);
 </script>
 {% endblock %}

@@ -1740,15 +1740,14 @@ def _persistir_sugerencias_compra(
         faltante = float(item["faltante"])
 
         existente = db.execute(
-            text(
-                """
+            text("""
                 SELECT id, estado
                 FROM sugerencia_compra
                 WHERE anio=:anio AND mes=:mes
                   AND producto_id=:producto_id
                   AND unidad_medida_id=:unidad_medida_id
-                """
-            ),
+                FOR UPDATE
+                """),
             {
                 "anio": anio,
                 "mes": mes,
@@ -1756,6 +1755,13 @@ def _persistir_sugerencias_compra(
                 "unidad_medida_id": unidad_medida_id,
             },
         ).first()
+
+        if existente and existente.estado == "APROBADA":
+            alertas.append(
+                f"La sugerencia aprobada de {item['codigo']} se conservó sin cambios; "
+                "revisá el nuevo cálculo antes de modificar la compra."
+            )
+            continue
 
         if faltante > 0:
             params = {
@@ -1769,43 +1775,21 @@ def _persistir_sugerencias_compra(
                 "motivo": "Generado por análisis de faltantes del plan.",
             }
             if existente:
-                if existente.estado == "APROBADA":
-                    alertas.append(
-                        "La sugerencia aprobada de "
-                        f"{item['codigo']} no se cambió de estado."
-                    )
-                    db.execute(
-                        text(
-                            """
-                            UPDATE sugerencia_compra
-                            SET cantidad_necesaria=:cantidad_necesaria,
-                                stock_disponible=:stock_disponible,
-                                cantidad_sugerida=:cantidad_sugerida,
-                                motivo=:motivo
-                            WHERE id=:id
-                            """
-                        ),
-                        {**params, "id": existente.id},
-                    )
-                else:
-                    db.execute(
-                        text(
-                            """
-                            UPDATE sugerencia_compra
-                            SET cantidad_necesaria=:cantidad_necesaria,
-                                stock_disponible=:stock_disponible,
-                                cantidad_sugerida=:cantidad_sugerida,
-                                estado='PENDIENTE',
-                                motivo=:motivo
-                            WHERE id=:id
-                            """
-                        ),
-                        {**params, "id": existente.id},
-                    )
+                db.execute(
+                    text("""
+                        UPDATE sugerencia_compra
+                        SET cantidad_necesaria=:cantidad_necesaria,
+                            stock_disponible=:stock_disponible,
+                            cantidad_sugerida=:cantidad_sugerida,
+                            estado='PENDIENTE',
+                            motivo=:motivo
+                        WHERE id=:id
+                        """),
+                    {**params, "id": existente.id},
+                )
             else:
                 db.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO sugerencia_compra (
                             anio, mes, producto_id, unidad_medida_id,
                             cantidad_necesaria, stock_disponible,
@@ -1815,8 +1799,7 @@ def _persistir_sugerencias_compra(
                             :cantidad_necesaria, :stock_disponible,
                             :cantidad_sugerida, 'PENDIENTE', :motivo
                         )
-                        """
-                    ),
+                        """),
                     params,
                 )
             upserts += 1
@@ -1983,11 +1966,73 @@ def _limpiar_alertas(alertas: List[str]) -> List[str]:
     return alertas_limpias
 
 
+def _resumir_materiales_por_unidad(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """No mezcla unidades ni compensa faltantes con excedentes de otro material."""
+    grupos: Dict[int, Dict[str, Any]] = {}
+    for item in items:
+        unidad_id = int(item["unidad_medida_id"])
+        grupo = grupos.setdefault(
+            unidad_id,
+            {
+                "unidad_medida_id": unidad_id,
+                "um_codigo": str(item.get("um_codigo") or "Sin unidad"),
+                "total_requerido": 0.0,
+                "total_stock_disponible": 0.0,
+                "total_faltante_bruto": 0.0,
+                "total_solicitado_previo_laf": 0.0,
+                "total_faltante": 0.0,
+            },
+        )
+        grupo["total_requerido"] += float(item.get("cantidad_requerida") or 0)
+        grupo["total_stock_disponible"] += float(item.get("stock_disponible") or 0)
+        grupo["total_faltante_bruto"] += float(
+            item.get("faltante_bruto", item.get("faltante")) or 0
+        )
+        grupo["total_solicitado_previo_laf"] += float(
+            item.get("solicitado_previo_laf") or 0
+        )
+        grupo["total_faltante"] += float(item.get("faltante") or 0)
+    por_unidad = sorted(
+        grupos.values(), key=lambda g: (g["um_codigo"], g["unidad_medida_id"])
+    )
+    for grupo in por_unidad:
+        requerido = grupo["total_requerido"]
+        grupo["cobertura_global_pct"] = (
+            max(0.0, min(100.0, (1 - grupo["total_faltante"] / requerido) * 100))
+            if requerido > 0
+            else 100.0
+        )
+    campos = (
+        "total_requerido",
+        "total_stock_disponible",
+        "total_faltante_bruto",
+        "total_solicitado_previo_laf",
+        "total_faltante",
+        "cobertura_global_pct",
+    )
+    resumen: Dict[str, Any] = {
+        "por_unidad": por_unidad,
+        "unidades_mixtas": len(por_unidad) > 1,
+    }
+    for campo in campos:
+        resumen[campo] = (
+            None
+            if len(por_unidad) > 1
+            else (
+                por_unidad[0][campo]
+                if por_unidad
+                else 100.0 if campo == "cobertura_global_pct" else 0.0
+            )
+        )
+    return resumen
+
+
+
 def calcular_faltantes_y_capacidad(
     db: Session,
     mes: int,
     anio: int,
-    persistir_sugerencias: bool = True,
+    persistir_sugerencias: bool = False,
 ) -> Dict[str, Any]:
     mes_stock, anio_stock = _periodo_anterior(mes, anio)
     alertas: List[str] = []
@@ -2001,9 +2046,6 @@ def calcular_faltantes_y_capacidad(
         alertas,
     )
     faltantes_items: List[Dict[str, Any]] = calc["faltantes_items"]
-    total_requerido = float(calc["total_requerido"])
-    total_stock = float(calc["total_stock_considerado"])
-    total_faltante = float(calc["total_faltante"])
     faltantes_sin_stock = int(calc["faltantes_sin_stock"])
     detalle_prioridades = calc["detalle_prioridades"]
     stock_map = cast(Dict[int, Dict[str, Any]], calc.get("stock_map") or {})
@@ -2036,8 +2078,7 @@ def calcular_faltantes_y_capacidad(
         except SQLAlchemyError as exc:
             db.rollback()
             alertas.append(
-                "No se pudieron persistir sugerencias de compra. "
-                f"Detalle: {exc}"
+                "No se pudieron persistir sugerencias de compra. " f"Detalle: {exc}"
             )
 
     alertas_limpias = _limpiar_alertas(alertas)
@@ -2049,12 +2090,7 @@ def calcular_faltantes_y_capacidad(
             "mes_stock_base": mes_stock,
             "anio_stock_base": anio_stock,
             "componentes": len(faltantes_items),
-            "total_requerido": total_requerido,
-            "total_stock_disponible": total_stock,
-            "total_faltante": total_faltante,
-            "cobertura_global_pct": (
-                100.0 if total_requerido <= 0 else min((total_stock / total_requerido) * 100, 100.0)
-            ),
+            **_resumir_materiales_por_unidad(faltantes_items),
             "con_alertas": len(alertas_limpias) > 0,
         },
         "faltantes": sorted(
@@ -2101,8 +2137,7 @@ def calcular_asistente_oc(
                 "total_deuda_clientes": 0.0,
                 "total_demanda_neta_pt": 0.0,
                 "componentes": 0,
-                "total_faltante": 0.0,
-                "cobertura_global_pct": 100.0,
+                **_resumir_materiales_por_unidad([]),
                 "con_alertas": False,
             },
             "demanda_neta_pt": [],
@@ -2121,8 +2156,7 @@ def calcular_asistente_oc(
         int(p["producto_id"]): p for p in planes_base
     }
     codigo_a_id: Dict[str, int] = {
-        str(p["codigo"]).strip().upper(): int(p["producto_id"])
-        for p in planes_base
+        str(p["codigo"]).strip().upper(): int(p["producto_id"]) for p in planes_base
     }
 
     ajustes_map: Dict[int, Dict[str, float]] = {}
@@ -2193,16 +2227,11 @@ def calcular_asistente_oc(
         alertas,
     )
     faltantes_items: List[Dict[str, Any]] = calc["faltantes_items"]
-    total_requerido = float(calc["total_requerido"])
-    total_stock = float(calc["total_stock_considerado"])
-    total_faltante = float(calc["total_faltante"])
     faltantes_sin_stock = int(calc["faltantes_sin_stock"])
     detalle_prioridades = calc["detalle_prioridades"]
     stock_map = cast(Dict[int, Dict[str, Any]], calc.get("stock_map") or {})
 
     solicitado_laf_map = _obtener_solicitado_laf_por_producto_periodo(db, mes, anio)
-    total_solicitado_laf = 0.0
-    total_faltante_bruto = total_faltante
 
     for item in faltantes_items:
         pid = int(item.get("producto_id") or 0)
@@ -2219,11 +2248,9 @@ def calcular_asistente_oc(
         requerido = float(item.get("cantidad_requerida") or 0.0)
         stock_asignado = float(item.get("stock_asignado") or 0.0)
         if requerido > 0:
-            item["cobertura_pct"] = min(((stock_asignado + descuento) / requerido) * 100, 100.0)
-
-        total_solicitado_laf += solicitado
-
-    total_faltante = sum(float(i.get("faltante") or 0.0) for i in faltantes_items)
+            item["cobertura_pct"] = min(
+                ((stock_asignado + descuento) / requerido) * 100, 100.0
+            )
 
     if faltantes_sin_stock > 0:
         alertas.append(
@@ -2252,8 +2279,7 @@ def calcular_asistente_oc(
         except SQLAlchemyError as exc:
             db.rollback()
             alertas.append(
-                "No se pudieron persistir sugerencias de compra. "
-                f"Detalle: {exc}"
+                "No se pudieron persistir sugerencias de compra. " f"Detalle: {exc}"
             )
 
     alertas_limpias = _limpiar_alertas(alertas)
@@ -2270,19 +2296,7 @@ def calcular_asistente_oc(
             "total_deuda_clientes": total_deuda_clientes,
             "total_demanda_neta_pt": total_demanda_neta_pt,
             "componentes": len(faltantes_items),
-            "total_requerido": total_requerido,
-            "total_stock_disponible": total_stock,
-            "total_faltante_bruto": total_faltante_bruto,
-            "total_solicitado_previo_laf": total_solicitado_laf,
-            "total_faltante": total_faltante,
-            "cobertura_global_pct": (
-                100.0
-                if total_requerido <= 0
-                else min(
-                    ((total_stock + total_solicitado_laf) / total_requerido) * 100,
-                    100.0,
-                )
-            ),
+            **_resumir_materiales_por_unidad(faltantes_items),
             "con_alertas": len(alertas_limpias) > 0,
         },
         "demanda_neta_pt": sorted(

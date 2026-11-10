@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from sqlalchemy import bindparam, text
 
 from app.api.deps_auth import get_current_user, require_permission
 from app.db import get_db
@@ -19,29 +20,36 @@ from app.schemas.recepcion import (
     EvaluacionProveedorRanking,
     RecepcionCalidadCreate,
     RecepcionImportResult,
+    RecepcionIntentoInspeccionCreate,
     RecepcionNormalizacionResult,
     RecepcionOperativaCreate,
     RecepcionOperativaOut,
 )
 from app.services.access_read_service import (
     AccessReadError,
-    listar_controles_access,
-    listar_recepciones_recientes_access,
-    obtener_control_access,
     inspect_access_schema,
     inspect_access_table,
+    listar_controles_access,
+    obtener_control_access,
 )
-from app.services.producto_service import listar_productos
 from app.services.plano_service import obtener_plano_pdf
+from app.services.producto_service import listar_productos
 from app.services.proveedor_service import listar_proveedores
 from app.services.recepcion_access_import_service import importar_recepcion_desde_access
 from app.services.recepcion_metrics_service import calcular_metricas_todos_proveedores
+from app.services.recepcion_muestreo_service import calcular_plan_muestreo
 from app.services.recepcion_normalization_service import normalizar_todo_staging
 from app.services.recepcion_operativa_service import (
+    actualizar_recepcion_operativa,
     crear_recepcion_operativa,
+    eliminar_recepcion_operativa,
+    listar_recepciones_operativas,
+    listar_lineas_pendientes_calidad,
     obtener_recepcion_operativa,
     registrar_control_calidad,
+    registrar_intento_inspeccion,
 )
+from app.services.recepcion_recomendacion_service import recomendar_nivel_inspeccion
 from app.services.recepcion_scheduler import get_scheduler_status
 from app.services.recepcion_sync_service import sincronizar_ciclo_completo
 
@@ -72,6 +80,36 @@ def buscar_proveedores_recepcion(
     ]
 
 
+@router.get("/proveedores/{proveedor_id}/recomendacion-control")
+def obtener_recomendacion_control_proveedor(
+    proveedor_id: int,
+    db=Depends(get_db),
+    _current_user=Depends(require_permission("recepcion", False)),
+):
+    """Clasifica desempeño reciente con el criterio interno legado de Access."""
+    try:
+        return recomendar_nivel_inspeccion(db, proveedor_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/plan-muestreo")
+def obtener_plan_muestreo(
+    nivel: str = Query(min_length=1, max_length=30),
+    lote: str = Query(min_length=1, max_length=30),
+    _current_user=Depends(require_permission("recepcion", False)),
+):
+    """Calcula la letra de código y muestra por nivel y tamaño del lote."""
+    try:
+        return calcular_plan_muestreo(nivel, lote)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AccessReadError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.get("/articulos/buscar")
 def buscar_articulos_recepcion(
     q: str = Query(min_length=2, max_length=100),
@@ -80,11 +118,32 @@ def buscar_articulos_recepcion(
 ):
     """Busca artículos activos por código o nombre para el formulario."""
     articulos = listar_productos(db, q=q, activo=True, limit=10, offset=0)
+    unidad_ids = [
+        articulo.get("unidad_medida_id")
+        for articulo in articulos
+        if articulo.get("unidad_medida_id") is not None
+    ]
+    unidades = {}
+    if unidad_ids:
+        unidades = {
+            row.id: row.codigo
+            for row in db.execute(
+                text("SELECT id, codigo FROM unidad_medida WHERE id IN :ids").bindparams(
+                    bindparam("ids", expanding=True)
+                ),
+                {"ids": unidad_ids},
+            )
+        }
     return [
         {
             "id": articulo["id"],
             "codigo": articulo["codigo"],
             "nombre": articulo["nombre"],
+            **(
+                {"unidad_medida": unidades[articulo["unidad_medida_id"]]}
+                if articulo.get("unidad_medida_id") in unidades
+                else {}
+            ),
         }
         for articulo in articulos
     ]
@@ -130,17 +189,25 @@ def listar_recepciones(
     q: str | None = Query(default=None, max_length=100),
     proveedor_codigo: str | None = Query(default=None, max_length=50),
     limit: int = Query(default=100, ge=1, le=500),
+    db=Depends(get_db),
     _current_user=Depends(require_permission("recepcion", False)),
 ):
-    """Lista recepciones históricas de Access, igual que el buscador de historial."""
-    try:
-        return listar_recepciones_recientes_access(
-            q=q, proveedor_codigo=proveedor_codigo, limit=limit
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except AccessReadError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    """Lista recepciones operativas guardadas en COMPRAS."""
+
+    return listar_recepciones_operativas(
+        db, q=q, proveedor_codigo=proveedor_codigo, limit=limit
+    )
+
+
+@router.get("/operativas/lineas-pendientes")
+def listar_lineas_pendientes_control_calidad(
+    q: str | None = Query(default=None, max_length=100),
+    limit: int = Query(default=300, ge=1, le=500),
+    db=Depends(get_db),
+    _current_user=Depends(require_permission("recepcion", False)),
+):
+    """Lista materiales operativos que esperan control o reinspección."""
+    return listar_lineas_pendientes_calidad(db, q=q, limit=limit)
 
 
 @router.get("/operativas/{recepcion_id}")
@@ -177,6 +244,38 @@ def crear_recepcion(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.put("/operativas/{recepcion_id}")
+def actualizar_recepcion(
+    recepcion_id: int,
+    payload: RecepcionOperativaCreate,
+    db=Depends(get_db),
+    current_user=Depends(require_permission("recepcion", True)),
+):
+    """Actualiza una recepción local manteniendo sus cotas actuales editadas."""
+    try:
+        return actualizar_recepcion_operativa(
+            db,
+            recepcion_id,
+            payload,
+            usuario_id=int(current_user["id"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/operativas/{recepcion_id}", status_code=204)
+def borrar_recepcion(
+    recepcion_id: int,
+    db=Depends(get_db),
+    _current_user=Depends(require_permission("recepcion", True)),
+):
+    """Borra una recepción local sin intentos de inspección ni NC asociadas."""
+    try:
+        eliminar_recepcion_operativa(db, recepcion_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/operativas/{recepcion_id}/control-calidad")
 def guardar_control_calidad(
     recepcion_id: int,
@@ -189,6 +288,25 @@ def guardar_control_calidad(
         return registrar_control_calidad(
             db,
             recepcion_id,
+            payload,
+            usuario_id=int(current_user["id"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/operativas/lineas/{linea_id}/intentos-inspeccion", status_code=201)
+def guardar_intento_inspeccion(
+    linea_id: int,
+    payload: RecepcionIntentoInspeccionCreate,
+    db=Depends(get_db),
+    current_user=Depends(require_permission("recepcion", True)),
+):
+    """Registra el resultado observado; no calcula ni valida reglas IRAM."""
+    try:
+        return registrar_intento_inspeccion(
+            db,
+            linea_id,
             payload,
             usuario_id=int(current_user["id"]),
         )

@@ -2,6 +2,7 @@
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -97,10 +98,14 @@ def get_settings_ui(
             return {}
         with _APP_CONFIG_PATH.open("r", encoding="utf-8") as f:
             cfg = json.load(f)
-        # No filtrar: la plantilla decide qué mostrar. Retornamos el objeto.
-        return cfg
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if not isinstance(cfg, dict):
+            raise ValueError("Formato inválido")
+        # La respuesta nunca debe incluir credenciales ni cadenas de conexión.
+        return {
+            key: cfg[key] for key in ("bcra_api_base_url", "bcra_sync_days") if key in cfg
+        }
+    except (OSError, ValueError):
+        raise HTTPException(status_code=500, detail="No se pudo acceder a la configuración.") from None
 
 
 @router.post("/settings")
@@ -110,7 +115,7 @@ def save_settings_ui(
 ):
     """Guarda parámetros en `app/config.json`. Se hace merge con valores existentes."""
     try:
-        cfg = {}
+        cfg: dict[str, Any] = {}
         if _APP_CONFIG_PATH.exists():
             with _APP_CONFIG_PATH.open("r", encoding="utf-8") as f:
                 try:
@@ -126,5 +131,5 @@ def save_settings_ui(
         with _APP_CONFIG_PATH.open("w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2, ensure_ascii=False)
         return {"status": "ok"}
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except OSError:
+        raise HTTPException(status_code=500, detail="No se pudo acceder a la configuración.") from None

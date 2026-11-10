@@ -84,52 +84,78 @@ document.addEventListener('DOMContentLoaded', () => {
 	// cerrar con Esc
 	document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeLoginModal(); });
 
-	// Dropdown de configuración: toggle y cierre al hacer click fuera o Esc
-	document.querySelectorAll('.dropdown-toggle').forEach(btn => {
-		console.debug('main.js: found dropdown-toggle', btn);
-		const wrapper = btn.closest('.import-dropdown');
-		if (!wrapper) return;
-		const menu = wrapper.querySelector('.dropdown-menu');
-		btn.addEventListener('click', (ev) => {
-			ev.stopPropagation();
-			const opened = !menu.classList.contains('hidden');
-			console.debug('main.js: dropdown click, opened=', opened);
-			// cerrar todos los dropdowns primero
-			document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.add('hidden'));
-			if (!opened) {
-				menu.classList.remove('hidden');
-				console.debug('main.js: menu opened');
+	// Toggle del menú lateral
+	const sidebarToggle = document.getElementById('sidebar-toggle');
+	const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+	const isMobile = () => window.matchMedia('(max-width: 880px)').matches;
+	const closeMobileSidebar = () => {
+		document.body.classList.remove('sidebar-open');
+		if (sidebarBackdrop) sidebarBackdrop.classList.add('hidden');
+	};
+	if (sidebarToggle) {
+		sidebarToggle.addEventListener('click', () => {
+			if (isMobile()) {
+				const opening = !document.body.classList.contains('sidebar-open');
+				document.body.classList.toggle('sidebar-open', opening);
+				if (sidebarBackdrop) sidebarBackdrop.classList.toggle('hidden', !opening);
+				sidebarToggle.setAttribute('aria-expanded', String(opening));
 			} else {
-				console.debug('main.js: menu closed');
+				const collapsed = document.body.classList.toggle('sidebar-collapsed');
+				sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
 			}
 		});
+	}
+	if (sidebarBackdrop) {
+		sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+	}
+	document.addEventListener('keydown', (ev) => {
+		if (ev.key === 'Escape') closeMobileSidebar();
+	});
+	// Al navegar desde el sidebar en móvil, cerrarlo
+	document.querySelectorAll('.sidebar a').forEach(a => {
+		a.addEventListener('click', () => { if (isMobile()) closeMobileSidebar(); });
 	});
 
-	// Delegated handler: asegura que clicks sobre elementos dinámicos también funcionen
-	document.addEventListener('click', (ev) => {
-		const btn = ev.target.closest && ev.target.closest('.dropdown-toggle');
-		if (!btn) return;
-		ev.stopPropagation();
-		console.debug('main.js: delegated dropdown click', btn);
-		const wrapper = btn.closest('.import-dropdown');
-		if (!wrapper) return;
-		const menu = wrapper.querySelector('.dropdown-menu');
-		const opened = !menu.classList.contains('hidden');
-		document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.add('hidden'));
-		if (!opened) {
-			menu.classList.remove('hidden');
-			console.debug('main.js: menu opened (delegated)');
-		}
-	});
+	// Grupos del menú lateral: se abren/cierran solo de forma manual y quedan fijos.
+	const navGroups = document.querySelectorAll('.sidebar-nav .nav-group');
 
-	// Cerrar dropdowns al click fuera
-	document.addEventListener('click', (ev) => {
-		if (ev.target.closest && ev.target.closest('.import-dropdown')) return;
-		document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.add('hidden'));
-	});
+	navGroups.forEach(group => {
+		const button = group.querySelector('.nav-group-toggle');
+		const menu = group.querySelector('.dropdown-menu');
+		const menuItems = () => Array.from(menu.querySelectorAll('[role="menuitem"]'));
 
-	// also close on Esc (in addition to modal handling)
-	document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') {
-		document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.add('hidden'));
-	}});
+		button.addEventListener('click', () => {
+			const opening = menu.classList.contains('hidden');
+			menu.classList.toggle('hidden', !opening);
+			button.setAttribute('aria-expanded', String(opening));
+		});
+
+		button.addEventListener('keydown', event => {
+			if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+			event.preventDefault();
+			if (menu.classList.contains('hidden')) button.click();
+			const items = menuItems();
+			items[event.key === 'ArrowDown' ? 0 : items.length - 1]?.focus();
+		});
+
+		menu.addEventListener('keydown', event => {
+			const items = menuItems();
+			const currentIndex = items.indexOf(document.activeElement);
+			let nextIndex;
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				menu.classList.add('hidden');
+				button.setAttribute('aria-expanded', 'false');
+				button.focus();
+				return;
+			}
+			if (event.key === 'Home') nextIndex = 0;
+			else if (event.key === 'End') nextIndex = items.length - 1;
+			else if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % items.length;
+			else if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length;
+			else return;
+			event.preventDefault();
+			items[nextIndex]?.focus();
+		});
+	});
 });

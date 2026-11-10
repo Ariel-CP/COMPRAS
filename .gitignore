@@ -61,6 +61,7 @@ static_build/
 
 # SQL dumps / large data
 *.sql
+!database/migrations/021_recepcion_inspeccion_intentos.sql
 *.sqlite3
 
 # Profiling
@@ -96,3 +97,12 @@ erp_precios_demo.csv
 
 # Assets locales (si más adelante se quieren versionar, quitar esta regla)
 app/static/img/
+
+# Configuración privada local y claves protegidas de Wizard OC
+/.local/
+
+/ACCESS/
+
+/TEMP/
+
+/Tablas control.xlsx

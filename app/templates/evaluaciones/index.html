@@ -31,6 +31,20 @@
 
   <!-- ===== PANEL NUEVA EVALUACIÓN ===== -->
   <div class="panel panel-alta">
+    <details open style="margin-bottom:16px;border:1px solid #b8d2e8;border-radius:6px;background:#f4f9fd;padding:12px 16px;">
+      <summary style="cursor:pointer;color:#0b5cab;font-weight:700;">Instructivo: cómo evalúa el sistema</summary>
+      <div style="margin-top:10px;color:#26343c;line-height:1.5;font-size:0.92em;">
+        <p><strong>Esta pantalla registra la evaluación formal</strong> del proveedor. El sistema guarda tres aportes ponderados: calidad, servicio y embalaje.</p>
+        <ol>
+          <li>Seleccione el proveedor, año y período.</li>
+          <li>Asigne a cada dimensión un aporte entre 0 y 100. Para que el total sea comparable, los aportes deben sumar como máximo 100 puntos.</li>
+          <li>Describa el fundamento en observaciones y detalle el sector y evaluador.</li>
+          <li>Al guardar, el sistema suma los tres aportes y clasifica el resultado.</li>
+        </ol>
+        <p><strong>Clasificación:</strong> 70 o más = Aprobado; 55 a 69,99 = Aprobado condicional; menos de 55 = No apto.</p>
+        <p><strong>Importante:</strong> el ranking operativo se calcula aparte con recepciones, controles de calidad, entregas y no conformidades. No reemplaza esta evaluación formal.</p>
+      </div>
+    </details>
     <h3 style="margin-bottom:14px;color:#0b5cab;border-bottom:2px solid #0b5cab;padding-bottom:6px;">
       ➕ Nueva Evaluación
     </h3>
@@ -79,21 +93,21 @@
 
         <!-- Puntajes parciales -->
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <label class="campo-lbl">Calidad (0–100)</label>
+          <label class="campo-lbl">Calidad (aporte 0–100)</label>
           <input type="number" name="puntaje_calidad" min="0" max="100" step="0.01"
             placeholder="Ej: 29.20"
             style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <label class="campo-lbl">Servicio (0–100)</label>
+          <label class="campo-lbl">Servicio (aporte 0–100)</label>
           <input type="number" name="puntaje_servicio" min="0" max="100" step="0.01"
             placeholder="Ej: 52.66"
             style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <label class="campo-lbl">Embalaje (0–100)</label>
+          <label class="campo-lbl">Embalaje (aporte 0–100)</label>
           <input type="number" name="puntaje_embalaje" min="0" max="100" step="0.01"
             placeholder="Ej: 10.00"
             style="padding:7px 10px;border:1px solid #ccc;border-radius:5px;font-size:0.95em;" />

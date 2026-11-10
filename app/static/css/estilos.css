@@ -46,8 +46,72 @@ header .brand-wrap h1{margin:0;line-height:1.1;font-size:1.5rem}
 header .brand-logo-slot{width:170px;height:56px;display:flex;align-items:center;justify-content:flex-start;overflow:hidden}
 header .brand-logo-img{width:100%;height:100%;object-fit:contain;object-position:left center;display:block}
 header nav a{color:#fff;margin-right:12px;text-decoration:none}
+header nav.header-nav {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px;
+	flex: 1;
+	min-width: 0
+}
+
+header .nav-group {
+	display: inline-flex;
+	vertical-align: middle
+}
+
+header .nav-group-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 8px 9px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: #fff;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	white-space: nowrap
+}
+
+header .nav-group-toggle:hover,
+header .nav-group-toggle[aria-expanded="true"] {
+	background: rgba(255, 255, 255, .16)
+}
+
+header .nav-group-toggle:focus-visible,
+.header-nav .dropdown-item:focus-visible {
+	outline: 2px solid #ffd24d;
+	outline-offset: 2px
+}
+
+header .nav-group-toggle span {
+	font-size: 11px;
+	opacity: .85
+}
+
+header .header-nav .dropdown-menu {
+	top: calc(100% + 4px);
+	min-width: 210px;
+	max-width: min(320px, calc(100vw - 24px));
+	white-space: normal
+}
+
+header .header-nav .dropdown-item {
+	margin: 0;
+	color: #17212b !important;
+	text-decoration: none;
+	line-height: 1.35
+}
+
+header .nav-group-admin .dropdown-menu {
+	right: 0;
+	left: auto
+}
 header nav a.wizard-oc-link{display:inline-flex;align-items:center;gap:6px}
-header .header-right .menu-user{font-size:12px;line-height:1.1;opacity:.95}
+header .header-right{display:flex;align-items:center;gap:12px;margin-left:auto;flex-wrap:nowrap}
+header .header-right .menu-user{font-size:12px;line-height:1.1;opacity:.95;white-space:nowrap}
 header .db-status{margin-left:auto;font-size:12px}
 header .db-status .ok{color:#bdfcc9}
 header .db-status .err{color:#ffd2d2}
@@ -168,10 +232,57 @@ table.productos-table { width:100%; }
 .small{font-size:12px}
 
 @media (max-width: 880px) {
+	header {
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+
+		header nav.header-nav {
+			order: 3;
+			flex: 1 0 100%;
+			gap: 2px;
+		}
+
+		header .header-right {
+			margin-left: auto;
+		}
 	.truncate{max-width:160px}
 	.sessions-actions{display:flex;flex-direction:column;align-items:flex-end}
 }
 
+@media (max-width: 560px) {
+	header {
+		padding: 8px 10px
+	}
+
+	header .brand-wrap {
+		min-width: 120px
+	}
+
+	header .brand-logo-slot {
+		width: 120px;
+		height: 44px
+	}
+
+	header nav.header-nav {
+		align-items: stretch
+	}
+
+	header .nav-group-toggle {
+		padding: 8px 6px;
+		font-size: 12px
+	}
+
+	header .header-nav .dropdown-menu {
+		right: auto;
+		left: 0
+	}
+
+	header .nav-group-admin .dropdown-menu {
+		right: 0;
+		left: auto
+	}
+}
 /* Modal login */
 .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1200}
 .modal.hidden{display:none}
@@ -185,3 +296,420 @@ table.productos-table { width:100%; }
 .logo-config-preview-wrap{background:#f8fbff;border:1px dashed #b7d0f4;border-radius:8px;padding:14px}
 .logo-config-slot{width:100%;max-width:260px;height:86px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #d0d7de;border-radius:8px;overflow:hidden}
 .logo-config-img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+
+/* Tema Flat Material */
+:root {
+	--ui-brand: #0b5cab;
+	--ui-brand-hover: #084b8a;
+	--ui-accent: #087f8c;
+	--ui-page: #f3f6f8;
+	--ui-surface: #fff;
+	--ui-surface-muted: #f7f9fb;
+	--ui-text: #24313d;
+	--ui-text-muted: #637381;
+	--ui-border: #d8e0e7;
+	--ui-focus: #18a5b5;
+	--ui-danger: #c43d4b;
+	--ui-radius: 4px;
+	--ui-shadow: 0 1px 3px rgba(25, 42, 56, .08);
+}
+
+body {
+	background: var(--ui-page);
+	color: var(--ui-text);
+	font-family: "Segoe UI", system-ui, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+header {
+	background: var(--ui-brand);
+	box-shadow: 0 2px 5px rgba(22, 40, 56, .16);
+}
+
+main {
+	color: var(--ui-text);
+}
+
+main h1,
+main h2,
+main h3,
+main h4 {
+	color: #263746;
+	font-weight: 600;
+}
+
+.hint,
+.muted {
+	color: var(--ui-text-muted);
+}
+
+.panel,
+.card,
+.login-card,
+.modal-card {
+	background: var(--ui-surface);
+	border: 1px solid var(--ui-border);
+	border-radius: var(--ui-radius);
+	box-shadow: var(--ui-shadow);
+}
+
+.card {
+	color: var(--ui-text);
+}
+
+.card:hover {
+	border-color: #9cb9cf;
+	box-shadow: 0 2px 6px rgba(25, 42, 56, .12);
+}
+
+.btn-accion,
+.btn-guardar,
+.btn-update,
+.btn-primary,
+button:not([class]) {
+	min-height: 34px;
+	border: 1px solid transparent;
+	border-radius: var(--ui-radius);
+	background: var(--ui-brand);
+	color: #fff;
+	font: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.25;
+	padding: 7px 12px;
+	cursor: pointer;
+	transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.btn-accion:hover,
+.btn-guardar:hover,
+.btn-update:hover,
+.btn-primary:hover,
+button:not([class]):hover {
+	background: var(--ui-brand-hover);
+}
+
+.btn-secundario,
+.btn-ghost {
+	min-height: 34px;
+	border: 1px solid var(--ui-border);
+	border-radius: var(--ui-radius);
+	background: var(--ui-surface);
+	color: var(--ui-text);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	padding: 7px 12px;
+	cursor: pointer;
+}
+
+.btn-secundario:hover,
+.btn-ghost:hover {
+	background: var(--ui-surface-muted);
+	border-color: #aebdca;
+}
+
+.btn-danger {
+	border-radius: var(--ui-radius);
+	background: var(--ui-danger);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,
+textarea {
+	border: 1px solid #bdc9d3;
+	border-radius: var(--ui-radius);
+	background-color: var(--ui-surface);
+	color: var(--ui-text);
+	font: inherit;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select {
+	min-height: 34px;
+	padding: 6px 9px;
+}
+
+textarea {
+	padding: 8px 10px;
+}
+
+input::placeholder,
+textarea::placeholder {
+	color: #788895;
+	opacity: 1;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+	outline: 2px solid var(--ui-focus);
+	outline-offset: 2px;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled,
+button:disabled {
+	background-color: #edf1f4;
+	color: #788895;
+	cursor: not-allowed;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+	accent-color: var(--ui-accent);
+}
+
+table {
+	color: var(--ui-text);
+}
+
+th,
+td {
+	border-color: var(--ui-border);
+}
+
+th {
+	background: #eaf0f4;
+	color: #34495a;
+}
+
+tbody tr:nth-child(even) {
+	background-color: #fafbfd;
+}
+
+tbody tr:hover {
+	background-color: #edf5f8;
+}
+
+.tabla-scroll {
+	border-color: var(--ui-border);
+	border-radius: var(--ui-radius);
+}
+
+.error,
+.error-banner {
+	border-radius: var(--ui-radius);
+}
+
+.login-wrapper {
+	min-height: calc(100vh - 120px);
+}
+
+.login-card {
+	max-width: 400px;
+	padding: 28px;
+}
+
+.login-card .login-actions .btn-accion {
+	border-radius: var(--ui-radius);
+}
+
+.login-brand h2 {
+	color: var(--ui-brand);
+}
+
+.login-field label {
+	color: #40515f;
+	font-weight: 600;
+}
+
+.login-footer {
+	color: var(--ui-text-muted);
+}
+
+.modal-card {
+	box-shadow: 0 8px 28px rgba(25, 42, 56, .2);
+}
+
+footer {
+	padding: 10px 16px;
+	color: var(--ui-text-muted);
+	font-size: 12px;
+}
+
+@media (max-width: 560px) {
+	.login-wrapper {
+		min-height: auto;
+		padding: 18px 12px;
+	}
+
+	.login-card {
+		padding: 22px 18px;
+	}
+}
+
+/* Layout con menú lateral */
+body.with-sidebar {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+}
+
+.layout {
+	display: flex;
+	align-items: stretch;
+	flex: 1;
+}
+
+.layout-main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.layout-main main {
+	flex: 1;
+}
+
+.sidebar {
+	width: 240px;
+	flex-shrink: 0;
+	background: var(--ui-surface);
+	border-right: 1px solid var(--ui-border);
+	box-shadow: var(--ui-shadow);
+	padding: 12px 8px;
+	overflow-y: auto;
+}
+
+.sidebar-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.sidebar-link,
+.sidebar .nav-group-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 7px;
+	width: 100%;
+	padding: 9px 12px;
+	border: 0;
+	border-radius: var(--ui-radius);
+	background: transparent;
+	color: var(--ui-text);
+	font-size: 14px;
+	font-weight: 600;
+	text-decoration: none;
+	text-align: left;
+	cursor: pointer;
+	box-sizing: border-box;
+}
+
+.sidebar-link:hover,
+.sidebar .nav-group-toggle:hover,
+.sidebar .nav-group-toggle[aria-expanded="true"] {
+	background: var(--ui-surface-muted);
+	color: var(--ui-brand);
+}
+
+.sidebar-link:focus-visible,
+.sidebar .nav-group-toggle:focus-visible,
+.sidebar .dropdown-item:focus-visible {
+	outline: 2px solid var(--ui-focus);
+	outline-offset: 2px;
+}
+
+.sidebar .nav-group-toggle span {
+	font-size: 11px;
+	opacity: .7;
+}
+
+.sidebar .dropdown-menu {
+	position: static;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+	padding: 0 0 4px 12px;
+}
+
+.sidebar .dropdown-menu.hidden {
+	display: none;
+}
+
+.sidebar .dropdown-item {
+	display: block;
+	padding: 7px 12px;
+	color: var(--ui-text) !important;
+	text-decoration: none;
+	font-size: 13px;
+	border-radius: var(--ui-radius);
+	border-left: 2px solid var(--ui-border);
+}
+
+.sidebar .dropdown-item:hover {
+	background: var(--ui-surface-muted);
+	color: var(--ui-brand) !important;
+	border-left-color: var(--ui-brand);
+}
+
+.sidebar-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 38px;
+	height: 38px;
+	border: 0;
+	border-radius: var(--ui-radius);
+	background: transparent;
+	color: #fff;
+	font-size: 20px;
+	cursor: pointer;
+}
+
+.sidebar-toggle:hover {
+	background: rgba(255, 255, 255, .16);
+}
+
+.sidebar-toggle:focus-visible {
+	outline: 2px solid #ffd24d;
+	outline-offset: 2px;
+}
+
+.sidebar-backdrop {
+	display: none;
+}
+
+/* En pantallas chicas el sidebar se vuelve un panel deslizable */
+@media (max-width: 880px) {
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		z-index: 1100;
+		transform: translateX(-100%);
+		transition: transform .2s ease-in-out;
+		padding-top: 20px;
+	}
+
+	body.sidebar-open .sidebar {
+		transform: translateX(0);
+	}
+
+	.sidebar-backdrop {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgba(2, 6, 23, .45);
+		z-index: 1090;
+	}
+
+	.sidebar-backdrop.hidden {
+		display: none;
+	}
+}
+
+/* En pantallas grandes el botón hamburguesa colapsa el sidebar en línea */
+@media (min-width: 881px) {
+	body.sidebar-collapsed .sidebar {
+		display: none;
+	}
+}
