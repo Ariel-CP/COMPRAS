@@ -34,4 +34,3 @@ No se ejecutaron pruebas de interfaz/API ni se reinició servidor porque no hubo
 # Actualización del criterio — 17/11/2026
 
 El usuario indicó considerar dentro del plazo todas las recepciones sin OC. Se aplica cuando falta FECHA EMISION OC: base entrega 100 y aporte 45/45, sin inventar fechas ni modificar Access. La ausencia de certificado sigue aportando cero. PDF y Excel regenerados; 519 recepciones/36 proveedores: 35 aprobados, 1 condicional, 0 no aptos. SAITTA 11316 pasa de 52,39 a 73,93. Los resultados anteriores que siguen documentados corresponden a la versión previa, ya reemplazada para el cálculo vigente.
-
