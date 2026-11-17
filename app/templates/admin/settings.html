@@ -68,11 +68,20 @@
     <nav class="settings-nav" aria-label="Secciones de configuración"><a href="#ia">IA y controles</a><a href="#bcra">BCRA</a></nav>
   </header>
   <section id="ia" class="settings-section" aria-labelledby="ia-title">
-    <div class="settings-section-heading"><h2 id="ia-title">Inteligencia artificial</h2><span class="settings-badge">IA de compras bloqueada</span></div>
+    <div class="settings-section-heading"><h2 id="ia-title">Inteligencia artificial</h2><span class="settings-badge">Asistente del Wizard con habilitación independiente</span></div>
     <div class="settings-layout">
       <form id="ia-form" class="settings-form" autocomplete="off">
         <fieldset {{ can_write_any_attr(['ui_admin_settings']) }}>
-          <legend>Prepará la conexión y sus límites para la integración futura.</legend>
+          <legend>Conexión y controles del asistente de materiales.</legend>
+          <section class="settings-card">
+            <label for="ia-wizard"><input id="ia-wizard" type="checkbox" />Habilitar conversación de IA en el Wizard de OC</label>
+            <p>La IA recibe los mensajes que confirmes y metadatos del Wizard. Propone acciones que aplicás con un botón; las cargas conservan sus permisos. No recibe archivos ni accede directamente a la base.</p>
+            <div class="settings-fields">
+              <div class="settings-field"><label for="ia-precio-entrada">USD por millón de tokens de entrada</label><input id="ia-precio-entrada" type="number" min="0" max="10000" step="any" required /></div>
+              <div class="settings-field"><label for="ia-precio-salida">USD por millón de tokens de salida</label><input id="ia-precio-salida" type="number" min="0" max="10000" step="any" required /></div>
+            </div>
+            <p>Ingresá tarifas positivas y vigentes del modelo elegido. Se reserva una estimación conservadora por envío, incluidos intentos fallidos, contra el presupuesto diario UTC. Este control depende de esas tarifas y no sustituye los límites de facturación del proveedor.</p>
+          </section>
           <section class="settings-card" aria-labelledby="ia-connection-title">
             <div class="settings-card-title"><span class="settings-step" aria-hidden="true">01</span><div><h3 id="ia-connection-title">Conexión y credenciales</h3><p>La clave se conserva cifrada y no vuelve a mostrarse.</p></div></div>
             <div class="settings-fields">
@@ -84,7 +93,7 @@
             <label class="settings-delete" for="ia-eliminar"><input id="ia-eliminar" type="checkbox" />Eliminar la clave guardada localmente</label>
           </section>
           <section class="settings-card" aria-labelledby="ia-limits-title">
-            <div class="settings-card-title"><span class="settings-step" aria-hidden="true">02</span><div><h3 id="ia-limits-title">Límites de uso</h3><p>Valores preparados para cuando se autorice la integración.</p></div></div>
+            <div class="settings-card-title"><span class="settings-step" aria-hidden="true">02</span><div><h3 id="ia-limits-title">Límites de uso</h3><p>Aplicados a la conversación del Wizard.</p></div></div>
             <div class="settings-fields"><div class="settings-field"><label for="ia-timeout">Tiempo por consulta</label><input id="ia-timeout" type="number" min="5" max="120" value="30" required /><small>Segundos de espera máxima.</small></div>
 <div class="settings-field"><label for="ia-tokens">Tokens de respuesta</label><input id="ia-tokens" type="number" min="128" max="8192" value="1500" required /><small>Límite de extensión de cada respuesta.</small></div>
 <div class="settings-field"><label for="ia-caracteres">Tamaño del envío</label><input id="ia-caracteres" type="number" min="1000" max="50000" value="12000" required /><small>Máximo de caracteres por consulta.</small></div>
@@ -97,10 +106,10 @@
         <div id="ia-msg" class="settings-feedback" role="status" aria-live="polite"></div>
       </form>
       <aside class="settings-side" aria-label="Privacidad y estado de la integración">
-        <h3>Tus datos, bajo control</h3><p>El MRP sigue calculando localmente. Ninguna configuración de esta pantalla habilita el envío de información.</p>
+        <h3>Tus datos, bajo control</h3><p>El MRP sigue calculando localmente. La opción de conversación habilita solo el asistente acotado del Wizard. Cada mensaje requiere vista previa y confirmación del contenido.</p>
         <ul><li><strong>Autorización en cada envío</strong>Vista previa del contenido antes de compartirlo.</li><li><strong>Solo los datos necesarios</strong>Minimización y seudonimización obligatorias.</li><li><strong>Auditoría sin secretos</strong>Se registran los cambios, sin claves ni contenido comercial.</li></ul>
         <details><summary>Cómo se protege la clave</summary><p>La clave local se cifra para el usuario de Windows que ejecuta el sistema. Si el servidor tiene una clave definida en su entorno, esa tiene prioridad.</p></details>
-        <details><summary>Antes de habilitar la integración</summary><p>Los controles de envío aún deben implementarse y aprobarse. La seudonimización no equivale a anonimización completa. La suscripción de ChatGPT no se utiliza como credencial de la API.</p></details>
+        <details><summary>Alcance de la integración</summary><p>No se envían códigos, nombres, cantidades ni archivos de negocio automáticamente. El texto que escribas se comparte tal como lo confirmes: evitá incluir secretos o datos personales. La suscripción de ChatGPT no se utiliza como credencial de la API.</p></details>
       </aside>
     </div>
   </section>
@@ -203,7 +212,7 @@
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'No se pudo completar la prueba.');
-      msg.textContent = data.mensaje + ' Las consultas de compras siguen bloqueadas.';
+      msg.textContent = data.mensaje + ' La prueba no cambia la habilitación del asistente.';
     } catch (error) {
       msg.textContent = error.message || 'No se pudo completar la prueba.';
     } finally {
@@ -215,8 +224,10 @@
     modelo: 'ia-modelo', timeout_segundos: 'ia-timeout', max_tokens_salida: 'ia-tokens',
     max_caracteres_envio: 'ia-caracteres', solicitudes_por_minuto: 'ia-frecuencia',
     presupuesto_diario_usd: 'ia-presupuesto',
+    precio_entrada_millon_usd: 'ia-precio-entrada', precio_salida_millon_usd: 'ia-precio-salida',
   };
   function show(data) {
+    document.getElementById('ia-wizard').checked = Boolean(data.wizard_conversacional);
     Object.entries(fields).forEach(([name, id]) => {
       document.getElementById(id).value = data[name] ?? '';
     });
@@ -245,7 +256,7 @@
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!form.reportValidity()) return;
-    const payload = {proveedor: 'openai', eliminar_clave_local: remove.checked};
+    const payload = {proveedor: 'openai', eliminar_clave_local: remove.checked, wizard_conversacional: document.getElementById('ia-wizard').checked};
     Object.entries(fields).forEach(([name, id]) => {
       const value = document.getElementById(id).value.trim();
       payload[name] = name === 'modelo' || name === 'presupuesto_diario_usd' ? value : Number(value);

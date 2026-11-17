@@ -82,3 +82,11 @@ El repo ya incluye módulos además de MBOM y compras: auth, usuarios, roles, ba
 - Para cambios grandes, proponer primero un plan corto con tablas afectadas, endpoints, services y validaciones.
 - Si hay documentación existente para el tema, enlazarla en vez de duplicarla.
 - Si el pedido parece apoyarse en CSV/Access/Power BI, revisar primero servicios y docs de recepción/evaluación antes de inventar un flujo nuevo.
+
+## Continuidad del proyecto
+
+- Antes de iniciar trabajo, leer [docs/ESTADO_PROYECTO.md](docs/ESTADO_PROYECTO.md) y comprobar el estado de Git.
+- Al cerrar cada avance o cambiar de tarea, actualizar la bitácora con fecha, objetivo, cambios, archivos relevantes, validaciones y resultados, pendientes, decisiones y próximo paso concreto.
+- Distinguir lo implementado y verificado de las hipótesis y propuestas. Indicar expresamente las validaciones no ejecutadas y sus bloqueos.
+- Enlazar documentación existente y notas por módulo cuando el detalle sea extenso; mantener la bitácora central breve y vigente.
+- No guardar secretos, sobrescribir cambios ajenos ni crear commits automáticamente como parte de este registro.

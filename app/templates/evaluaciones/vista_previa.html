@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Vista previa · Evaluación de proveedores{% endblock %}
+{% block content %}
+<section class="productos-wrapper">
+  <h2>Evaluación de proveedores · Registro B</h2>
+  <p>Vista previa de trabajo — PG-4.06.02 V13. Consultá una evaluación de Access y prepará las observaciones para la nueva evaluación.</p>
+  <p><a class="btn-accion" href="/ui/evaluaciones">Evaluaciones</a> <a class="btn-accion" href="/ui/evaluaciones/evolucion">Evolución</a></p>
+  <div class="panel"><strong>Sin guardado.</strong> Los datos de Access son históricos. Sus grupos y ponderaciones todavía no se equiparan a las categorías V13. Los textos que completes se pierden al recargar o cambiar de evaluación.</div>
+  {% if error %}<div class="panel" role="alert">{{ error }} <a href="/ui/evaluaciones/vista-previa">Reintentar</a></div>{% endif %}
+  {% if datos %}
+  <form class="panel" method="get">
+    <label for="buscar">Buscar por código o nombre de proveedor</label>
+    <input id="buscar" name="q" value="{{ q }}" maxlength="100" placeholder="Código o nombre">
+    <button class="btn-accion" type="submit">Buscar en Access</button>
+    <p>{{ datos.coincidencias }} evaluaciones coincidentes de {{ datos.total }}. Se muestran hasta 100; afiná la búsqueda para ver otras.</p>
+    <label for="evaluacion">Evaluación de origen</label>
+    <select id="evaluacion" name="access_id" style="max-width:100%;padding:8px;">
+      <option value="">Seleccionar evaluación…</option>
+      {% for e in datos.opciones %}<option value="{{ e.id }}" {% if access_id == e.id %}selected{% endif %}>{{ e.codigo }} · {{ e.proveedor }} · {{ e.periodo }} · ID {{ e.id }}</option>{% endfor %}
+    </select>
+    <button class="btn-accion" type="submit">Ver detalle</button>
+  </form>
+  <div class="panel">
+    <h3>Tres casos de control</h3>
+    <p>Ejemplos históricos con suma de subtotales conciliada (tolerancia 0,02). Esto no valida todavía las fórmulas de cada criterio.</p>
+    <div class="tabla-scroll"><table class="productos-table">
+      <thead><tr><th>Proveedor</th><th>Período de origen</th><th>Total Access</th><th>Suma comprobada</th><th>Resultado Access</th><th></th></tr></thead>
+      <tbody>{% for e in datos.pilotos %}<tr><td>{{ e.codigo }} · {{ e.proveedor }}</td><td>{{ e.periodo }}</td><td>{{ e.total_origen }}</td><td>{{ e.total_calculado }}</td><td>{{ e.resultado_origen }}</td><td><a href="?access_id={{ e.id }}">Revisar ID {{ e.id }}</a></td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+  {% if datos.no_encontrada %}<p role="alert">No se encontró el ID de evaluación solicitado.</p>{% endif %}
+  {% set e = datos.seleccionada %}
+  {% if e %}
+  <article class="panel">
+    <h3>{{ e.codigo }} · {{ e.proveedor }}</h3>
+    <p><strong>Origen:</strong> {{ datos.origen }} · ID {{ e.id }} · {{ e.periodo }} · {{ e.tipo }} · Fecha: {{ e.fecha or 'Sin fecha' }}</p>
+    <p><strong>Evaluador:</strong> {{ e.evaluador or 'Sin informar' }} · <strong>Sector:</strong> {{ e.sector or 'Sin informar' }}</p>
+    {% for aviso in e.advertencias %}<p role="alert"><strong>Revisar:</strong> {{ aviso }}</p>{% endfor %}
+    <p>{% for nombre, valor in e.subtotales.items() %}<strong>{{ nombre }}:</strong> {{ valor if valor is not none else 'Sin dato' }} · {% endfor %}</p>
+    <p><strong>Total Access:</strong> {{ e.total_origen }} · <strong>Suma de subtotales:</strong> {{ e.total_calculado }} · <strong>Diferencia:</strong> {{ e.diferencia }}</p>
+    <p><strong>Resultado de origen:</strong> {{ e.resultado_origen }} · <strong>Clasificación por suma (regla actual del sistema):</strong> {{ e.resultado_por_suma or 'Sin calcular' }}</p>
+    <p><strong>Observaciones históricas:</strong> {{ e.observaciones or 'Sin observaciones registradas' }}</p>
+    <div class="tabla-scroll"><table class="productos-table">
+      <thead><tr><th>Grupo histórico</th><th>Criterio</th><th>Respuesta Access</th><th>Valor PV de origen</th></tr></thead>
+      <tbody>{% for c in e.criterios %}<tr><td>{{ c.grupo }}</td><td>{{ c.nombre }}</td><td>{{ c.respuesta if c.respuesta is not none else 'Sin dato' }}</td><td>{{ c.valor if c.valor is not none else 'Sin dato' }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <details><summary>Ver puntuaciones PO/PP de origen</summary><dl>{% for nombre, valor in e.ponderaciones_origen.items() %}<dt>{{ nombre }}</dt><dd>{{ valor if valor is not none else 'Sin dato' }}</dd>{% endfor %}</dl></details>
+  </article>
+  {% endif %}
+  <section class="panel">
+    <h3>Borrador de la nueva evaluación V13</h3>
+    <p><strong>Resultado propuesto: pendiente.</strong> Falta acordar los criterios y pesos vigentes. Los valores PV históricos no son aportes directos al total de 100 puntos.</p>
+    <label for="periodo-borrador">Período a evaluar</label><input id="periodo-borrador" placeholder="Ej.: anual 2026">
+    <label for="responsable-borrador">Evaluador / sector</label><input id="responsable-borrador" placeholder="Nombre y sector">
+    {% for categoria in ['Cumplimiento en insumos/servicios', 'Gestión', 'Post contractual'] %}
+    <h4>{{ categoria }}</h4>
+    <p>Criterios y puntuación pendientes de validar. A completar por el evaluador con evidencia verificable.</p>
+    <label for="categoria-{{ loop.index }}">Evidencia, observaciones y datos faltantes</label>
+    <textarea id="categoria-{{ loop.index }}" rows="3" style="display:block;width:100%;box-sizing:border-box;" placeholder="Anotá la evidencia y lo que debemos incorporar al formulario."></textarea>
+    {% endfor %}
+    <p>Access será la fuente inicial. La información de Compras se incorporará luego sobre los mismos criterios acordados.</p>
+  </section>
+  {% endif %}
+</section>
+{% endblock %}

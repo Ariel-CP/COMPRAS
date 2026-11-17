@@ -11,5 +11,8 @@
   "bcra_api_base_url": "https://api.bcra.gob.ar",
   "bcra_api_token": null,
   "bcra_sync_days": 5,
-  "sync_job_token": null
+  "sync_job_token": null,
+  "access_db_path": "R:\\COMPARTIR-Calidad-ID\\CALIDAD\\Ecotermo Server\\Control de Recepción Server\\Control de Recepción Database.accdb",
+  "access_table_name": "CONTROL DE RECEPCION",
+  "access_planos_db_path": "R:\\COMPARTIR-Calidad-ID\\CALIDAD\\Ecotermo Server\\Gestión de Planos Server\\Listado de Planos General Database V2.accdb"
 }

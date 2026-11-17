@@ -1,0 +1,8 @@
+{
+  "Parametros": ["version", "anio", "mes", "fecha_corte_mp", "fecha_corte_pt", "fecha_corte_deuda", "sin_laf"],
+  "Plan_PT": ["codigo", "nombre", "unidad", "cantidad_planificada"],
+  "Stock_MP": ["codigo", "nombre", "unidad", "stock_disponible"],
+  "Stock_PT": ["codigo", "nombre", "unidad", "stock_pt"],
+  "Deuda_Clientes": ["codigo", "nombre", "unidad", "deuda_clientes"],
+  "LAF_Solicitado": ["codigo", "nombre", "unidad", "proveedor_nombre", "cantidad_total", "cantidad_q1", "cantidad_q2", "fecha_pedido", "fecha_entrega_estimada", "estado", "observaciones"]
+}

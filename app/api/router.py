@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 
 from .ai_settings import router as ai_settings_router
+from .wizard_ai import router as wizard_ai_router
+from .wizard_excel import router as wizard_excel_router
 from .auth import router as auth_router
 from .backups import router as backups_router
 from .health import router as health_router
@@ -47,3 +49,5 @@ api_router.include_router(roles_router)
 api_router.include_router(system_router)
 
 api_router.include_router(ai_settings_router)
+api_router.include_router(wizard_ai_router)
+api_router.include_router(wizard_excel_router)

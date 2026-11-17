@@ -18,6 +18,9 @@
     Flujo guiado para calcular materiales: presuncion -> stock MP -> stock PT -> deuda clientes -> sugerencias.
   </p>
   <button type="button" id="btnVerProcedimiento" class="btn-procedimiento">¿Cómo funciona? →</button>
+  <a class="btn-accion" href="#wizard-chat">Asistente IA para requerimientos</a>
+  <a class="btn-accion" href="#wizard-excel">Cargar todo desde Excel</a>
+  <a class="btn-accion" href="#wizard-guia">Preparar materiales con el asistente</a>
 
   <div class="wizard-steps" id="wizardSteps">
     <button type="button" class="wizard-step active" data-step="1">1. Presuncion</button>
@@ -27,6 +30,17 @@
     <button type="button" class="wizard-step" data-step="5">5. Calculo OC</button>
   </div>
 </section>
+
+{% include "plan/wizard_excel.html" %}
+{% include "plan/wizard_chat.html" %}
+<details class="panel">
+  <summary>Guía local paso a paso</summary>
+  {% include "plan/wizard_guia.html" %}
+</details>
+<details class="panel">
+  <summary>Vista previa de consultas libres a la IA</summary>
+  {% include "plan/consulta_ia.html" %}
+</details>
 
 <section class="panel wizard-body" data-pane="1">
   <h3>Paso 1: Cargar presuncion del periodo</h3>
@@ -383,6 +397,7 @@
 {% endblock %}
 
 {% block styles %}
+<link rel="stylesheet" href="/static/css/consulta_ia.css?v={{ app_version }}-3" />
 <style>
   .wizard-panel {
     background: linear-gradient(120deg, #f8fbff 0%, #eef6ff 55%, #fff9f0 100%);
@@ -550,6 +565,10 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/consulta_ia.js?v={{ app_version }}-1" defer></script>
+<script src="/static/js/wizard_guia.js?v={{ app_version }}-1"></script>
+<script src="/static/js/wizard_chat.js?v={{ app_version }}-2"></script>
+<script src="/static/js/wizard_excel.js?v={{ app_version }}-1"></script>
 <script>
 const CAN_WRITE = {{ CAN_WRITE_JS|default('false') }};
 const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']) }};
@@ -596,6 +615,7 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
   const totalSteps = 5;
 
   let presuncionItems = [];
+  let periodoPlanCargado = "";
   let stockPtMap = {};
   let deudaMap = {};
 
@@ -714,6 +734,8 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
       return;
     }
 
+    presuncionItems = [];
+    periodoPlanCargado = "";
     presuncionFeedback.textContent = "Cargando...";
     tablaPresuncionBody.innerHTML = '<tr><td colspan="3">Cargando...</td></tr>';
 
@@ -725,6 +747,7 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     }
 
     const data = await resp.json();
+    if (Number(anioPlan.value) !== anio || Number(mesPlan.value) !== mes) return false;
     presuncionItems = Array.isArray(data.items) ? data.items : [];
 
     if (!presuncionItems.length) {
@@ -750,9 +773,16 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     mesStock.value = d.getMonth() + 1;
     fechaCorteStock.value = new Date().toISOString().slice(0, 10);
 
-    await cargarAjustesPersistidos(anio, mes);
+    const ajustesCargados = await cargarAjustesPersistidos(anio, mes);
+    if (Number(anioPlan.value) !== anio || Number(mesPlan.value) !== mes) return false;
+    if (!ajustesCargados) {
+      presuncionFeedback.textContent = "Plan cargado, pero no se pudieron cargar sus ajustes. Reintentá antes de continuar.";
+      return false;
+    }
 
     presuncionFeedback.textContent = `Presuncion cargada: ${presuncionItems.length} productos.`;
+    periodoPlanCargado = `${anio}-${mes}`;
+    return true;
   }
 
   async function importarStockMp() {
@@ -788,6 +818,8 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     }
 
     stockMpFeedback.textContent = `OK. Insertados ${data.insertados || 0}, actualizados ${data.actualizados || 0}, rechazados ${data.rechazados || 0}.`;
+    document.dispatchEvent(new CustomEvent("wizard:datos-modificados", { detail: { desde: 1 } }));
+    return true;
   }
 
   async function cargarCsvEnMapa(fileInput, keyCol, valueCol) {
@@ -840,7 +872,7 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     renderSimpleMapTable(tablaDeudaBody, deudaMap, "deuda_clientes");
 
     await cargarCorridas(anio, mes);
-    await cargarLafSolicitado(anio, mes);
+    return await cargarLafSolicitado(anio, mes);
   }
 
   function limpiarFormLaf() {
@@ -885,6 +917,7 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     }
     const data = await resp.json().catch(() => ({}));
     renderLafSolicitado(data.items || []);
+    return true;
   }
 
   async function agregarLafSolicitado() {
@@ -927,8 +960,10 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     }
 
     lafFeedback.textContent = "Solicitado LAF guardado.";
+    document.dispatchEvent(new CustomEvent("wizard:datos-modificados", { detail: { desde: 1 } }));
     limpiarFormLaf();
     await cargarLafSolicitado(anio, mes);
+    return true;
   }
 
   async function importarLafSolicitado() {
@@ -958,7 +993,9 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     }
 
     lafFeedback.textContent = `Importación LAF completa. Insertados: ${data.insertados || 0}, rechazados: ${data.rechazados || 0}.`;
+    document.dispatchEvent(new CustomEvent("wizard:datos-modificados", { detail: { desde: 1 } }));
     await cargarLafSolicitado(anio, mes);
+    return true;
   }
 
   tablaLafSolicitadoBody.addEventListener("click", async (ev) => {
@@ -976,6 +1013,7 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
       return;
     }
     lafFeedback.textContent = "Registro eliminado.";
+    document.dispatchEvent(new CustomEvent("wizard:datos-modificados", { detail: { desde: 1 } }));
     await cargarLafSolicitado(anio, mes);
   });
 
@@ -1062,6 +1100,8 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     });
     renderSimpleMapTable(tablaStockPtBody, stockPtMap, "stock_pt");
     stockPtFeedback.textContent = `Stock PT guardado. Upserts: ${data.upserts || 0}, rechazados: ${data.rechazados || 0}.`;
+    document.dispatchEvent(new CustomEvent("wizard:datos-modificados", { detail: { desde: 2 } }));
+    return true;
   }
 
   async function procesarDeudaClientes() {
@@ -1099,6 +1139,8 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     });
     renderSimpleMapTable(tablaDeudaBody, deudaMap, "deuda_clientes");
     deudaFeedback.textContent = `Deuda guardada. Upserts: ${data.upserts || 0}, rechazados: ${data.rechazados || 0}.`;
+    document.dispatchEvent(new CustomEvent("wizard:datos-modificados", { detail: { desde: 3 } }));
+    return true;
   }
 
   function descargar(url) {
@@ -1208,7 +1250,7 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     alertasOc.innerHTML = list.map((a) => `<div>• ${a}</div>`).join("");
   }
 
-  async function calcularOc() {
+  async function calcularOc(persistenciaPermitida = true) {
     const anio = Number(anioPlan.value);
     const mes = Number(mesPlan.value);
     if (!anio || !mes) {
@@ -1219,11 +1261,15 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
       ocFeedback.textContent = "No hay presuncion cargada.";
       return;
     }
+    if (periodoPlanCargado !== `${anio}-${mes}`) {
+      ocFeedback.textContent = "Cargá nuevamente el plan del período seleccionado antes de calcular.";
+      return false;
+    }
 
     ocFeedback.textContent = "Calculando...";
     const ajustes_pt = buildAjustesPt();
 
-    const persistir = CAN_WRITE && Boolean(persistirSugerencias && persistirSugerencias.checked);
+    const persistir = persistenciaPermitida !== false && CAN_WRITE && Boolean(persistirSugerencias && persistirSugerencias.checked);
 
     const resp = await fetch(`${API_OC}?mes=${mes}&anio=${anio}&persistir_sugerencias=${persistir ? "true" : "false"}`, {
       method: "POST",
@@ -1243,6 +1289,7 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
     renderAlertas(data.alertas || []);
     ocFeedback.textContent = "Calculo completo.";
     await cargarCorridas(anio, mes);
+    return true;
   }
 
   btnCargarPresuncion.addEventListener("click", cargarPresuncion);
@@ -1296,6 +1343,81 @@ const CAN_WRITE_STOCK = {{ can_write_any_js(['ui_stock', 'ui_plan_asistente_oc']
   cargarLafSolicitado(Number(anioPlan.value), Number(mesPlan.value));
 
   setStep(1);
+  window.iniciarGuiaWizard({
+    ir: setStep,
+    cargarPlan: cargarPresuncion,
+    simular: () => calcularOc(false),
+  });
+  window.iniciarWizardChat({
+    contexto: () => ({
+      anio: Number(anioPlan.value), mes: Number(mesPlan.value), paso: currentStep,
+      productos_plan: presuncionItems.length,
+      registros_stock_pt: Object.keys(stockPtMap).length,
+      registros_deuda: Object.keys(deudaMap).length,
+    }),
+    aplicar: async (propuesta) => {
+      const ubicaciones = {
+        excel_integral: [1, "excel-archivo"],
+        stock_mp: [2, "archivoStockMp"], laf: [2, "archivoLafSolicitado"],
+        stock_pt: [3, "archivoStockPt"], deuda: [4, "archivoDeudaClientes"],
+        revisar: [5, "btnExportarOcXlsx"],
+      };
+      if (propuesta.accion === "periodo") {
+        anioPlan.value = propuesta.anio;
+        mesPlan.value = propuesta.mes;
+        presuncionItems = [];
+        stockPtMap = {};
+        deudaMap = {};
+        anioPlan.dispatchEvent(new Event("input", { bubbles: true }));
+        setStep(1);
+        return true;
+      }
+      if (propuesta.accion === "cargar_plan") {
+        setStep(1);
+        return (await cargarPresuncion()) === true;
+      }
+      if (propuesta.accion === "simular") {
+        setStep(5);
+        return (await calcularOc(false)) === true;
+      }
+      const importaciones = {
+        importar_mp: [2, importarStockMp], importar_laf: [2, importarLafSolicitado],
+        importar_pt: [3, procesarStockPt], importar_deuda: [4, procesarDeudaClientes],
+      };
+      if (importaciones[propuesta.accion]) {
+        const [paso, importar] = importaciones[propuesta.accion];
+        setStep(paso);
+        if (!window.confirm("Esta acción importa el archivo seleccionado y guarda sus datos en el sistema. ¿Continuar?")) return false;
+        return (await importar()) === true;
+      }
+      if (ubicaciones[propuesta.accion]) {
+        const [paso, campo] = ubicaciones[propuesta.accion];
+        setStep(paso);
+        document.getElementById(campo).scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById(campo).focus({ preventScroll: true });
+        return true;
+      }
+      return false;
+    },
+  });
+  window.iniciarWizardExcel({
+    periodo: () => `${anioPlan.value}-${String(mesPlan.value).padStart(2, "0")}`,
+    puedeGuardar: CAN_WRITE && {{ can_write_any_js(['ui_plan', 'ui_plan_mensual']) }},
+    mostrar: async (result) => {
+      anioPlan.value = result.importacion.anio;
+      mesPlan.value = result.importacion.mes;
+      anioPlan.dispatchEvent(new Event("input", { bubbles: true }));
+      const loaded = await cargarPresuncion();
+      const data = result.calculo;
+      renderKpi(data.resumen || {});
+      renderDemandaNeta(data.demanda_neta_pt || []);
+      renderFaltantes(data.faltantes || []);
+      renderAlertas(data.alertas || []);
+      setStep(5);
+      ocFeedback.textContent = "Carga integral guardada y cálculo completo, sin persistir sugerencias.";
+      if (!loaded) throw new Error("No se pudo actualizar el plan en pantalla.");
+    },
+  });
 })();
 </script>
 {% endblock %}

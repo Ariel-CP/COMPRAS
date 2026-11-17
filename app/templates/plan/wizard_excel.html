@@ -1,0 +1,22 @@
+<section id="wizard-excel" class="panel consulta-ia" aria-labelledby="excel-titulo">
+  <h3 id="excel-titulo">Todos los datos en un solo Excel</h3>
+  <p>Descargá la plantilla, completá cada listado y subí el mismo archivo. Primero se valida completo; después confirmás para guardar los datos y calcular los materiales.</p>
+  <div class="consulta-ia-filtros">
+    <div><label for="excel-periodo">Período de la plantilla</label><input id="excel-periodo" type="month" required /></div>
+    <div class="consulta-ia-acciones"><button id="excel-descargar" type="button" class="btn-accion">Descargar plantilla completa</button></div>
+  </div>
+  <p class="hint">Hojas: Parametros, Plan_PT, Stock_MP, Stock_PT, Deuda_Clientes y LAF_Solicitado. La descarga incluye códigos, unidades y valores guardados disponibles. Completá las celdas vacías con datos reales o cero explícito. Stock MP corresponde al mes anterior al plan.</p>
+  <label for="excel-archivo">Plantilla completada (.xlsx, hasta 20 MB)</label>
+  <input id="excel-archivo" type="file" accept=".xlsx" />
+  <div class="consulta-ia-acciones">
+    <button id="excel-validar" type="button" class="btn-accion">Validar archivo completo</button>
+    <button id="excel-importar" type="button" class="btn-guardar" disabled>Confirmar carga y calcular materiales</button>
+  </div>
+  <p id="excel-estado" role="status" aria-live="polite"></p>
+  <div id="excel-resumen" class="consulta-ia-resultado" hidden></div>
+  <div id="excel-errores" class="consulta-ia-resultado" hidden></div>
+  <p class="hint">Al confirmar se actualizan los datos de los códigos listados y se reemplaza la lista LAF completa del período del archivo. Otras planificaciones no se modifican. Se calcula una propuesta sin guardar sugerencias ni emitir OC. El Excel permanece en el sistema y no se envía a la IA.</p>
+  {% if can_write_any_js(['ui_plan_asistente_oc'])|trim != 'true' or can_write_any_js(['ui_plan', 'ui_plan_mensual'])|trim != 'true' %}
+  <p>Podés descargar y validar. Para guardar la carga integral necesitás escritura en Wizard OC y Plan mensual.</p>
+  {% endif %}
+</section>

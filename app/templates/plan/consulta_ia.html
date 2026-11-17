@@ -1,0 +1,45 @@
+<section id="consulta-ia" class="panel consulta-ia" aria-labelledby="consulta-ia-titulo">
+  <div class="consulta-ia-cabecera">
+    <div>
+      <p class="hint">Asistente de planificación y compras</p>
+      <h3 id="consulta-ia-titulo">Consultá sobre los datos del sistema</h3>
+    </div>
+    <span class="consulta-ia-estado">Vista previa · respuestas pendientes de habilitación</span>
+  </div>
+  <p>Prepará tu pregunta sobre el plan, los faltantes o los pedidos LAF. Esta vista previa no consulta la base ni envía información a un proveedor de IA.</p>
+  <form id="consulta-ia-form">
+    <div class="consulta-ia-filtros">
+      <div>
+        <label for="consulta-ia-periodo">Período a consultar</label>
+        <input id="consulta-ia-periodo" type="month" required />
+      </div>
+      <div>
+        <label for="consulta-ia-tema">Tema</label>
+        <select id="consulta-ia-tema">
+          <option value="plan">Plan de producción</option>
+          <option value="faltantes">Stock y faltantes de materiales</option>
+          <option value="laf">Pedidos LAF</option>
+          <option value="compras">Sugerencias de compra</option>
+        </select>
+      </div>
+    </div>
+    <label for="consulta-ia-pregunta">¿Qué necesitás saber?</label>
+    <textarea id="consulta-ia-pregunta" rows="4" maxlength="2000" required placeholder="Por ejemplo: ¿Qué materiales faltan para cumplir el plan de este período?"></textarea>
+    <div class="consulta-ia-ejemplos" aria-label="Preguntas de ejemplo">
+      <button type="button" class="btn-ghost" data-tema="faltantes" data-pregunta="¿Qué materiales faltan para cumplir el plan de este período?">Ver faltantes</button>
+      <button type="button" class="btn-ghost" data-tema="laf" data-pregunta="¿Qué pedidos LAF están pendientes de recibir en este período?">Revisar pedidos LAF</button>
+      <button type="button" class="btn-ghost" data-tema="compras" data-pregunta="¿Qué compras sugiere el cálculo para este período y por qué?">Entender las compras</button>
+    </div>
+    <div class="consulta-ia-acciones">
+      <button type="submit" class="btn-accion">Preparar consulta</button>
+      <button type="reset" class="btn-ghost">Limpiar</button>
+      <span class="hint">La pregunta no se guarda al salir de la página.</span>
+    </div>
+  </form>
+  <div id="consulta-ia-resultado" class="consulta-ia-resultado" role="status" aria-live="polite" hidden>
+    <h4>Consulta preparada</h4>
+    <p id="consulta-ia-contexto"></p>
+    <p id="consulta-ia-texto" class="consulta-ia-texto"></p>
+    <p><strong>Todavía no hay una respuesta de IA.</strong> Falta conectar las fuentes de datos permitidas y habilitar su consulta. No se enviaron datos.</p>
+  </div>
+</section>

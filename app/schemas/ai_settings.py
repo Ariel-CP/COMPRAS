@@ -14,6 +14,9 @@ class AISettingsIn(BaseModel):
     max_caracteres_envio: int = Field(default=12000, ge=1000, le=50000)
     solicitudes_por_minuto: int = Field(default=3, ge=1, le=60)
     presupuesto_diario_usd: Decimal = Field(default=Decimal("1.00"), gt=0, le=1000)
+    wizard_conversacional: bool = False
+    precio_entrada_millon_usd: Decimal = Field(default=Decimal("0"), ge=0, le=10000)
+    precio_salida_millon_usd: Decimal = Field(default=Decimal("0"), ge=0, le=10000)
     api_key: SecretStr | None = None
     eliminar_clave_local: bool = False
 

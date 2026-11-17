@@ -293,4 +293,8 @@
     if (button) loadDetail(Number(button.dataset.accessId));
   });
   loadHistory();
+  const initialAccessId = new URLSearchParams(window.location.search).get('access_id');
+  if (initialAccessId && /^[1-9]\d*$/.test(initialAccessId) && Number.isSafeInteger(Number(initialAccessId))) {
+    loadDetail(Number(initialAccessId)).then(() => detailElement.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
 })();

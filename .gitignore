@@ -106,3 +106,7 @@ app/static/img/
 /TEMP/
 
 /Tablas control.xlsx
+
+# Resultados locales de negocio, capturas y herramientas temporales
+/outputs/
+/tmp/

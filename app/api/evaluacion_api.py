@@ -12,6 +12,9 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_db
 from app.api.deps_auth import get_current_user, require_permission
+from app.schemas.evaluacion_powerbi import RankingPowerBIOut, HistorialPowerBIOut
+from app.services.access_read_service import AccessReadError
+from app.services import evaluacion_powerbi_service
 from app.schemas.evaluacion import (
     EvaluacionCreate,
     EvaluacionListItem,
@@ -44,6 +47,38 @@ router = APIRouter(
     tags=["evaluaciones"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+@router.get(
+    "/powerbi/ranking", response_model=RankingPowerBIOut,
+    dependencies=[Depends(require_permission("ui_evaluaciones_ranking"))],
+)
+def api_ranking_powerbi(desde: date, hasta: date):
+    try:
+        return evaluacion_powerbi_service.ranking_periodo(desde, hasta)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (FileNotFoundError, AccessReadError) as exc:
+        raise HTTPException(status_code=503, detail="Access no está disponible. Verificá el acceso del servidor a la unidad de red.") from exc
+
+
+@router.get(
+    "/powerbi/proveedor/{codigo}/historial", response_model=HistorialPowerBIOut,
+    dependencies=[Depends(require_permission("ui_evaluaciones_ranking"))],
+)
+def api_historial_powerbi(
+    codigo: str, hasta: date,
+    desde: date | None = None,
+    agrupacion: str = Query(default="anual", pattern="^(anual|mensual)$"),
+):
+    if len(codigo) > 50:
+        raise HTTPException(status_code=422, detail="El código supera la longitud permitida.")
+    try:
+        return evaluacion_powerbi_service.historial_proveedor(codigo, hasta, desde, agrupacion)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (FileNotFoundError, AccessReadError) as exc:
+        raise HTTPException(status_code=503, detail="No se pudo consultar el historial de Access.") from exc
 
 
 @router.post(

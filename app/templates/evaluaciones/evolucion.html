@@ -7,6 +7,9 @@
 
   <div class="tabla-controles" style="justify-content:flex-start;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
     <a class="btn-accion" href="/ui/evaluaciones">Volver a Evaluaciones</a>
+    {% if request.state.current_user and (is_admin or perms.get('ui_evaluaciones', (False, False))[0]) %}
+    <a class="btn-accion" href="/ui/evaluaciones/vista-previa">Vista previa Registro B</a>
+    {% endif %}
     <a class="btn-accion" href="/ui/evaluaciones/ranking" style="background:#0b5cab;">Ver Ranking</a>
     <label for="txtBuscarProveedorEvolucion">Buscar proveedor</label>
     <input

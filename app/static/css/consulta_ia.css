@@ -1,0 +1,18 @@
+.consulta-ia { scroll-margin-top: 24px; }
+.consulta-ia-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.consulta-ia-cabecera h3 { margin: 4px 0 12px; }
+.consulta-ia-estado { background: #fff3cd; color: #664d03; border-radius: 16px; padding: 6px 12px; font-size: 12px; }
+.consulta-ia-filtros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
+.consulta-ia label { display: block; margin-bottom: 6px; font-weight: 600; }
+.consulta-ia input, .consulta-ia select, .consulta-ia textarea { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #b8c9da; border-radius: 6px; font: inherit; }
+.consulta-ia textarea { resize: vertical; }
+.consulta-ia-ejemplos, .consulta-ia-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.consulta-ia-acciones .btn-accion { padding: 10px 16px; font-size: 14px; }
+.consulta-ia-resultado { margin-top: 18px; background: #f2f7fc; border-left: 4px solid #0b5cab; padding: 12px 16px; }
+.consulta-ia-texto { white-space: pre-wrap; overflow-wrap: anywhere; }
+.guia-lista { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 0; list-style: none; font-size: 13px; }
+.guia-lista [aria-current="step"] { font-weight: 700; color: #0b5cab; }
+.consulta-ia button:disabled { opacity: .6; cursor: wait; }
+.wizard-chat-mensajes { max-height: 400px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wizard-chat-mensajes p { padding: 12px; background: #f2f7fc; border-radius: 8px; }
+@media (max-width: 600px) { .consulta-ia-filtros { grid-template-columns: 1fr; } }

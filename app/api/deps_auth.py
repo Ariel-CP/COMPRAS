@@ -21,6 +21,7 @@ UI_PERMISSION_ROUTES = {
     "/ui/admin/logo": ("ui_admin_logo", False),
     "/ui/admin/settings": ("ui_admin_settings", False),
     "/ui/evaluaciones": ("ui_evaluaciones", False),
+    "/ui/evaluaciones/vista-previa": ("ui_evaluaciones", False),
     "/ui/evaluaciones/ranking": ("ui_evaluaciones_ranking", False),
     "/ui/evaluaciones/ranking-print": ("ui_evaluaciones_ranking_print", False),
     "/ui/evaluaciones/evolucion": ("ui_evaluaciones_evolucion", False),
@@ -131,6 +132,10 @@ def resolve_api_permissions(
         return ("ui_admin_permisos",), method not in {"GET", "HEAD"}
     if path.startswith("/api/roles"):
         return ("ui_admin_roles",), method not in {"GET", "HEAD"}
+    if path.startswith("/api/evaluaciones/powerbi/ranking"):
+        return ("ui_evaluaciones_ranking",), method not in {"GET", "HEAD"}
+    if path.startswith("/api/evaluaciones/powerbi/proveedor/"):
+        return ("ui_evaluaciones_ranking", "ui_evaluaciones_evolucion"), method not in {"GET", "HEAD"}
     if path.startswith("/api/evaluaciones/ranking-periodo"):
         return ("ui_evaluaciones_ranking", "ui_evaluaciones_ranking_print"), False
     if path.startswith("/api/evaluaciones/ranking-operativo"):
@@ -183,6 +188,13 @@ def resolve_api_permissions(
     if path.startswith("/api/informes"):
         return ("ui_informes_costos_pt",), False
     if path.startswith("/api/plan-produccion-mensual"):
+        if path.startswith("/api/plan-produccion-mensual/asistente-oc/archivo-integral/"):
+            return ("ui_plan_asistente_oc",), path.rstrip("/").endswith("/importar")
+        if path.rstrip("/") in {
+            "/api/plan-produccion-mensual/asistente-oc/ia/conversacion",
+            "/api/plan-produccion-mensual/asistente-oc/ia/conversacion/estado",
+        }:
+            return ("ui_plan_asistente_oc",), False
         normalized = path.rstrip("/")
         if normalized == "/api/plan-produccion-mensual/asistente-oc/calcular" and method == "POST":
             return ("ui_plan_asistente_oc",), _query_requires_write(query_params, "persistir_sugerencias")

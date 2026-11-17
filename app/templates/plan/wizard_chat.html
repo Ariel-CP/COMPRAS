@@ -1,0 +1,30 @@
+<section id="wizard-chat" class="panel consulta-ia" aria-labelledby="wizard-chat-titulo">
+  <div class="consulta-ia-cabecera">
+    <h3 id="wizard-chat-titulo">IA · Asistente de requerimientos para OC</h3>
+    <span id="wizard-chat-disponibilidad" class="consulta-ia-estado">Comprobando configuración…</span>
+  </div>
+  <p>Contame qué período querés preparar. Te voy a pedir el plan, stock de MP, pedidos LAF, stock PT y deuda de clientes para calcular los materiales con el Wizard.</p>
+  <p class="hint">La IA propone el siguiente paso. Vos aplicás cada acción y revisás el requerimiento. Los archivos se procesan en el sistema y no se envían a la IA. El texto que escribís sí se comparte al confirmar.</p>
+  <div id="wizard-chat-mensajes" class="wizard-chat-mensajes" role="log" aria-live="polite"></div>
+  <form id="wizard-chat-form">
+    <label for="wizard-chat-pregunta">Mensaje para el asistente</label>
+    <textarea id="wizard-chat-pregunta" rows="3" maxlength="4000" required placeholder="Quiero preparar el requerimiento de materiales de diciembre de 2026. ¿Qué necesitás?"></textarea>
+    <div class="consulta-ia-acciones">
+      <button id="wizard-chat-preparar" class="btn-accion" type="submit" disabled>Revisar mensaje antes de enviar</button>
+      <button id="wizard-chat-limpiar" class="btn-ghost" type="button">Nueva conversación</button>
+    </div>
+  </form>
+  <div id="wizard-chat-preview" class="consulta-ia-resultado" hidden>
+    <h4>Contenido que se enviará a OpenAI</h4>
+    <p>Se enviarán este mensaje, el historial visible y los metadatos siguientes. Puede generar costos de API. No se envían archivos. El texto no se anonimiza automáticamente.</p>
+    <pre id="wizard-chat-envio" class="consulta-ia-texto"></pre>
+    <button id="wizard-chat-enviar" class="btn-accion" type="button">Confirmar y enviar a OpenAI</button>
+    <button id="wizard-chat-cancelar" class="btn-ghost" type="button">Cancelar</button>
+  </div>
+  <div id="wizard-chat-propuesta" class="consulta-ia-resultado" hidden>
+    <h4>Acción propuesta</h4>
+    <p id="wizard-chat-accion-texto"></p>
+    <button id="wizard-chat-aplicar" class="btn-accion" type="button">Aplicar acción</button>
+  </div>
+  <p id="wizard-chat-estado" role="status" aria-live="polite"></p>
+</section>
