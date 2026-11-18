@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Ranking e historial de proveedores{% endblock %}
-{% block styles %}<link rel="stylesheet" href="/static/css/evaluacion_ranking.css?v={{ app_version }}-powerbi-2">{% endblock %}
+{% block styles %}<link rel="stylesheet" href="/static/css/evaluacion_ranking.css?v={{ app_version }}-powerbi-general-1">{% endblock %}
 {% block content %}
 <section class="productos-wrapper evaluacion-ranking">
   <div class="ranking-cabecera"><div><h2>Ranking de proveedores</h2><p>Compará el período y consultá la evolución de cada proveedor.</p></div><a class="btn-accion" href="/ui/evaluaciones">Evaluaciones registradas</a></div>
@@ -9,21 +9,49 @@
     <label for="ranking-hasta">Hasta</label><input id="ranking-hasta" type="date" required value="{{ hasta_default }}">
     <button class="btn-accion" type="submit" id="ranking-analizar">Analizar período</button>
     <button class="btn-accion" type="button" id="ranking-exportar" disabled>Exportar ranking CSV</button>
-    <button class="btn-accion" type="button" id="ranking-imprimir" disabled>Imprimir</button>
+    <button class="btn-accion" type="button" id="ranking-imprimir" disabled title="Abrir el informe horizontal para imprimir o guardar PDF">Informe de Calidad</button>
     <button class="btn-accion" type="button" id="ranking-email" disabled title="Descargar borrador para abrir en Outlook u otro cliente compatible">Preparar email</button>
   </form>
   <p id="ranking-mensaje" role="status" aria-live="polite"></p>
   <p id="ranking-email-mensaje" role="status" aria-live="polite"></p>
   <details class="panel ranking-metodo"><summary>Cómo se calcula · Power BI 45 / 45 / 10</summary>
     <p>Promedio simple por recepción, usando <strong>Fecha de Entrega</strong> y proveedores marcados EVALUAR. Calidad: Simplificada 100, Normal 67, Estricta 33 (45 %). Entrega: emisión OC + plazo del proveedor, hasta 21 días adicionales 100; después 33 (45 %).</p>
-    <p><strong>Sin certificado: 0 puntos.</strong> Solo suma 10 si tiene certificado y aplica. No se redistribuye el peso. Aprobado desde 70, condicional desde 55 y no apto por debajo de 55; clasificación sin redondeo previo.</p>
+    <p><strong>Sin evidencia de certificado: 0 puntos.</strong> Se reconoce la casilla TieneCertificado, cualquier archivo en ADJUNTO (confirmados como certificados) o una nota que documente su recepción o uso concreto. La leyenda «Cumple con los requisitos del certificado de calidad y especificaciones técnicas» o similar, por sí sola, no cuenta. Las notas negativas no prueban recepción; si contradicen la casilla o un adjunto se informa para revisión. Solo suma 10 si aplica. No se redistribuye el peso. Aprobado desde 70, condicional desde 55 y no apto por debajo de 55; clasificación sin redondeo previo.</p>
     <p>Sin emisión OC se considera dentro del plazo por criterio solicitado: 100 de base, aporte de 45 puntos. Es un supuesto para evaluar, no una fecha completada. Plan no reconocido aporta 0. Se identifica al proveedor por código y nombre; si el código es inconsistente, solo se acepta nombre exacto único. Las identidades ambiguas se excluyen.</p>
     <p>Consulta de Access en solo lectura, con caché de hasta un minuto. Maestro y plazos actuales; no reconstruye su estado histórico. Los resultados son <strong>recalculados, no evaluaciones formales guardadas</strong>.</p>
   </details>
   <div id="ranking-resultados" hidden>
     <p id="ranking-periodo" class="ranking-periodo"></p>
+    <section class="panel ranking-general" aria-labelledby="ranking-general-titulo">
+      <div>
+        <h3 id="ranking-general-titulo">Evaluación general de proveedores</h3>
+        <div id="ranking-medidor" class="ranking-medidor"></div>
+        <p id="ranking-general-resultado" class="ranking-general-resultado"></p>
+        <p>Puntaje máximo: 100 · Aprobado ≥ 70 · Condicional ≥ 55 · No apto &lt; 55</p>
+      </div>
+      <div class="ranking-referencia">
+        <h4>Referencia histórica informada</h4>
+        <p id="ranking-referencia-periodo"></p>
+        <strong id="ranking-referencia-valor"></strong>
+        <p id="ranking-general-variacion"></p>
+        <details class="ranking-ref-config"><summary>Cambiar referencia para comparar</summary>
+          <form id="ranking-referencia-form">
+            <label for="ranking-ref-periodo">Período histórico</label>
+            <input id="ranking-ref-periodo" maxlength="100" value="3.º cuatrimestre 2024" required>
+            <label for="ranking-ref-valor">Puntaje histórico (0 a 100)</label>
+            <input id="ranking-ref-valor" type="number" min="0" max="100" step="0.01" value="77.83" required>
+            <button class="btn-accion" type="submit">Actualizar referencia</button>
+          </form>
+        </details>
+        <p>Referencia aportada para la comparación; no recalculada por el sistema. La diferencia es orientativa si cambian el período, los proveedores o los criterios de evaluación.</p>
+      </div>
+      <p class="ranking-general-nota">Promedio de todas las recepciones evaluadas del período, con igual peso por recepción, como el medidor de Power BI. Se incluyen todos los proveedores evaluados, no solo los 20 mejores o peores. Para comparar entre años, usá períodos equivalentes y la misma metodología. El cálculo actual considera las OC sin fecha dentro del plazo y reconoce certificados por casilla, adjuntos o notas explícitas.</p>
+    </section>
     <div class="ranking-kpis" id="ranking-kpis"></div>
-    <div class="panel ranking-advertencias" id="ranking-advertencias"></div>
+    <details class="panel ranking-advertencias" id="ranking-detalles">
+      <summary>Detalles y advertencias de la evaluación</summary>
+      <div id="ranking-advertencias"></div>
+    </details>
     <p>Se muestran hasta 20 por listado. Con menos de 40 proveedores, los mejores y los peores pueden compartir posiciones. Seleccioná un proveedor en las tablas o en el gráfico para ver su historia.</p>
     <div class="ranking-columnas">
       <article class="panel"><h3>20 mejores proveedores</h3><div id="grafico-mejores" class="ranking-grafico"></div><div class="tabla-scroll"><table class="productos-table"><thead><tr><th>Proveedor</th><th>Puntaje</th><th>Recepciones</th><th>Resultado</th><th></th></tr></thead><tbody id="tabla-mejores"></tbody></table></div></article>
@@ -49,4 +77,4 @@
   </div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="/static/js/evaluacion_email.js?v={{ app_version }}-email-1" defer></script><script src="/static/js/evaluacion_ranking.js?v={{ app_version }}-powerbi-4" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/js/evaluacion_email.js?v={{ app_version }}-email-1" defer></script><script src="/static/js/evaluacion_informe_calidad.js?v={{ app_version }}-informe-1" defer></script><script src="/static/js/evaluacion_ranking.js?v={{ app_version }}-powerbi-informe-1" defer></script>{% endblock %}

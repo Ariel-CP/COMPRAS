@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from collections import Counter, OrderedDict, defaultdict
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
@@ -19,10 +21,64 @@ from app.services.access_read_service import (
 from app.services.evaluacion_access_import_service import _normalizar_codigo
 
 logger = logging.getLogger(__name__)
-METODOLOGIA = "PBIX-45-45-10-CERTIFICADO-AUSENTE-0-SIN-OC-EN-PLAZO"
+METODOLOGIA = "PBIX-45-45-10-CERTIFICADO-EVIDENCIA-V2-SIN-OC-EN-PLAZO"
 _cache: OrderedDict[tuple, tuple[float, dict]] = OrderedDict()
 _cache_lock = Lock()
 _TTL = 60
+
+
+def evidencia_certificado(fila: dict) -> dict:
+    """Combina evidencias sin interpretar una leyenda de cumplimiento como recepción."""
+    nota = " ".join(
+        "".join(
+            c
+            for c in unicodedata.normalize("NFKD", str(fila.get("NOTA") or ""))
+            if not unicodedata.combining(c)
+        )
+        .casefold()
+        .split()
+    )
+    certificado = r"certificados?\b"
+    ausencia = bool(
+        re.search(
+            rf"\b(?:sin|falta(?:n)?|pendiente(?:s)?(?: de entrega)?(?: de)?)\s+(?:el |los )?{certificado}"
+            rf"|\bno\s+(?:se\s+)?(?:(?:ha|han)\s+)?(?:recibi\w*|recibe\w*|present\w*|entreg\w*|adjunt\w*|tiene|tener|vino|llego)"
+            rf"\s+(?:con\s+)?(?:(?:el|los|un|ningun)\s+)?{certificado}"
+            rf"|\bprevio a tener\s+(?:el |los )?{certificado}"
+            rf"|\b{certificado}(?: de calidad)?\s+(?:pendientes?|no\s+(?:recibidos?|entregados?|adjuntos?))\b",
+            nota,
+        )
+    )
+    # No se busca simplemente 'certificado': excluye instrucciones y textos tipo
+    # 'Cumple con los requisitos del certificado ...' e instrumentos certificados.
+    recepcion = (
+        bool(
+            re.search(
+                rf"\b(?:recibio|recibieron|recibimos|recibe|reciben|recibido|presenta|presento|presentaron|entrega|entrego|entregaron|adjunta|adjunto|adjuntaron)"
+                rf"\s+(?:(?:el|los|un|sus|respectivos|correspondientes)\s+)*{certificado}"
+                rf"|\b{certificado}(?: de calidad)?\s+(?:recibidos?|entregados?|adjuntos?|presentados?)\b"
+                rf"|\b(?:recibid[oa]s?|vino|llego)\s+con\s+(?:el |los )?{certificado}"
+                rf"|\binformada\b[^.;]{{0,100}}\bmediante el certificado de calidad\b",
+                nota,
+            )
+        )
+        and not ausencia
+    )
+    fuentes = []
+    if fila.get("TieneCertificado"):
+        fuentes.append("TieneCertificado")
+    # El usuario confirmó que todos los archivos de ADJUNTO son certificados,
+    # incluidos nombres genéricos de escáner o WhatsApp. No se abren los archivos.
+    if str(fila.get("ADJUNTO") or "").strip():
+        fuentes.append("ADJUNTO")
+    if recepcion:
+        fuentes.append("NOTA")
+    return {
+        "tiene_certificado": bool(fuentes),
+        "fuentes_certificado": fuentes,
+        "certificado_nota_ausencia": ausencia,
+        "certificado_conflicto": bool(fuentes) and ausencia,
+    }
 
 
 def nombre_clave(valor: Any) -> str:
@@ -95,7 +151,8 @@ def leer_fuentes(desde: date | None, hasta: date) -> tuple[list[dict], list[dict
             cursor = connection.cursor()
             cursor.execute(
                 "SELECT [ID_INT], [Codigo Proveedor], [PROVEEDOR], [Fecha de Entrega], "
-                "[FECHA EMISION OC], [Fecha Control], [PLAN MUESTREO], [TieneCertificado], [Estado] "
+                "[FECHA EMISION OC], [Fecha Control], [PLAN MUESTREO], [TieneCertificado], "
+                "[Estado], [NOTA], [ADJUNTO] "
                 f"FROM [CONTROL DE RECEPCION] WHERE {where} ORDER BY [ID_INT]",
                 params,
             )
@@ -140,12 +197,13 @@ def analizar_fuentes(controles: list[dict], maestros: list[dict]) -> dict:
                 }
             )
             continue
+        evidencia = evidencia_certificado(fila)
         calculo = puntuar(
             fila["PLAN MUESTREO"],
             fila["FECHA EMISION OC"],
             fila["Fecha de Entrega"],
             m["DEMORA_ENTREGA"],
-            fila["TieneCertificado"],
+            evidencia["tiene_certificado"],
             m["APLICA CERTIFICADO_CALIDAD"],
         )
         detalle.append(
@@ -158,7 +216,7 @@ def analizar_fuentes(controles: list[dict], maestros: list[dict]) -> dict:
                 "nombre": str(m["PROVEEDOR"] or m["RAZON SOCIAL"] or fila["PROVEEDOR"]),
                 "tipo": m["INSUMO SERVICIO"],
                 "fecha": fila["Fecha de Entrega"],
-                "tiene_certificado": bool(fila["TieneCertificado"]),
+                **evidencia,
                 "estado": str(fila["Estado"] or "").strip(),
                 **calculo,
             }
@@ -175,6 +233,11 @@ def analizar_fuentes(controles: list[dict], maestros: list[dict]) -> dict:
     ]
     proveedores.sort(key=lambda r: (-r["total"], r["nombre"].casefold(), r["codigo"]))
     resumen = {
+        "puntaje_general": (
+            sum((f["total"] for f in detalle), Decimal(0)) / len(detalle)
+            if detalle
+            else None
+        ),
         "controles_periodo": len(controles),
         "controles_evaluados": len(detalle),
         "controles_excluidos": len(excluidos),
@@ -186,8 +249,26 @@ def analizar_fuentes(controles: list[dict], maestros: list[dict]) -> dict:
         "identidad_por_nombre": sum(
             f["asociacion"].startswith("Nombre exacto") for f in detalle
         ),
+        "con_certificado": sum(f["tiene_certificado"] for f in detalle),
+        "certificado_por_adjunto": sum(
+            "ADJUNTO" in f["fuentes_certificado"] for f in detalle
+        ),
+        "certificado_por_nota": sum(
+            "NOTA" in f["fuentes_certificado"] for f in detalle
+        ),
+        "certificado_conflictos": sum(f["certificado_conflicto"] for f in detalle),
+        "controles_certificado_conflicto": [
+            {"id": f["id"], "fecha": f["fecha"].date(), "proveedor": f["nombre"]}
+            for f in detalle
+            if f["certificado_conflicto"]
+        ],
         "exclusiones_por_motivo": dict(Counter(f["motivo"] for f in excluidos)),
     }
+    resumen["resultado_general"] = (
+        clasificar(resumen["puntaje_general"])
+        if resumen["puntaje_general"] is not None
+        else None
+    )
     return {"resumen": resumen, "proveedores": proveedores, "detalle": detalle}
 
 

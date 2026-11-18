@@ -13,6 +13,7 @@
   const providerSelectedCode = document.getElementById("controles-provider-code");
   const providerSelectedName = document.getElementById("controles-provider-name");
   const canWrite = page.dataset.canWrite === "true";
+  const canQuality = page.dataset.canQuality === "true";
   let selectedProviderCode = "";
   let providerSearchTimer;
   let providerSearchController;
@@ -264,6 +265,7 @@
       const data = await requestJson(`/api/recepcion/operativas/${id}`);
       const lineDetails = data.lineas.map((line) => `<div class="controles-detail-line">
         <h3>Línea ${Number(line.numero_linea)} · ${escapeHtml(line.producto_codigo)} · ${escapeHtml(line.designacion || line.producto_nombre)}</h3>
+        ${canQuality && data.recepcion_staging_id == null ? `<p><a href="/ui/recepcion/calidad/linea/${Number(line.id)}">Control de calidad y certificados</a></p>` : ""}
         <div class="controles-detail-grid">
           <div><strong>Plano / lote</strong>${escapeHtml(line.numero_plano || "-")} · ${escapeHtml(line.lote_numero || "-")}</div>
           <div><strong>Cantidades solicitada / recibida</strong>${escapeHtml(line.cantidad_solicitada)} / ${escapeHtml(line.cantidad_recibida)}</div>

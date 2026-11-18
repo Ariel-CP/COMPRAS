@@ -8,6 +8,7 @@
   const currentUser = page.dataset.currentUser || "Usuario actual";
   let selectedReception = null;
   let pendingItem = null;
+  let certificateSaving = false;
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -79,25 +80,71 @@
     }
     detail.innerHTML = '<p class="calidad-muted">Cargando ficha e historial de inspección...</p>';
     try {
-      // Localizar la línea dentro de las pendientes para obtener recepción y datos de muestreo
-      const pendings = await requestJson("/api/recepcion/operativas/lineas-pendientes?limit=500");
-      const item = pendings.find((material) => Number(material.linea_id) === lineaId);
-      if (!item) {
-        detail.innerHTML = '<p class="calidad-status error">El material ya no tiene controles pendientes o no existe.</p><p><a class="calidad-button secondary" href="/ui/recepcion/calidad">← Volver a pendientes</a></p>';
-        return;
-      }
-      pendingItem = item;
-      const reception = await requestJson(`/api/recepcion/operativas/${Number(item.recepcion_id)}`);
+      const certificate = await requestJson(`/api/recepcion/calidad/lineas/${lineaId}/certificado`);
+      const reception = await requestJson(`/api/recepcion/operativas/${Number(certificate.recepcion_id)}`);
       const line = reception.lineas.find((entry) => Number(entry.id) === lineaId);
       if (!line) throw new Error("No se encontró la línea seleccionada en la recepción.");
+      const item = {...line, estado_embalaje: reception.estado_embalaje};
+      pendingItem = item;
       selectedReception = reception;
-      renderDetail(item, reception, line);
+      renderDetail(item, reception, line, certificate);
+      renderCertificate(certificate);
     } catch (error) {
       detail.innerHTML = `<p class="calidad-status error">${escapeHtml(error.message)}</p>`;
     }
   }
 
-  function renderDetail(item, reception, line) {
+  function renderCertificate(certificate) {
+    const section = document.getElementById("calidad-certificado");
+    const documents = certificate.documentos || [];
+    section.innerHTML = `
+      <h3>Certificado de calidad del proveedor</h3>
+      <p>${certificate.recibido ? "✓ Certificado recibido" : "Certificado no registrado como recibido"}
+      ${certificate.usuario_nombre ? ` · ${escapeHtml(certificate.usuario_nombre)} · ${escapeHtml(formatDate(certificate.fecha_actualizacion))}` : ""}</p>
+      ${documents.length ? `<ul>${documents.map(doc => `<li><a href="/api/recepcion/calidad/lineas/${lineaId}/certificado/documentos/${Number(doc.id)}">${escapeHtml(doc.nombre)}</a> · ${Math.ceil(doc.tamano/1024)} KB · ${escapeHtml(doc.usuario_nombre || "")} · ${escapeHtml(formatDate(doc.fecha_creacion))}</li>`).join("")}</ul>` : '<p class="calidad-muted">Sin documento digital adjunto.</p>'}
+      ${canWrite ? `<form id="certificado-form" class="calidad-form">
+        <label class="calidad-certificado-check"><input name="recibido" type="checkbox" ${certificate.recibido ? "checked" : ""} ${documents.length ? "disabled" : ""}> Verificado: el proveedor entregó el certificado de calidad</label>
+        <label for="certificado-archivo">Adjuntar documento entregado por el proveedor</label>
+        <input id="certificado-archivo" name="archivo" type="file" accept=".pdf,.jpg,.jpeg,.png">
+        <p class="calidad-muted">PDF, JPG o PNG · máximo 10 MB por archivo. Adjuntar marca el certificado como recibido. Los documentos guardados se conservan.</p>
+        <button class="calidad-button save" type="submit">Guardar certificado</button>
+        <p class="calidad-status" data-certificate-status role="status" aria-live="polite"></p>
+      </form>` : ""}`;
+    const form = document.getElementById("certificado-form");
+    if (!form) return;
+    form.addEventListener("change", () => {
+      form.dataset.dirty = "true";
+      if (form.elements.archivo.files.length) form.elements.recibido.checked = true;
+    });
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      try { await saveCertificate(form); }
+      catch (error) {
+        const status = form.querySelector("[data-certificate-status]");
+        status.textContent = error.message; status.classList.add("error");
+      }
+    });
+  }
+
+  async function saveCertificate(form) {
+    if (certificateSaving) throw new Error("El certificado se está guardando. Esperá a que termine.");
+    const file = form.elements.archivo.files[0];
+    if (file && file.size > 10*1024*1024) throw new Error("El documento no puede superar 10 MB.");
+    const data = new FormData();
+    data.append("recibido", String(form.elements.recibido.checked));
+    if (file) data.append("archivo", file);
+    const button = form.querySelector('button[type="submit"]');
+    certificateSaving = true; button.disabled = true;
+    const status = form.querySelector("[data-certificate-status]");
+    status.textContent = "Guardando certificado..."; status.classList.remove("error");
+    try {
+      const certificate = await requestJson(`/api/recepcion/calidad/lineas/${lineaId}/certificado`, {method:"PUT", body:data});
+      renderCertificate(certificate);
+      document.querySelector("[data-certificate-status]").textContent = "Certificado guardado.";
+    } finally { certificateSaving = false; button.disabled = false; }
+  }
+
+  function renderDetail(item, reception, line, certificate) {
     const attempts = line.intentos_inspeccion || [];
     const latest = attempts.at(-1);
     const sample = item.tamano_muestra
@@ -108,7 +155,7 @@
     const planoLink = planoDisponible
       ? `<a class="calidad-button secondary" href="/api/recepcion/planos/${encodeURIComponent(plano)}/pdf" target="_blank" rel="noopener">Abrir plano PDF</a>`
       : '<span class="calidad-muted">Plano PDF no disponible</span>';
-    const editReceptionLink = canWrite && reception.lineas.length === 1
+    const editReceptionLink = canWrite && reception.lineas.length === 1 && !certificate.recibido
       ? `<a class="calidad-button secondary" href="/ui/recepcion?editar=${Number(reception.id)}">Editar recepción</a>`
       : "";
     const nextAttempt = latest ? "REINSPECCION" : "INICIAL";
@@ -126,9 +173,10 @@
         <div><strong>Material utilizado</strong>${escapeHtml(item.material_utilizado || "-")}</div>
         <div><strong>Recepcionó</strong>${escapeHtml(reception.usuario_recepcion_nombre || "-")}</div>
       </div>
+      <section id="calidad-certificado" class="calidad-certificado"></section>
       <h3>Intentos anteriores</h3>
       ${renderAttemptHistory(attempts)}
-      ${canWrite ? `
+      ${canWrite && line.estado_inspeccion !== "APROBADO" ? `
       <form class="calidad-form" id="control-linea-form" data-attempt-id="${latest ? Number(latest.id) : ""}" data-attempt-type="${nextAttempt}">
         <h3>${nextAttempt === "INICIAL" ? "Registrar inspección inicial" : "Registrar reinspección"}</h3>
         <div class="calidad-fields">
@@ -187,7 +235,12 @@
     const printWindow = payload.decision === "ACEPTADO" ? window.open("", "_blank") : null;
     status.textContent = "Guardando inspección...";
     status.classList.remove("error");
+    const submitButton = form.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
     try {
+      const certificateForm = document.getElementById("certificado-form");
+      if (certificateForm?.dataset.dirty === "true") await saveCertificate(certificateForm);
+      else if (certificateSaving) throw new Error("Esperá a que termine de guardarse el certificado.");
       const result = await requestJson(`/api/recepcion/operativas/lineas/${lineaId}/intentos-inspeccion`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -208,6 +261,8 @@
       printWindow?.close();
       status.textContent = error.message;
       status.classList.add("error");
+    } finally {
+      submitButton.disabled = false;
     }
   }
 

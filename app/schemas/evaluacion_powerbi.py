@@ -9,6 +9,12 @@ class ControlRechazado(BaseModel):
     fecha: date
 
 
+class ControlCertificadoConflicto(BaseModel):
+    id: int
+    fecha: date
+    proveedor: str
+
+
 class ProveedorPuntaje(BaseModel):
     codigo: str
     nombre: str
@@ -28,6 +34,8 @@ class ProveedorPuntaje(BaseModel):
 
 
 class ResumenRanking(BaseModel):
+    puntaje_general: Decimal | None = None
+    resultado_general: str | None = None
     controles_periodo: int
     controles_evaluados: int
     controles_excluidos: int
@@ -37,6 +45,13 @@ class ResumenRanking(BaseModel):
     sin_plan: int
     sin_plazo: int
     identidad_por_nombre: int
+    con_certificado: int = 0
+    certificado_por_adjunto: int = 0
+    certificado_por_nota: int = 0
+    certificado_conflictos: int = 0
+    controles_certificado_conflicto: list[ControlCertificadoConflicto] = Field(
+        default_factory=list
+    )
     exclusiones_por_motivo: dict[str, int]
 
 

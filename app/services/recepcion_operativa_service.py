@@ -15,6 +15,7 @@ from app.schemas.recepcion import (
     RecepcionIntentoInspeccionCreate,
     RecepcionOperativaCreate,
 )
+from app.services.recepcion_certificado_service import proteger_recepcion_con_certificados
 
 
 def _calcular_porcentaje_muestreo(
@@ -188,7 +189,7 @@ def obtener_recepcion_operativa(
     cabecera = (
         db.execute(
             text("""
-            SELECT rc.id, rc.numero_recepcion, rc.proveedor_id,
+            SELECT rc.id, rc.numero_recepcion, rc.proveedor_id, rc.recepcion_staging_id,
                    rc.orden_compra, rc.remito, rc.fecha_recepcion,
                    rc.fecha_entrega_esperada, rc.fecha_control, rc.estado,
                      rc.usuario_creacion_id, rc.usuario_inspeccion_id,
@@ -313,6 +314,8 @@ def actualizar_recepcion_operativa(
         raise ValueError("Recepción no encontrada")
     if recepcion.recepcion_staging_id is not None:
         raise ValueError("Las recepciones históricas importadas son de solo lectura")
+
+    proteger_recepcion_con_certificados(db, recepcion_id)
 
     intentos = db.execute(
         text("""
@@ -534,6 +537,8 @@ def eliminar_recepcion_operativa(db: Session, recepcion_id: int) -> None:
         raise ValueError("Recepción no encontrada")
     if recepcion.recepcion_staging_id is not None:
         raise ValueError("Las recepciones históricas importadas son de solo lectura")
+
+    proteger_recepcion_con_certificados(db, recepcion_id)
 
     intentos = db.execute(
         text("""

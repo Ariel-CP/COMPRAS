@@ -6,6 +6,14 @@
   let ranking = null, rankingRequest = null, historyRequest = null;
   let rankVersion = 0, historyVersion = 0;
   const number = value => Number(value).toLocaleString('es-AR', {maximumFractionDigits: 2});
+  const scoreNumber = value => Number(value).toLocaleString('es-AR', {minimumFractionDigits:2,maximumFractionDigits:2});
+  const referenceKey = 'evaluacion-ranking-referencia-v1';
+  let reference = {periodo:$('ranking-ref-periodo').value,valor:Number($('ranking-ref-valor').value)};
+  try {
+    const saved=JSON.parse(localStorage.getItem(referenceKey));
+    if(saved && typeof saved.periodo==='string' && saved.periodo.trim() && saved.periodo.length<=100 && typeof saved.valor==='number' && Number.isFinite(saved.valor) && saved.valor>=0 && saved.valor<=100) reference=saved;
+  } catch {}
+  $('ranking-ref-periodo').value=reference.periodo;$('ranking-ref-valor').value=reference.valor;
   const dateLabel = value => value.split('-').reverse().join('/');
   const label = value => ({APROBADO: 'Aprobado', CONDICIONAL: 'Condicional', 'NO APTO': 'No apto'}[value] || value);
   const text = (tag, value, className) => {
@@ -22,25 +30,56 @@
   }
   function axes(svg, left, top, width, height) {
     for (const mark of [0, 25, 50, 75, 100]) {
-      const x = left + width * mark / 100;
-      svg.append(svgNode('line', {x1:x, x2:x, y1:top, y2:top+height, class:'eje'}));
-      svg.append(svgNode('text', {x, y:top-9, 'text-anchor':'middle', 'font-size':11}, mark));
+      const y = top + height * (1 - mark / 100);
+      svg.append(svgNode('line', {x1:left, x2:left+width, y1:y, y2:y, class:'eje'}));
+      svg.append(svgNode('text', {x:left-12, y:y+4, 'text-anchor':'end', 'font-size':12}, mark));
     }
+  }
+  function generalScore(summary) {
+    const container=$('ranking-medidor');container.replaceChildren();
+    const score=summary.puntaje_general==null ? null : Number(summary.puntaje_general);
+    const category=summary.resultado_general;
+    $('ranking-referencia-periodo').textContent=reference.periodo;
+    $('ranking-referencia-valor').textContent=`${scoreNumber(reference.valor)} / 100`;
+    if(score===null || !Number.isFinite(score)) {
+      container.append(text('p','Sin recepciones evaluables para calcular el promedio general.'));
+      $('ranking-general-resultado').textContent='Sin calificación';
+      $('ranking-general-variacion').textContent='Sin comparación disponible.';
+      return;
+    }
+    const color=category==='APROBADO' ? '#24613a' : category==='CONDICIONAL' ? '#8a4c00' : '#922b2b';
+    const svg=svgNode('svg',{viewBox:'0 0 340 220',role:'img','aria-label':`Promedio general: ${scoreNumber(score)} de 100. ${label(category)}. Referencia histórica: ${scoreNumber(reference.valor)}.`});
+    const path='M 30 170 A 140 140 0 0 1 310 170';
+    svg.append(svgNode('path',{d:path,fill:'none',stroke:'#dce4eb','stroke-width':28}));
+    svg.append(svgNode('path',{d:path,fill:'none',stroke:color,'stroke-width':28,pathLength:100,'stroke-dasharray':`${score} 100`}));
+    const angle=Math.PI*(1-reference.valor/100);
+    const marker=svgNode('line',{x1:170+120*Math.cos(angle),y1:170-120*Math.sin(angle),x2:170+160*Math.cos(angle),y2:170-160*Math.sin(angle),stroke:'#17324d','stroke-width':3});
+    marker.append(svgNode('title',{},`Referencia histórica: ${scoreNumber(reference.valor)}`));svg.append(marker);
+    svg.append(svgNode('text',{x:170,y:125,'text-anchor':'middle','font-size':38,'font-weight':700,fill:color},`${scoreNumber(score)} %`));
+    svg.append(svgNode('text',{x:170,y:152,'text-anchor':'middle','font-size':13,fill:'#526576'},'puntaje sobre 100'));
+    svg.append(svgNode('text',{x:22,y:205,'font-size':12},'0'));
+    svg.append(svgNode('text',{x:318,y:205,'text-anchor':'end','font-size':12},'100'));
+    container.append(svg);
+    $('ranking-general-resultado').textContent=label(category);
+    const difference=score-reference.valor;
+    const delta=Math.abs(difference)<0.005 ? 0 : difference;
+    $('ranking-general-variacion').textContent=`Diferencia respecto de la referencia: ${delta>0 ? '+' : ''}${scoreNumber(delta)} puntos sobre 100.`;
   }
   function bars(containerId, rows, color) {
     const container = $(containerId);
     container.replaceChildren();
     if (!rows.length) { container.append(text('p', 'Sin proveedores en el período.')); return; }
-    const left=245, width=300, top=30, rowHeight=30;
-    const svg = svgNode('svg', {viewBox:`0 0 620 ${top+rows.length*rowHeight+10}`, role:'img', 'aria-label':containerId.includes('mejores') ? 'Puntaje de los mejores proveedores' : 'Puntaje de los peores proveedores'});
-    axes(svg, left, top, width, rows.length*rowHeight);
+    const left=60, width=1160, top=35, plotHeight=300, slot=width/rows.length;
+    const svg = svgNode('svg', {viewBox:'0 0 1280 550', class:'ranking-barras', role:'img', 'aria-label':containerId.includes('mejores') ? 'Puntaje de los mejores proveedores' : 'Puntaje de los peores proveedores'});
+    axes(svg, left, top, width, plotHeight);
     rows.forEach((r,i) => {
-      const y=top+i*rowHeight, full=`${r.codigo} · ${r.nombre}`;
+      const x=left+(i+0.5)*slot, barHeight=plotHeight*Number(r.total)/100, y=top+plotHeight-barHeight, full=`${r.codigo} · ${r.nombre}`;
       const group=svgNode('g', {role:'button', tabindex:0, 'aria-label':`Ver historia de ${full}, ${number(r.total)} puntos`});
       group.append(svgNode('title', {}, `${full}: ${number(r.total)} puntos, ${r.recepciones} recepciones`));
-      group.append(svgNode('text', {x:left-10,y:y+17,'text-anchor':'end','font-size':11},full.length>34 ? full.slice(0,32)+'…' : full));
-      group.append(svgNode('rect', {x:left,y:y+4,width:width*Number(r.total)/100,height:20,rx:3,fill:color}));
-      group.append(svgNode('text', {x:left+width*Number(r.total)/100+7,y:y+18,'font-size':11},number(r.total)));
+      const labelY=top+plotHeight+18;
+      group.append(svgNode('text', {x,y:labelY,transform:`rotate(-50 ${x} ${labelY})`,'text-anchor':'end','font-size':12},full.length>30 ? full.slice(0,28)+'…' : full));
+      group.append(svgNode('rect', {x:x-Math.min(38,slot*0.65)/2,y,width:Math.min(38,slot*0.65),height:barHeight,rx:3,fill:color}));
+      group.append(svgNode('text', {x,y:y-8,'text-anchor':'middle','font-size':12},number(r.total)));
       group.addEventListener('click', () => selectProvider(r.codigo));
       group.addEventListener('keydown', event => { if (event.key==='Enter' || event.key===' ') {event.preventDefault();selectProvider(r.codigo);} });
       svg.append(group);
@@ -127,6 +166,7 @@
       const data=await jsonResponse(await fetch(`/api/evaluaciones/powerbi/ranking?${new URLSearchParams({desde,hasta})}`,{signal:rankingRequest.signal}));
       if (version!==rankVersion) return;
       ranking=data;$('ranking-resultados').hidden=false;
+      generalScore(data.resumen);
       $('ranking-periodo').textContent=`Período evaluado: ${dateLabel(data.desde)} al ${dateLabel(data.hasta)} · Fecha de Entrega · Consultado ${new Date(data.calculado_en).toLocaleString('es-AR')}`;
       const kpis=$('ranking-kpis');kpis.replaceChildren();
       for (const [title,value] of [['Proveedores',data.resumen.proveedores],['Aprobados',data.resumen.resultados.APROBADO||0],['Condicionales',data.resumen.resultados.CONDICIONAL||0],['No aptos',data.resumen.resultados['NO APTO']||0]]) {
@@ -137,8 +177,20 @@
         `${summary.controles_evaluados} recepciones evaluadas de ${summary.controles_periodo}; ${summary.controles_excluidos} excluidas.`,
         `${summary.sin_fecha_oc} sin emisión OC (consideradas dentro del plazo por criterio solicitado); ${summary.sin_plan} sin plan reconocido; ${summary.sin_plazo} sin plazo. Las fechas faltantes no se completan.`,
         `${summary.identidad_por_nombre} recepciones asociadas por nombre exacto único por código inconsistente. No se atribuye automáticamente código 0 a YPF GAS.`,
+        `Certificados: ${summary.con_certificado} recepciones con evidencia; ${summary.certificado_por_adjunto} con adjunto y ${summary.certificado_por_nota} con nota explícita (pueden coincidir). La leyenda genérica de cumplimiento no cuenta.`,
+        ...(summary.certificado_conflictos ? [`Revisar ${summary.certificado_conflictos} ${summary.certificado_conflictos===1 ? 'recepción' : 'recepciones'} con evidencia de certificado y nota de ausencia: se reconoce la casilla o el adjunto, conservando la contradicción de origen.`] : []),
         ...Object.entries(summary.exclusiones_por_motivo).map(([reason,count])=>`Excluidas: ${reason}: ${count}.`),
       ]) notes.append(text('p',line));
+      if (summary.controles_certificado_conflicto?.length) {
+        const details=document.createElement('details');
+        details.append(text('summary','Ver controles con nota de ausencia y evidencia de certificado (requiere permiso de historial Access)'));
+        const list=document.createElement('ul');
+        summary.controles_certificado_conflicto.forEach(control=>{
+          const item=document.createElement('li'),link=text('a',`${control.proveedor} · Control ${control.id} · ${dateLabel(control.fecha)}`);
+          link.href=`/ui/recepcion/historial-access?access_id=${encodeURIComponent(control.id)}`;link.target='_blank';link.rel='noopener';item.append(link);list.append(item);
+        });
+        details.append(list);notes.append(details);
+      }
       bars('grafico-mejores',data.mejores_20,'#2a8054');bars('grafico-peores',data.peores_20,'#bb6146');
       table('tabla-mejores',data.mejores_20);table('tabla-peores',data.peores_20);
       $('historial-buscar').value='';$('historial-proveedor').replaceChildren();fillProviders();
@@ -182,20 +234,43 @@
     const blob=new Blob(['\uFEFF'+rows.map(row=>row.map(quote).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`ranking_${ranking.desde}_${ranking.hasta}.csv`;a.click();URL.revokeObjectURL(url);
   });
-  $('ranking-imprimir').addEventListener('click',()=>window.print());
+  function qualityReport() {
+    let html=RankingInformeCalidad.createReport(ranking);
+    if(!$('historial-resultados').hidden) {
+      const history=$('historial-resultados').cloneNode(true);
+      history.querySelectorAll('[hidden],form,button').forEach(node=>node.remove());
+      html=html.replace('</body>','<section class="quality-history"><h2>Historia del proveedor</h2>'+history.outerHTML+'</section><style>.quality-history{background:white;max-width:1440px;margin:20px auto;padding:24px;font-size:13px}.quality-history svg{width:100%;height:auto;max-width:1000px}.quality-history .eje{stroke:#d7e0e8}.quality-history table{border-collapse:collapse;width:100%}.quality-history th,.quality-history td{padding:6px;border:1px solid #ccd6df}@media print{.quality-history{break-before:page;margin:0;padding:0}}</style></body>');
+    }
+    return html;
+  }
+  $('ranking-imprimir').addEventListener('click',()=>{
+    if(!ranking?.proveedores.length)return;
+    try {
+      const html=qualityReport(),preview=window.open('','_blank');
+      if(!preview)throw new Error('Permití las ventanas emergentes para abrir el informe.');
+      preview.opener=null;preview.document.open();preview.document.write(html);preview.document.close();
+    } catch(error) {$('ranking-mensaje').textContent=error.message;}
+  });
+  $('ranking-referencia-form').addEventListener('submit',event=>{
+    event.preventDefault();
+    const periodo=$('ranking-ref-periodo').value.trim(),valor=Number($('ranking-ref-valor').value);
+    if(!periodo || $('ranking-ref-valor').value==='' || !Number.isFinite(valor) || valor<0 || valor>100)return;
+    reference={periodo,valor};
+    try{localStorage.setItem(referenceKey,JSON.stringify(reference));}catch{}
+    if(ranking)generalScore(ranking.resumen);
+  });
+  let detailsBeforePrint=false;
+  window.addEventListener('beforeprint',()=>{detailsBeforePrint=$('ranking-detalles').open;$('ranking-detalles').open=true;});
+  window.addEventListener('afterprint',()=>{$('ranking-detalles').open=detailsBeforePrint;});
   $('ranking-email').addEventListener('click',()=>{
     if(!ranking?.proveedores.length)return;
     try {
-      const report=$('ranking-resultados').cloneNode(true);
-      report.querySelectorAll('[hidden],form,button,#historial-mensaje').forEach(node=>node.remove());
-      if($('historial-resultados').hidden)report.querySelector('#historial-seccion')?.remove();
-      const method=document.querySelector('.ranking-metodo').cloneNode(true);method.open=true;
-      const html='<!doctype html><html lang="es"><meta charset="utf-8"><title>Evaluación de proveedores</title><style>body{font:14px Arial;color:#17324d;margin:24px}table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #ccd6df;padding:8px;text-align:left}th{background:#edf2f7}svg{width:100%;max-width:900px;height:auto}svg text{fill:#34495d}.eje{stroke:#d7e0e8}.umbral{stroke-dasharray:5 5}.ranking-kpis{display:flex;gap:32px}.ranking-kpi strong{display:block;font-size:24px}.ranking-advertencias{background:#fff8eb;padding:12px}.tabla-scroll{overflow:auto}@media print{article{break-before:page}}</style><body><h1>Evaluación de proveedores</h1>'+method.outerHTML+report.outerHTML+'</body></html>';
+      const html=qualityReport();
       const draft=RankingEmail.createDraft({desde:ranking.desde,hasta:ranking.hasta,html});
       const url=URL.createObjectURL(new Blob([draft],{type:'message/rfc822'}));
       const a=document.createElement('a');a.href=url;a.download=`informe_proveedores_${ranking.desde}_${ranking.hasta}.eml`;a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
-      $('ranking-email-mensaje').textContent='Borrador descargado (.eml). Abrilo en Outlook u otro cliente compatible, completá el destinatario y enviá. Incluye el informe HTML con gráficos y la historia si está visible. Todavía no se envió ningún correo.';
+      $('ranking-email-mensaje').textContent='Borrador descargado (.eml). Abrilo en Outlook u otro cliente compatible, completá el destinatario y enviá. Incluye el Informe de Calidad con el formato horizontal y la historia si está visible. Todavía no se envió ningún correo.';
     } catch(error) {$('ranking-email-mensaje').textContent='No se pudo preparar el email. '+error.message;}
   });
   form.requestSubmit();

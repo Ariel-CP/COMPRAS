@@ -258,6 +258,7 @@
 {% endblock %} {% block content %}
 <div
   class="controles-page"
+  data-can-quality="{{ 'true' if ('admin' in (current_user.roles or []) or current_user.permissions.get('ui_recepcion_calidad', (False, False))[0] or current_user.permissions.get('ui_recepcion_calidad', (False, False))[1]) else 'false' }}"
   data-can-write="{{ 'true' if current_user.permissions.get('recepcion', (False, False))[1] else 'false' }}"
 >
   <div class="controles-title">
@@ -326,5 +327,5 @@
   </section>
 </div>
 <script src="/static/js/recepcion_etiqueta.js?v={{ app_version }}" defer></script>
-<script src="/static/js/recepcion_controles.js?v={{ app_version }}" defer></script>
+<script src="/static/js/recepcion_controles.js?v={{ app_version }}-certificado-1" defer></script>
 {% endblock %}

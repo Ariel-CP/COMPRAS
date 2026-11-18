@@ -36,6 +36,20 @@ def _session() -> Session:
         connection.execute(
             text("CREATE TABLE usuario (id INTEGER PRIMARY KEY, nombre TEXT)")
         )
+        connection.execute(text("""
+            CREATE TABLE recepcion_certificado_calidad (
+                recepcion_linea_id INTEGER PRIMARY KEY, recibido INTEGER NOT NULL,
+                usuario_id INTEGER, fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("""
+            CREATE TABLE recepcion_certificado_documento (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, recepcion_linea_id INTEGER NOT NULL,
+                nombre TEXT, tipo_mime TEXT, tamano INTEGER, sha256 TEXT, contenido BLOB,
+                usuario_id INTEGER, fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (recepcion_linea_id, sha256)
+            )
+        """))
         connection.execute(
             text(
                 "CREATE TABLE producto (id INTEGER PRIMARY KEY, codigo TEXT, "

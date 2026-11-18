@@ -62,6 +62,7 @@ static_build/
 # SQL dumps / large data
 *.sql
 !database/migrations/021_recepcion_inspeccion_intentos.sql
+!database/migrations/026_recepcion_certificados_calidad.sql
 *.sqlite3
 
 # Profiling
@@ -109,4 +110,5 @@ app/static/img/
 
 # Resultados locales de negocio, capturas y herramientas temporales
 /outputs/
+/output/pdf/
 /tmp/

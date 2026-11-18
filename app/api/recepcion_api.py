@@ -7,9 +7,10 @@ Fase 5: Explotación de datos - lecturas analíticas separadas de operaciones.
 import logging
 from datetime import date, datetime
 from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import bindparam, text
 
 from app.api.deps_auth import get_current_user, require_permission
@@ -50,6 +51,8 @@ from app.services.recepcion_operativa_service import (
     registrar_intento_inspeccion,
 )
 from app.services.recepcion_recomendacion_service import recomendar_nivel_inspeccion
+from app.schemas.recepcion_certificado import RecepcionCertificadoOut
+from app.services import recepcion_certificado_service as certificados
 from app.services.recepcion_scheduler import get_scheduler_status
 from app.services.recepcion_sync_service import sincronizar_ciclo_completo
 
@@ -60,6 +63,66 @@ router = APIRouter(
     tags=["recepcion"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+@router.get("/calidad/lineas/{linea_id}/certificado", response_model=RecepcionCertificadoOut)
+def consultar_certificado_calidad(
+    linea_id: int,
+    db=Depends(get_db),
+    _user=Depends(require_permission("ui_recepcion_calidad", False)),
+):
+    try:
+        return certificados.obtener_certificado(db, linea_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/calidad/lineas/{linea_id}/certificado", response_model=RecepcionCertificadoOut)
+def guardar_certificado_calidad(
+    linea_id: int,
+    recibido: bool = Form(...),
+    archivo: UploadFile | None = File(default=None),
+    db=Depends(get_db),
+    user=Depends(require_permission("ui_recepcion_calidad", True)),
+):
+    try:
+        contenido = archivo.file.read(certificados.MAX_ARCHIVO_BYTES + 1) if archivo else None
+        return certificados.guardar_certificado(
+            db, linea_id, recibido=recibido, usuario_id=int(user["id"]),
+            nombre=archivo.filename if archivo else None, contenido=contenido,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if archivo:
+            archivo.file.close()
+
+
+@router.get("/calidad/lineas/{linea_id}/certificado/documentos/{documento_id}")
+def descargar_certificado_calidad(
+    linea_id: int,
+    documento_id: int,
+    db=Depends(get_db),
+    _user=Depends(require_permission("ui_recepcion_calidad", False)),
+):
+    try:
+        documento = certificados.obtener_documento(db, linea_id, documento_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=bytes(documento["contenido"]), media_type=documento["tipo_mime"],
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(documento["nombre"], safe=""),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.get("/proveedores/buscar")
